@@ -1,0 +1,49 @@
+# PowerSync sync rules — what each authenticated user is allowed to sync.
+#
+# Apply these in your PowerSync Cloud dashboard:
+#   Project → Sync Rules → paste this file → Deploy.
+#
+# `request.user_id()` returns the `sub` claim of the Supabase JWT.
+
+bucket_definitions:
+  user_profile:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM profiles WHERE id = bucket.user_id
+
+  user_exercises:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM exercises WHERE user_id = bucket.user_id
+
+  user_workouts:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM workouts WHERE user_id = bucket.user_id
+
+  # Sets has no user_id column. We derive a bucket per workout the user owns,
+  # then sync the sets belonging to each. PowerSync's data queries cannot JOIN,
+  # but parameter queries can SELECT from tables, so this two-step setup works.
+  user_sets:
+    parameters:
+      - SELECT id as workout_id FROM workouts WHERE user_id = request.user_id()
+    data:
+      - SELECT * FROM sets WHERE workout_id = bucket.workout_id
+
+  user_field_options:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM user_field_options WHERE user_id = bucket.user_id
+
+  # Both ends of a follow edge receive the row, so the user can see who
+  # follows them AND who they follow.
+  user_follows:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM follows WHERE follower_id = bucket.user_id
+      - SELECT * FROM follows WHERE followee_id = bucket.user_id
