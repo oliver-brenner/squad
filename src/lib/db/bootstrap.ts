@@ -1,7 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { powersync } from "./client";
-import { arrStr, boolInt, nowISO, uuid } from "./encoding";
-import { DEFAULT_EXERCISES } from "@/lib/stats/defaults";
+import { nowISO, uuid } from "./encoding";
 import {
   CATEGORIES,
   EQUIPMENT_OPTIONS,
@@ -20,6 +19,8 @@ const titleCase = (s: string) =>
 // Runs once per user, on first sign-in. Waits for the initial PowerSync pull
 // so we don't double-seed on a returning user whose data already exists in
 // Postgres but hasn't yet streamed down to this device.
+// Seeds: profile row + default field options (categories, equipment, muscle
+// groups). New users start with no exercises — they build their library themselves.
 export async function bootstrapIfNeeded(user: User): Promise<void> {
   await powersync.waitForFirstSync();
 
@@ -44,44 +45,6 @@ export async function bootstrapIfNeeded(user: User): Promise<void> {
       [user.id, null, displayName, avatarUrl, now]
     );
 
-    for (const e of DEFAULT_EXERCISES) {
-      await tx.execute(
-        `INSERT INTO exercises (
-          id, user_id, name, categories, equipment,
-          is_bodyweight, track_reps, default_weight_kg, double_reps,
-          distance_unit, track_time, time_unit,
-          track_resistance, track_speed, speed_unit,
-          track_incline, incline_unit, track_rest,
-          muscles, secondary_muscles, archived_at, created_at
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?)`,
-        [
-          uuid(),
-          user.id,
-          e.name,
-          arrStr(e.category ? [e.category] : null),
-          e.equipment ?? null,
-          boolInt(e.isBodyweight ?? false),
-          boolInt(true), // track_reps
-          e.defaultWeightKg ?? 0,
-          boolInt(e.doubleReps ?? false),
-          null, // distance_unit
-          boolInt(false), // track_time
-          null, // time_unit
-          boolInt(false), // track_resistance
-          boolInt(false), // track_speed
-          null, // speed_unit
-          boolInt(false), // track_incline
-          null, // incline_unit
-          boolInt(false), // track_rest
-          null, // muscles
-          null, // secondary_muscles
-          null, // archived_at
-          now,
-        ]
-      );
-    }
-
-    // user_field_options: categories, equipment, then muscle groups + children.
     const optionSql = `INSERT INTO user_field_options (id, user_id, kind, parent_id, key, label, position, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
