@@ -34,7 +34,7 @@ export function Landing() {
         <div className="h-14 w-14 rounded-2xl bg-foreground text-background flex items-center justify-center text-2xl font-bold">
           SQ
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight">squad</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Squad</h1>
         <p className="text-muted-foreground">
           Log workouts, track PBs, and see what your friends are up to.
         </p>

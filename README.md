@@ -1,4 +1,4 @@
-# squad
+# Squad
 
 A local-first web app — gym tracking with sub-millisecond navigation.
 
