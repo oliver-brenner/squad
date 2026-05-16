@@ -21,7 +21,7 @@ export function Log() {
     <>
       <PageHeader title="Log" description="Your training sessions." />
 
-      <div className="py-8">
+      <div className="pt-2 pb-6">
         <Link to="/log/new" className="block w-full">
           <Button className="w-full" size="lg">
             <Plus className="h-4 w-4 mr-1" /> New session

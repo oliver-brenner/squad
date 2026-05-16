@@ -58,7 +58,7 @@ export function Exercises() {
         title="Exercises"
         description="Your personal library. Edit, track, or add new."
       />
-      <Button onClick={() => setCreating(true)} size="lg" className="w-full">
+      <Button onClick={() => setCreating(true)} size="lg" className="-mt-2 w-full">
         <Plus className="h-4 w-4" /> New exercise
       </Button>
 
