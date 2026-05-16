@@ -74,9 +74,10 @@ interface Props {
   exercise?: Exercise;
   onClose: () => void;
   onCreated?: (exercise: Exercise) => void;
+  onUpdated?: (exercise: Exercise) => void;
 }
 
-export function ExerciseForm({ exercise, onClose, onCreated }: Props) {
+export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
   const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
   const [isPending, startTransition] = useTransition();
   useEffect(() => {
@@ -163,6 +164,10 @@ export function ExerciseForm({ exercise, onClose, onCreated }: Props) {
         };
         if (exercise) {
           await updateExercise(exercise.id, input);
+          if (onUpdated) {
+            const updated = await getExerciseById(exercise.id);
+            if (updated) onUpdated(updated);
+          }
           onClose();
         } else {
           const newId = await createExercise(input);

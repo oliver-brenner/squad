@@ -96,14 +96,18 @@ interface Props {
   exercises: Exercise[];
 }
 
-function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props) {
+function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initialExercises }: Props) {
   const navigate = useNavigate();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(workout.name);
   const [isRenaming, setIsRenaming] = useState(false);
-  const [items, setItems] = useState<WorkoutItem[]>(() => buildItems(initialSets, exercises));
+  // Local copy of the exercises list so we can reflect inline edits (e.g.
+  // renaming or changing tracked metrics via the embedded ExerciseForm)
+  // without remounting the route.
+  const [exercises, setExercises] = useState(initialExercises);
+  const [items, setItems] = useState<WorkoutItem[]>(() => buildItems(initialSets, initialExercises));
   const stats = useMemo(() => {
     const statItems: StatItem[] = items.map((item) =>
       isCircuitGroup(item)
@@ -275,6 +279,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
   }
 
   function addExercise(ex: Exercise) {
+    setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
     setItems((prev) => [
       ...prev,
       {
@@ -300,6 +305,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
   }
 
   function addExerciseToCircuit(circuitKey: string, ex: Exercise) {
+    setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
     setItems((prev) =>
       prev.map((item) => {
         if (!isCircuitGroup(item) || item.groupKey !== circuitKey) return item;
@@ -322,6 +328,26 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
 
   function removeItem(groupKey: string) {
     setItems((prev) => prev.filter((item) => item.groupKey !== groupKey));
+  }
+
+  function applyExerciseUpdate(updated: Exercise) {
+    setExercises((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    setItems((prev) =>
+      prev.map((item) => {
+        if (isCircuitGroup(item)) {
+          return {
+            ...item,
+            exercises: item.exercises.map((eg) =>
+              eg.exerciseId === updated.id ? { ...eg, exercise: updated } : eg
+            ),
+          };
+        }
+        if (item.exerciseId === updated.id) {
+          return { ...item, exercise: updated };
+        }
+        return item;
+      })
+    );
   }
 
   function confirmRename() {
@@ -357,6 +383,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
     return (
       <ExerciseForm
         exercise={editingExercise}
+        onUpdated={applyExerciseUpdate}
         onClose={() => {
           setEditingExercise(null);
           window.scrollTo({ top: 0, behavior: "instant" });
