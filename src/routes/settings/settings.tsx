@@ -70,6 +70,8 @@ export function Settings() {
             console.error("[settings] disconnectAndClear failed:", err);
           }
           try {
+            localStorage.removeItem("squad.lastConnectedUserId.v2");
+            // Also clean up the pre-OPFS marker if it's still around.
             localStorage.removeItem("squad.lastConnectedUserId");
           } catch {
             // ignore — localStorage may be unavailable

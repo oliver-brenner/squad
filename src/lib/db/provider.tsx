@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PowerSyncContext } from "@powersync/react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { powersync } from "./client";
+import { powersync, powerSyncReady } from "./client";
 import { SupabaseConnector } from "./connector";
 import { bootstrapIfNeeded } from "./bootstrap";
 
@@ -9,7 +9,11 @@ import { bootstrapIfNeeded } from "./bootstrap";
 // local DB when this changes — *not* on every user→null transition, because
 // mobile Safari can emit transient SIGNED_OUT during token refresh and we
 // don't want to nuke local data every time that happens.
-const LAST_USER_KEY = "squad.lastConnectedUserId";
+//
+// The `.v2` suffix marks the OPFS migration: pre-migration markers pointed
+// at IDB storage which is now unused, so we want the first post-migration
+// load to go through the full bootstrap path against fresh OPFS storage.
+const LAST_USER_KEY = "squad.lastConnectedUserId.v2";
 
 function readLastUser(): string | null {
   try {
@@ -32,22 +36,24 @@ function writeLastUser(id: string | null): void {
 // Local-first lifecycle.
 //
 // Goal: open the app, log a set, lock the phone, come back, keep logging —
-// no spinners, no flashes, no "refresh." The local SQLite DB is the source
-// of truth for the UI; sync is purely a background concern.
+// the local SQLite DB is the source of truth for the UI; sync is purely a
+// background concern.
 //
 // Strategy:
-//   - If this device has already bootstrapped this user (LAST_USER_KEY marker
-//     matches), we know there's local data — render children IMMEDIATELY and
-//     do init/connect/sync invisibly in the background. PowerSync's own
-//     reconnect logic handles backgrounded tabs and flaky networks.
-//   - Only first-time sign-in / new device blocks on the first sync, because
-//     there's no data to render yet.
+//   - powersync.init() starts at module import (see powerSyncReady in
+//     client.ts), in parallel with the React boot. By the time this provider
+//     awaits it, init is typically already done.
+//   - We only render children AFTER init resolves — anything before that
+//     could let a useQuery fire against a partially-initialised wa-sqlite
+//     worker, which on iOS Safari crashes the tab.
+//   - For RETURNING users (LAST_USER_KEY matches the signed-in user) we skip
+//     waitForFirstSync — bootstrap is fire-and-forget. connect() happens in
+//     the background; the UI doesn't wait for the WebSocket.
+//   - For FIRST-TIME users we await connect + bootstrap so the UI doesn't
+//     paint with missing defaults.
 //   - Transient user→null (mobile Safari token refresh hiccups) just calls
-//     disconnect(). Never disconnectAndClear() — that only happens when a
-//     genuinely different user signs in on the same browser, or on explicit
-//     sign-out (handled in settings.tsx).
-//   - Background failures are logged, not surfaced as errors — the app keeps
-//     working from cache while PowerSync retries connection internally.
+//     disconnect(). Never disconnectAndClear() — that only fires on a real
+//     user-swap or explicit sign-out (handled in settings.tsx).
 export function PowerSyncProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
 
@@ -62,15 +68,12 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
 
   const userId = user?.id ?? null;
 
-  // Read the marker once at mount. If it matches the user we're about to
-  // render for, we can skip the blocking wait — local data exists.
+  // Read the marker once at mount. If it matches, we already have local data
+  // and can skip the network-blocking parts of setup.
   const initialMarker = useMemo(() => readLastUser(), []);
   const haveLocalDataForUser = userId !== null && initialMarker === userId;
 
-  // `ready` starts true for returning users so the first paint is the app
-  // itself, not a spinner. First-time users start false and we gate on
-  // init/connect/bootstrap completing.
-  const [ready, setReady] = useState(haveLocalDataForUser);
+  const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
 
@@ -80,37 +83,38 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const runOnce = async () => {
-      await powersync.init();
+      // Await the eager init kicked off at module load. Idempotent — if it's
+      // already done, this resolves immediately.
+      await powerSyncReady;
       if (cancelled) return;
 
       if (!user || !connector) {
-        // No user → stop syncing but keep local data intact. Transient
-        // SIGNED_OUT on mobile Safari shouldn't destroy state.
         await powersync.disconnect();
         return;
       }
 
       const previousUser = readLastUser();
       if (previousUser && previousUser !== user.id) {
-        // Different user on this browser — wipe stale data so we don't
-        // leak the previous user's rows.
+        // Different user on this browser — wipe stale data so we don't leak
+        // the previous user's rows.
         await powersync.disconnectAndClear();
         if (cancelled) return;
       }
 
-      await powersync.connect(connector);
-      if (cancelled) return;
-
       if (haveLocalDataForUser) {
-        // Returning user: bootstrap runs in the background as a safety net
-        // (no-op via the existing-profile check). Don't await — the UI is
-        // already live.
+        // Returning user: kick off connect + bootstrap in the background.
+        // We render the app from the local DB now; sync catches up silently.
+        powersync.connect(connector).catch((err) => {
+          console.warn("[powersync] background connect failed:", err);
+        });
         bootstrapIfNeeded(user).catch((err) => {
           console.warn("[powersync] background bootstrap failed:", err);
         });
       } else {
-        // First sign-in on this device: wait for initial sync + seed so we
-        // don't paint an empty app and then have rows pop in.
+        // First sign-in on this device — wait for connect + bootstrap so the
+        // UI doesn't paint with missing defaults.
+        await powersync.connect(connector);
+        if (cancelled) return;
         await bootstrapIfNeeded(user);
         if (cancelled) return;
       }
@@ -127,14 +131,6 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
         }
       } catch (err) {
         if (cancelled) return;
-        if (haveLocalDataForUser) {
-          // App is already rendered from cache. PowerSync's internal retry
-          // will recover when the network is back; nothing for us to do.
-          console.warn("[powersync] background sync failed:", err);
-          return;
-        }
-        // First-time path can't proceed without init. Retry once, then
-        // surface an actionable error.
         console.warn("[powersync] init failed, retrying once:", err);
         await new Promise((r) => setTimeout(r, 800));
         if (cancelled) return;
