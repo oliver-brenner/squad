@@ -33,10 +33,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setState({
-        session,
-        user: session?.user ?? null,
-        loading: false,
+      const nextUser = session?.user ?? null;
+      // Skip state updates that don't change the signed-in user. supabase-js
+      // re-emits events for TOKEN_REFRESHED and on tab visibility changes
+      // (especially on iOS Safari) — without this guard, every refresh would
+      // produce a new user object reference and ripple through downstream
+      // effects that depend on `user`.
+      setState((prev) => {
+        if (prev.user?.id === nextUser?.id && !prev.loading) {
+          return { ...prev, session };
+        }
+        return { session, user: nextUser, loading: false };
       });
     });
 

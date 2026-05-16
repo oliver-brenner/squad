@@ -21,6 +21,8 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     return new SupabaseConnector(url);
   }, []);
 
+  const userId = user?.id ?? null;
+
   useEffect(() => {
     if (loading) return;
 
@@ -45,7 +47,11 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, loading, connector]);
+    // Depend on userId (primitive) rather than the user object — supabase-js
+    // emits a fresh user object on every TOKEN_REFRESHED / visibility event,
+    // which would otherwise re-run connect() and thrash the DB on iOS Safari.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, loading, connector]);
 
   if (!ready) {
     return (
