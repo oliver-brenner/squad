@@ -1,7 +1,7 @@
 import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useParams, Navigate } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, Plus, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -16,8 +16,11 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import type { Exercise, Workout, WorkoutSet } from "@/lib/db/types";
+import type { Exercise, Workout, WorkoutSet, SetWithExerciseRow } from "@/lib/db/types";
 import { computeSessionStats, type StatItem } from "@/lib/session-stats";
+import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
+import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
+import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -125,6 +128,36 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+
+  const { muscleGroups } = useUserFieldOptions();
+  const breakdown = useMemo(() => {
+    const rows: SetWithExerciseRow[] = [];
+    for (const item of items) {
+      if (isCircuitGroup(item)) {
+        for (const eg of item.exercises) {
+          for (const s of eg.sets) {
+            rows.push({
+              set: toWorkoutSet(s, eg.exerciseId, workout.id),
+              exercise: eg.exercise,
+              performedOn: workout.performedOn,
+              workoutId: workout.id,
+            });
+          }
+        }
+      } else {
+        for (const s of item.sets) {
+          rows.push({
+            set: toWorkoutSet(s, item.exerciseId, workout.id),
+            exercise: item.exercise,
+            performedOn: workout.performedOn,
+            workoutId: workout.id,
+          });
+        }
+      }
+    }
+    return computeExerciseBreakdown(rows, muscleGroups);
+  }, [items, muscleGroups, workout.id, workout.performedOn]);
 
   const renameInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
@@ -423,6 +456,34 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
         </div>
       )}
 
+      {items.length > 0 && breakdown.totalExercises > 0 && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setBreakdownOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30"
+            aria-expanded={breakdownOpen}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Muscle groups
+            </span>
+            <div className="flex items-center gap-3">
+              {breakdownOpen && <MuscleLegend size="sm" />}
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform ${
+                  breakdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+          {breakdownOpen && (
+            <div className="px-4 pb-4">
+              <MuscleGroupsBody data={breakdown} />
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(workout.sessionType)}`} />
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -490,6 +551,26 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises }: Props
       {isPending && null}
     </div>
   );
+}
+
+function toWorkoutSet(s: DraftSet, exerciseId: string, workoutId: string): WorkoutSet {
+  return {
+    id: s.id ?? "",
+    workoutId,
+    exerciseId,
+    position: 0,
+    reps: s.reps,
+    weightKg: s.weightKg,
+    distanceKm: s.distanceKm,
+    durationSec: s.durationSec,
+    resistance: s.resistance,
+    speedMs: s.speedMs,
+    inclinePct: s.inclinePct,
+    restSec: s.restSec,
+    circuitId: null,
+    circuitRounds: null,
+    circuitName: null,
+  };
 }
 
 function WorkoutMenu({
