@@ -5,7 +5,7 @@ import { getDaysInMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkout, copyWorkout } from "@/lib/mutations/workouts";
-import { getRecentWorkouts, getWorkoutWithSets } from "@/lib/db/queries";
+import { getWorkoutWithSets } from "@/lib/db/queries";
 import type { SessionType } from "@/lib/db/schema";
 
 const SESSION_TYPES: { value: SessionType; label: string }[] = [
@@ -14,6 +14,11 @@ const SESSION_TYPES: { value: SessionType; label: string }[] = [
   { value: "sport", label: "Sport" },
   { value: "lifestyle", label: "Other" },
 ];
+
+function defaultNameFor(type: SessionType): string {
+  if (type === "workout") return "Gym";
+  return SESSION_TYPES.find((t) => t.value === type)?.label ?? "";
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const ITEM_H = 44;
@@ -25,10 +30,11 @@ export function NewSession() {
   const [searchParams] = useSearchParams();
   const copyFrom = searchParams.get("copyFrom") ?? undefined;
 
-  const [name, setName] = useState("");
-  const [nameLoaded, setNameLoaded] = useState(false);
-  const [isPending, startTransition] = useTransition();
   const [sessionType, setSessionType] = useState<SessionType>("workout");
+  const [name, setName] = useState(() => (copyFrom ? "" : defaultNameFor("workout")));
+  const [nameLoaded, setNameLoaded] = useState(!copyFrom);
+  const [userEditedName, setUserEditedName] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
   const [day, setDay] = useState(today.getDate());
   const [month, setMonth] = useState(today.getMonth());
@@ -41,16 +47,12 @@ export function NewSession() {
   }, [month, year, daysInMonth, day]);
 
   useEffect(() => {
+    if (!copyFrom) return;
     let cancelled = false;
     (async () => {
       try {
-        if (copyFrom) {
-          const source = await getWorkoutWithSets(copyFrom);
-          if (!cancelled) setName(source?.workout.name ?? "");
-        } else {
-          const recent = await getRecentWorkouts(1);
-          if (!cancelled) setName(recent[0]?.name ?? "");
-        }
+        const source = await getWorkoutWithSets(copyFrom);
+        if (!cancelled) setName(source?.workout.name ?? "");
       } catch (err) {
         console.error("[new-session] failed to load default name:", err);
         // Don't block the user — they can still create a session, just without
@@ -63,6 +65,11 @@ export function NewSession() {
       cancelled = true;
     };
   }, [copyFrom]);
+
+  useEffect(() => {
+    if (copyFrom || userEditedName) return;
+    setName(defaultNameFor(sessionType));
+  }, [sessionType, copyFrom, userEditedName]);
 
   function submit() {
     if (!name.trim()) return;
@@ -100,7 +107,10 @@ export function NewSession() {
       <Input
         autoFocus
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setUserEditedName(true);
+          setName(e.target.value);
+        }}
         placeholder={nameLoaded ? "Name your session..." : "Loading…"}
         disabled={!nameLoaded}
         className="text-base"
