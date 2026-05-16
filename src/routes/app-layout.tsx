@@ -12,10 +12,10 @@ export function AppLayout() {
     <QueryProvider>
       <UserFieldOptionsProvider>
         <div className="flex min-h-dvh flex-col">
-          <main className="flex-1 mx-auto w-full max-w-2xl px-4 pb-6">
+          <main className="flex-1 mx-auto w-full max-w-2xl px-4 pb-32">
             <Outlet />
           </main>
-          <div className="sticky bottom-0 z-40">
+          <div className="fixed inset-x-0 bottom-0 z-40">
             <NewSessionPin />
             <BottomNav />
           </div>
