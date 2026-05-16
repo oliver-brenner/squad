@@ -41,16 +41,27 @@ export function NewSession() {
   }, [month, year, daysInMonth, day]);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      if (copyFrom) {
-        const source = await getWorkoutWithSets(copyFrom);
-        setName(source?.workout.name ?? "");
-      } else {
-        const recent = await getRecentWorkouts(1);
-        setName(recent[0]?.name ?? "");
+      try {
+        if (copyFrom) {
+          const source = await getWorkoutWithSets(copyFrom);
+          if (!cancelled) setName(source?.workout.name ?? "");
+        } else {
+          const recent = await getRecentWorkouts(1);
+          if (!cancelled) setName(recent[0]?.name ?? "");
+        }
+      } catch (err) {
+        console.error("[new-session] failed to load default name:", err);
+        // Don't block the user — they can still create a session, just without
+        // a prefilled name.
+      } finally {
+        if (!cancelled) setNameLoaded(true);
       }
-      setNameLoaded(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [copyFrom]);
 
   function submit() {

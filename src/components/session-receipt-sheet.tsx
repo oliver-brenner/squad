@@ -27,10 +27,21 @@ export function SessionReceiptSheet({ workoutId, onClose }: Props) {
   }, []);
 
   useEffect(() => {
-    getSessionExportData(workoutId).then((data) => {
-      if (data) setReceipt(formatSessionReceipt(data));
-      setLoading(false);
-    });
+    let cancelled = false;
+    getSessionExportData(workoutId)
+      .then((data) => {
+        if (cancelled) return;
+        if (data) setReceipt(formatSessionReceipt(data));
+      })
+      .catch((err) => {
+        console.error("[session-receipt] failed to load:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [workoutId]);
 
   function handleCopy() {

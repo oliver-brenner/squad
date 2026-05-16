@@ -39,20 +39,33 @@ export function EditSession() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     (async () => {
-      const data = await getWorkoutWithSets(id);
-      if (!data) {
+      try {
+        const data = await getWorkoutWithSets(id);
+        if (cancelled) return;
+        if (!data) {
+          setLoaded({ initial: true, notFound: true });
+          return;
+        }
+        const date = parseISO(data.workout.performedOn);
+        setName(data.workout.name);
+        setSessionType((data.workout.sessionType ?? "workout") as SessionType);
+        setDay(date.getDate());
+        setMonth(date.getMonth());
+        setYear(date.getFullYear());
+        setLoaded({ initial: true, notFound: false });
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[edit-session] failed to load:", err);
+        // Treat fetch failure as not-found so we redirect to /log instead of
+        // spinning forever.
         setLoaded({ initial: true, notFound: true });
-        return;
       }
-      const date = parseISO(data.workout.performedOn);
-      setName(data.workout.name);
-      setSessionType((data.workout.sessionType ?? "workout") as SessionType);
-      setDay(date.getDate());
-      setMonth(date.getMonth());
-      setYear(date.getFullYear());
-      setLoaded({ initial: true, notFound: false });
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const daysInMonth = getDaysInMonth(new Date(year, month));

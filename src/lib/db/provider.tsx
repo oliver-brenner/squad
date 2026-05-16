@@ -11,6 +11,8 @@ import { bootstrapIfNeeded } from "./bootstrap";
 export function PowerSyncProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const connector = useMemo(() => {
     const url = import.meta.env.VITE_POWERSYNC_URL;
@@ -28,20 +30,29 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
 
     let cancelled = false;
     (async () => {
-      await powersync.init();
-      if (cancelled) return;
+      try {
+        await powersync.init();
+        if (cancelled) return;
 
-      if (user && connector) {
-        await powersync.connect(connector);
-        // On first sign-in, seed the profile + default exercises + field options.
-        // No-op for returning users (the existing profile row short-circuits).
-        await bootstrapIfNeeded(user);
-      } else {
-        // No user → wipe local DB so the next person on this browser doesn't
-        // inherit the previous user's data.
-        await powersync.disconnectAndClear();
+        if (user && connector) {
+          await powersync.connect(connector);
+          // On first sign-in, seed the profile + default exercises + field options.
+          // No-op for returning users (the existing profile row short-circuits).
+          await bootstrapIfNeeded(user);
+        } else {
+          // No user → wipe local DB so the next person on this browser doesn't
+          // inherit the previous user's data.
+          await powersync.disconnectAndClear();
+        }
+        if (!cancelled) {
+          setError(null);
+          setReady(true);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[powersync] initialization failed:", err);
+        setError(err instanceof Error ? err : new Error(String(err)));
       }
-      if (!cancelled) setReady(true);
     })();
 
     return () => {
@@ -51,7 +62,28 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     // emits a fresh user object on every TOKEN_REFRESHED / visibility event,
     // which would otherwise re-run connect() and thrash the DB on iOS Safari.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, loading, connector]);
+  }, [userId, loading, connector, retryNonce]);
+
+  if (error) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center gap-4 p-6 text-center">
+        <p className="text-sm text-muted-foreground max-w-sm">
+          Couldn't start the local database. Check your connection and try again.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setReady(false);
+            setRetryNonce((n) => n + 1);
+          }}
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (!ready) {
     return (

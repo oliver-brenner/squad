@@ -51,48 +51,66 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
     opacity: isDragging ? 0.5 : undefined,
   };
 
+  // Keep refs of the latest `group` and `onUpdate` so the async effect below
+  // doesn't write back stale state. Without this, an edit made by the parent
+  // while getLastSetsForExercise is in flight gets overwritten when the
+  // closure-captured `group` resolves.
+  const groupRef = useRef(group);
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => {
+    groupRef.current = group;
+    onUpdateRef.current = onUpdate;
+  });
+
   useEffect(() => {
     let cancelled = false;
-    getLastSetsForExercise(group.exerciseId, 10).then((last) => {
-      if (cancelled || last.length === 0) return;
-      const lastSets = last.map((l) => ({
-        reps: l.set.reps,
-        weightKg: l.set.weightKg,
-        distanceKm: l.set.distanceKm,
-        durationSec: l.set.durationSec,
-        resistance: l.set.resistance,
-        speedMs: l.set.speedMs,
-        inclinePct: l.set.inclinePct,
-        restSec: l.set.restSec,
-      }));
-      lastLoggedRef.current = lastSets;
-      const nextSets = group.sets.map((s, i) => {
-        if (
-          s.reps != null ||
-          s.weightKg != null ||
-          s.distanceKm != null ||
-          s.durationSec != null ||
-          s.resistance != null ||
-          s.speedMs != null ||
-          s.inclinePct != null ||
-          s.restSec != null
-        )
-          return s;
-        const src = lastSets[i] ?? lastSets[0];
-        return {
-          ...s,
-          reps: src.reps,
-          weightKg: src.weightKg,
-          distanceKm: src.distanceKm,
-          durationSec: src.durationSec,
-          resistance: src.resistance,
-          speedMs: src.speedMs,
-          inclinePct: src.inclinePct,
-          restSec: src.restSec,
-        };
+    getLastSetsForExercise(group.exerciseId, 10)
+      .then((last) => {
+        if (cancelled || last.length === 0) return;
+        const lastSets = last.map((l) => ({
+          reps: l.set.reps,
+          weightKg: l.set.weightKg,
+          distanceKm: l.set.distanceKm,
+          durationSec: l.set.durationSec,
+          resistance: l.set.resistance,
+          speedMs: l.set.speedMs,
+          inclinePct: l.set.inclinePct,
+          restSec: l.set.restSec,
+        }));
+        lastLoggedRef.current = lastSets;
+        const currentGroup = groupRef.current;
+        const nextSets = currentGroup.sets.map((s, i) => {
+          if (
+            s.reps != null ||
+            s.weightKg != null ||
+            s.distanceKm != null ||
+            s.durationSec != null ||
+            s.resistance != null ||
+            s.speedMs != null ||
+            s.inclinePct != null ||
+            s.restSec != null
+          )
+            return s;
+          const src = lastSets[i] ?? lastSets[0];
+          return {
+            ...s,
+            reps: src.reps,
+            weightKg: src.weightKg,
+            distanceKm: src.distanceKm,
+            durationSec: src.durationSec,
+            resistance: src.resistance,
+            speedMs: src.speedMs,
+            inclinePct: src.inclinePct,
+            restSec: src.restSec,
+          };
+        });
+        if (nextSets.some((s, i) => s !== currentGroup.sets[i])) {
+          onUpdateRef.current({ ...currentGroup, sets: nextSets });
+        }
+      })
+      .catch((err) => {
+        console.error("[set-rows] failed to load last sets:", err);
       });
-      if (nextSets.some((s, i) => s !== group.sets[i])) onUpdate({ ...group, sets: nextSets });
-    });
     return () => {
       cancelled = true;
     };

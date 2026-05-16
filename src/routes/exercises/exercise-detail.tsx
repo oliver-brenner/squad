@@ -67,10 +67,23 @@ export function ExerciseDetail() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getExerciseById(id), getExerciseHistory(id)]).then(([ex, hist]) => {
-      setExercise(ex);
-      setHistory(hist);
-    });
+    let cancelled = false;
+    Promise.all([getExerciseById(id), getExerciseHistory(id)])
+      .then(([ex, hist]) => {
+        if (cancelled) return;
+        setExercise(ex);
+        setHistory(hist);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[exercise-detail] failed to load:", err);
+        // Treat as not-found so we navigate away instead of spinning forever.
+        setExercise(null);
+        setHistory([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (exercise === undefined || history === null) {
