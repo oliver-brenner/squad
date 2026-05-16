@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 import { supabase } from "@/lib/supabase/client";
+import { powersync } from "@/lib/db/client";
 
 export function Settings() {
   const { user } = useAuth();
@@ -58,7 +59,23 @@ export function Settings() {
         variant="outline"
         size="lg"
         className="w-full mt-4"
-        onClick={() => supabase.auth.signOut()}
+        onClick={async () => {
+          // Explicit sign-out: wipe the local DB so the next user on this
+          // browser doesn't inherit cached rows. The PowerSyncProvider no
+          // longer does this on transient user→null transitions (mobile
+          // Safari token refresh can briefly emit SIGNED_OUT).
+          try {
+            await powersync.disconnectAndClear();
+          } catch (err) {
+            console.error("[settings] disconnectAndClear failed:", err);
+          }
+          try {
+            localStorage.removeItem("squad.lastConnectedUserId");
+          } catch {
+            // ignore — localStorage may be unavailable
+          }
+          await supabase.auth.signOut();
+        }}
       >
         Sign out
       </Button>
