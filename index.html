@@ -6,9 +6,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a0a" />
     <title>Squad</title>
+    <style>
+      /* Boot-time styling — renders before any JS, matches the AuthGuard /
+         PowerSyncProvider spinner so the handoff to React is invisible.
+         Values mirror the HSL theme variables in src/index.css. */
+      html, body {
+        margin: 0;
+        background: hsl(0 0% 100%);
+        color: hsl(240 10% 3.9%);
+      }
+      @media (prefers-color-scheme: dark) {
+        html, body {
+          background: hsl(240 10% 3.9%);
+          color: hsl(0 0% 98%);
+        }
+      }
+      .__boot {
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .__boot > span {
+        display: block;
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: 9999px;
+        border: 2px solid hsl(240 4.8% 95.9%);
+        border-top-color: hsl(240 10% 3.9%);
+        animation: __boot-spin 1s linear infinite;
+      }
+      @media (prefers-color-scheme: dark) {
+        .__boot > span {
+          border-color: hsl(240 3.7% 15.9%);
+          border-top-color: hsl(0 0% 98%);
+        }
+      }
+      @keyframes __boot-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="__boot"><span></span></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
