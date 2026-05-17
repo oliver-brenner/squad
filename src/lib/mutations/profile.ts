@@ -1,0 +1,40 @@
+import { z } from "zod";
+import { powersync } from "@/lib/db/client";
+import { supabase } from "@/lib/supabase/client";
+
+// Lowercase letters, digits, underscores, and hyphens. Case-insensitive
+// uniqueness is enforced server-side by a unique partial index on
+// `lower(username)`; keeping the allowed alphabet to a single case sidesteps
+// any "OliverB" vs "oliverb" ambiguity here on the client.
+const USERNAME_REGEX = /^[a-z0-9_-]+$/;
+
+const usernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "At least 3 characters")
+  .max(24, "At most 24 characters")
+  .regex(USERNAME_REGEX, "Only lowercase letters, numbers, underscores, and hyphens");
+
+export function validateUsername(input: string): string | null {
+  const result = usernameSchema.safeParse(input);
+  return result.success ? null : result.error.issues[0]?.message ?? "Invalid username";
+}
+
+async function currentUserId(): Promise<string> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) throw new Error("Not authenticated");
+  return data.user.id;
+}
+
+// Pass `null` or an empty string to clear the username back to its initial
+// null state. Any non-empty value is validated against `usernameSchema`.
+export async function updateUsername(input: string | null): Promise<void> {
+  const userId = await currentUserId();
+  const value =
+    input === null || input.trim() === "" ? null : usernameSchema.parse(input);
+  await powersync.execute(
+    `UPDATE profiles SET username = ? WHERE id = ?`,
+    [value, userId]
+  );
+}

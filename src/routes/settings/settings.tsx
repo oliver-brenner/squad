@@ -1,4 +1,6 @@
+import { useEffect, useState, useTransition } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@powersync/react";
 import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,14 +8,25 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 import { supabase } from "@/lib/supabase/client";
 import { powersync } from "@/lib/db/client";
+import { decodeProfile } from "@/lib/db/decoders";
+import type { ProfileRow } from "@/lib/db/schema";
+import { updateUsername, validateUsername } from "@/lib/mutations/profile";
 
 export function Settings() {
   const { user } = useAuth();
-  const name =
+  const { data: profileRows } = useQuery<ProfileRow>(
+    `SELECT * FROM profiles WHERE id = ? LIMIT 1`,
+    [user?.id ?? ""]
+  );
+  const profile = profileRows[0] ? decodeProfile(profileRows[0]) : null;
+
+  const fallbackName =
     (user?.user_metadata?.full_name as string | undefined) ??
     (user?.user_metadata?.name as string | undefined) ??
-    user?.email ??
+    user?.email?.split("@")[0] ??
     "You";
+  const displayedName = profile?.username ?? fallbackName;
+  const initial = (displayedName || "Y").slice(0, 1).toUpperCase();
 
   return (
     <>
@@ -29,15 +42,17 @@ export function Settings() {
             />
           ) : (
             <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center font-semibold text-lg">
-              {name.slice(0, 1).toUpperCase()}
+              {initial}
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium">{name}</div>
+            <div className="truncate font-medium">{displayedName}</div>
             <div className="truncate text-sm text-muted-foreground">{user?.email}</div>
           </div>
         </CardContent>
       </Card>
+
+      <UsernameSection currentUsername={profile?.username ?? null} />
 
       <Card className="mt-4 p-0">
         <Link
@@ -82,5 +97,98 @@ export function Settings() {
         Sign out
       </Button>
     </>
+  );
+}
+
+function UsernameSection({ currentUsername }: { currentUsername: string | null }) {
+  const [draft, setDraft] = useState(currentUsername ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  // Keep the input synced with remote profile updates, but don't yank the
+  // value out from under the user while they're typing.
+  useEffect(() => {
+    if (!focused) setDraft(currentUsername ?? "");
+  }, [currentUsername, focused]);
+
+  function commit() {
+    const trimmed = draft.trim().toLowerCase();
+    if (trimmed === (currentUsername ?? "")) {
+      setError(null);
+      return;
+    }
+    // Empty + had no prior username: nothing to do.
+    if (trimmed === "" && currentUsername === null) {
+      setError(null);
+      return;
+    }
+    // Empty + had a prior username: clear it back to null.
+    if (trimmed === "") {
+      startTransition(async () => {
+        try {
+          await updateUsername(null);
+          setError(null);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Couldn't clear username");
+        }
+      });
+      return;
+    }
+    const validationError = validateUsername(trimmed);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateUsername(trimmed);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't save username");
+      }
+    });
+  }
+
+  return (
+    <Card className="mt-4 p-0">
+      <div className="p-4">
+        <div className="font-medium">Enter username</div>
+        <label className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+          <span>@</span>
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              if (error) setError(null);
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              commit();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                (e.currentTarget as HTMLInputElement).blur();
+              } else if (e.key === "Escape") {
+                setDraft(currentUsername ?? "");
+                setError(null);
+                (e.currentTarget as HTMLInputElement).blur();
+              }
+            }}
+            placeholder="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={24}
+            disabled={pending}
+            className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-60"
+          />
+        </label>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    </Card>
   );
 }
