@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { format, parseISO, startOfWeek, subDays } from "date-fns";
 import { useQuery } from "@powersync/react";
+import { useAuth } from "@/lib/auth/auth-context";
 import { decodeWorkout } from "@/lib/db/decoders";
 import type { WorkoutRow } from "@/lib/db/schema";
 import { Card } from "@/components/ui/card";
@@ -18,30 +19,35 @@ function greeting() {
 }
 
 export function Dashboard() {
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const today = new Date();
   const weekStartIso = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
   const since30Iso = format(subDays(today, 29), "yyyy-MM-dd");
 
   const { data: weekWorkoutCount = [{ count: 0 }] } = useQuery<{ count: number }>(
     `SELECT COUNT(*) AS count FROM workouts
-     WHERE performed_on >= ? AND session_type = 'workout'`,
-    [weekStartIso]
+     WHERE user_id = ? AND performed_on >= ? AND session_type = 'workout'`,
+    [userId, weekStartIso]
   );
   const weekWorkouts = weekWorkoutCount[0]?.count ?? 0;
 
   const { data: streakDays = [] } = useQuery<{ performed_on: string }>(
-    `SELECT DISTINCT performed_on FROM workouts`
+    `SELECT DISTINCT performed_on FROM workouts WHERE user_id = ?`,
+    [userId]
   );
 
   const { data: recentRows = [] } = useQuery<WorkoutRow>(
-    `SELECT * FROM workouts ORDER BY performed_on DESC, created_at DESC LIMIT 5`
+    `SELECT * FROM workouts WHERE user_id = ?
+     ORDER BY performed_on DESC, created_at DESC LIMIT 5`,
+    [userId]
   );
   const recentWorkouts = recentRows.map(decodeWorkout);
 
   const { data: calendarDots = [] } = useQuery<{ performed_on: string; session_type: string }>(
     `SELECT performed_on, session_type FROM workouts
-     WHERE performed_on >= ? ORDER BY performed_on ASC`,
-    [since30Iso]
+     WHERE user_id = ? AND performed_on >= ? ORDER BY performed_on ASC`,
+    [userId, since30Iso]
   );
 
   const dayStreak = computeStreak(streakDays.map((r) => r.performed_on));

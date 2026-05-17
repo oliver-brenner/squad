@@ -1,4 +1,6 @@
 import { useState, useTransition } from "react";
+import { Link } from "react-router-dom";
+import { format, parseISO } from "date-fns";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { Users } from "lucide-react";
@@ -7,9 +9,20 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/auth-context";
+import { sessionTypeColor } from "@/lib/session-type-color";
 import type { FollowRow } from "@/lib/db/schema";
 import { fetchDiscoverableProfiles, type PublicProfile } from "@/lib/supabase/profiles";
 import { followUser, unfollowUser } from "@/lib/mutations/follows";
+
+type FeedRow = {
+  workout_id: string;
+  workout_name: string;
+  performed_on: string;
+  session_type: string;
+  author_id: string;
+  author_username: string | null;
+  author_display_name: string | null;
+};
 
 type Tab = "feed" | "following";
 
@@ -48,16 +61,77 @@ function TabSwitcher({ value, onChange }: { value: Tab; onChange: (t: Tab) => vo
 }
 
 function FeedView() {
-  return (
-    <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center">
-      <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
-        <Users className="h-7 w-7 text-muted-foreground" />
+  const { user } = useAuth();
+  const myId = user?.id ?? "";
+
+  // Reactive: any new followee workout that streams in via PowerSync's
+  // followee_workouts bucket appears here without us doing anything. The
+  // EXISTS subquery against `follows` keeps the feed scoped to current
+  // followees (so unfollowing instantly removes their sessions).
+  const { data: rows = [] } = useQuery<FeedRow>(
+    `SELECT
+       w.id AS workout_id,
+       w.name AS workout_name,
+       w.performed_on AS performed_on,
+       w.session_type AS session_type,
+       w.user_id AS author_id,
+       p.username AS author_username,
+       p.display_name AS author_display_name
+     FROM workouts w
+     LEFT JOIN profiles p ON p.id = w.user_id
+     WHERE w.user_id != ?
+       AND EXISTS (
+         SELECT 1 FROM follows f
+         WHERE f.follower_id = ? AND f.followee_id = w.user_id
+       )
+     ORDER BY w.performed_on DESC, w.created_at DESC
+     LIMIT 100`,
+    [myId, myId]
+  );
+
+  if (rows.length === 0) {
+    return (
+      <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center">
+        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
+          <Users className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <p className="font-medium">Your feed is empty</p>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          Follow some friends to see their sessions, drop emotes, and leave comments here.
+        </p>
       </div>
-      <p className="font-medium">Your feed is empty</p>
-      <p className="max-w-xs text-sm text-muted-foreground">
-        Follow some friends to see their sessions, drop emotes, and leave comments here.
-      </p>
-    </div>
+    );
+  }
+
+  return (
+    <ul className="mt-4 flex flex-col gap-2">
+      {rows.map((r) => {
+        const author = r.author_username
+          ? `@${r.author_username}`
+          : r.author_display_name ?? "Unknown";
+        return (
+          <li key={r.workout_id}>
+            <Link
+              to={`/friends/sessions/${r.workout_id}`}
+              className="block rounded-2xl border border-border bg-card p-4 hover:bg-muted/30"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`h-2.5 w-2.5 rounded-full shrink-0 ${sessionTypeColor(r.session_type)}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{r.workout_name}</div>
+                  <div className="truncate text-xs text-muted-foreground">{author}</div>
+                </div>
+                <div className="text-sm text-muted-foreground shrink-0">
+                  {format(parseISO(r.performed_on), "EEE d MMM")}
+                </div>
+              </div>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

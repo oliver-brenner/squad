@@ -1,7 +1,7 @@
 import { z } from "zod";
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { arr, arrStr, nowISO, uuid } from "@/lib/db/encoding";
-import { supabase } from "@/lib/supabase/client";
 import type { UserFieldKind } from "@/lib/db/schema";
 import type { Transaction } from "@powersync/web";
 
@@ -14,12 +14,6 @@ function slugify(label: string): string {
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
-}
-
-async function currentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Not authenticated");
-  return data.user.id;
 }
 
 async function ensureUniqueKey(
@@ -55,7 +49,7 @@ const addSchema = z.object({
 });
 
 export async function addFieldOption(input: z.infer<typeof addSchema>): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const data = addSchema.parse(input);
 
   if (data.kind === "muscle_child" && !data.parentId) {
@@ -89,7 +83,7 @@ const renameSchema = z.object({
 });
 
 export async function renameFieldOption(input: z.infer<typeof renameSchema>): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const data = renameSchema.parse(input);
   await powersync.execute(
     `UPDATE user_field_options SET label = ? WHERE id = ? AND user_id = ?`,
@@ -104,7 +98,7 @@ const reorderSchema = z.object({
 });
 
 export async function reorderFieldOptions(input: z.infer<typeof reorderSchema>): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const data = reorderSchema.parse(input);
 
   await powersync.writeTransaction(async (tx) => {
@@ -164,7 +158,7 @@ async function unassignKeyFromExercises(
 const deleteSchema = z.object({ id: z.string().uuid() });
 
 export async function deleteFieldOption(input: z.infer<typeof deleteSchema>): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const { id } = deleteSchema.parse(input);
 
   const target = await powersync.getOptional<{

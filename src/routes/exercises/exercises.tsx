@@ -2,6 +2,7 @@ import { useState, useTransition, useEffect, useMemo } from "react";
 import { useQuery } from "@powersync/react";
 import { Plus, ArchiveRestore, MoreHorizontal } from "lucide-react";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
+import { useAuth } from "@/lib/auth/auth-context";
 import type { Exercise } from "@/lib/db/types";
 import type { ExerciseRow } from "@/lib/db/schema";
 import { decodeExercise } from "@/lib/db/decoders";
@@ -17,22 +18,25 @@ import { ExerciseFilteredList } from "@/components/exercise-filtered-list";
 const EXERCISES_QUERY = `
   SELECT e.*
   FROM exercises e
+  WHERE e.user_id = ?
   ORDER BY
     (SELECT MAX(w.performed_on)
      FROM sets s JOIN workouts w ON s.workout_id = w.id
-     WHERE s.exercise_id = e.id) DESC NULLS LAST,
+     WHERE s.exercise_id = e.id AND w.user_id = e.user_id) DESC NULLS LAST,
     (SELECT MAX(s.position)
      FROM sets s JOIN workouts w ON s.workout_id = w.id
-     WHERE s.exercise_id = e.id
+     WHERE s.exercise_id = e.id AND w.user_id = e.user_id
        AND w.performed_on = (
          SELECT MAX(w2.performed_on)
          FROM sets s2 JOIN workouts w2 ON s2.workout_id = w2.id
-         WHERE s2.exercise_id = e.id
+         WHERE s2.exercise_id = e.id AND w2.user_id = e.user_id
        )) DESC NULLS LAST
 `;
 
 export function Exercises() {
-  const { data: rawRows = [] } = useQuery<ExerciseRow>(EXERCISES_QUERY);
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
+  const { data: rawRows = [] } = useQuery<ExerciseRow>(EXERCISES_QUERY, [userId]);
   const exercises = useMemo(() => rawRows.map(decodeExercise), [rawRows]);
 
   const [editing, setEditing] = useState<Exercise | null>(null);

@@ -3,25 +3,31 @@
 // the same SQL — these helpers exist for code paths that need a value once
 // (autofill, exports, mutation pre-flight checks).
 //
-// Local SQLite only contains the current user's data (PowerSync sync rules
-// enforce this on download, RLS enforces it on upload). So we don't filter
-// by user_id in the WHERE clauses — there's nothing else to find.
+// Local SQLite now contains BOTH the signed-in user's data AND every followee's
+// workouts/sets/exercises/profile (driven by the `followee_*` buckets in
+// powersync/sync_rules.yaml — needed for the Friends feed). So every query
+// that returns "my" data must filter by user_id; queries that intentionally
+// span friends are explicit in their naming (e.g. `getFeedSessions`).
 
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "./client";
 import {
   decodeExercise,
+  decodeProfile,
   decodeSet,
   decodeWorkout,
   decodeUserFieldOption,
 } from "./decoders";
 import type {
   ExerciseRow,
+  ProfileRow,
   WorkoutRow,
   WorkoutSetRow,
   UserFieldOptionRow,
 } from "./schema";
 import type {
   Exercise,
+  Profile,
   Workout,
   WorkoutSet,
   WorkoutWithSets,
@@ -30,6 +36,8 @@ import type {
 } from "./types";
 
 export async function getExerciseById(exerciseId: string): Promise<Exercise | null> {
+  // Looked up by globally-unique id — no user filter needed; callers fetching
+  // a friend's exercise (e.g. read-only session view) rely on this too.
   const row = await powersync.getOptional<ExerciseRow>(
     `SELECT * FROM exercises WHERE id = ?`,
     [exerciseId]
@@ -38,10 +46,12 @@ export async function getExerciseById(exerciseId: string): Promise<Exercise | nu
 }
 
 export async function getUserExercises(includeArchived = false): Promise<Exercise[]> {
+  const userId = await getCurrentUserId();
   const rows = await powersync.getAll<ExerciseRow>(
     includeArchived
-      ? `SELECT * FROM exercises ORDER BY name ASC`
-      : `SELECT * FROM exercises WHERE archived_at IS NULL ORDER BY name ASC`
+      ? `SELECT * FROM exercises WHERE user_id = ? ORDER BY name ASC`
+      : `SELECT * FROM exercises WHERE user_id = ? AND archived_at IS NULL ORDER BY name ASC`,
+    [userId]
   );
   return rows.map(decodeExercise);
 }
@@ -51,35 +61,40 @@ export async function getUserExercises(includeArchived = false): Promise<Exercis
 export async function getUserExercisesOrderedByLastLogged(
   includeArchived = false
 ): Promise<Exercise[]> {
+  const userId = await getCurrentUserId();
   const sql = `
     SELECT e.*
     FROM exercises e
-    ${includeArchived ? "" : "WHERE e.archived_at IS NULL"}
+    WHERE e.user_id = ? ${includeArchived ? "" : "AND e.archived_at IS NULL"}
     ORDER BY
       (SELECT MAX(w.performed_on)
        FROM sets s JOIN workouts w ON s.workout_id = w.id
-       WHERE s.exercise_id = e.id) DESC NULLS LAST,
+       WHERE s.exercise_id = e.id AND w.user_id = e.user_id) DESC NULLS LAST,
       (SELECT MAX(s.position)
        FROM sets s JOIN workouts w ON s.workout_id = w.id
-       WHERE s.exercise_id = e.id
+       WHERE s.exercise_id = e.id AND w.user_id = e.user_id
          AND w.performed_on = (
            SELECT MAX(w2.performed_on)
            FROM sets s2 JOIN workouts w2 ON s2.workout_id = w2.id
-           WHERE s2.exercise_id = e.id
+           WHERE s2.exercise_id = e.id AND w2.user_id = e.user_id
          )) DESC NULLS LAST
   `;
-  const rows = await powersync.getAll<ExerciseRow>(sql);
+  const rows = await powersync.getAll<ExerciseRow>(sql, [userId]);
   return rows.map(decodeExercise);
 }
 
 export async function getWorkoutByDate(performedOn: string): Promise<Workout | null> {
+  const userId = await getCurrentUserId();
   const row = await powersync.getOptional<WorkoutRow>(
-    `SELECT * FROM workouts WHERE performed_on = ? LIMIT 1`,
-    [performedOn]
+    `SELECT * FROM workouts WHERE user_id = ? AND performed_on = ? LIMIT 1`,
+    [userId, performedOn]
   );
   return row ? decodeWorkout(row) : null;
 }
 
+// Loads ANY workout (own or friend's) by id. Callers must enforce access
+// boundaries themselves — e.g. the read-only friend session view passes a
+// followee's workout id intentionally.
 export async function getWorkoutWithSets(workoutId: string): Promise<WorkoutWithSets | null> {
   const workoutRow = await powersync.getOptional<WorkoutRow>(
     `SELECT * FROM workouts WHERE id = ?`,
@@ -94,9 +109,10 @@ export async function getWorkoutWithSets(workoutId: string): Promise<WorkoutWith
 }
 
 export async function getRecentWorkouts(limit = 30): Promise<Workout[]> {
+  const userId = await getCurrentUserId();
   const rows = await powersync.getAll<WorkoutRow>(
-    `SELECT * FROM workouts ORDER BY performed_on DESC, created_at DESC LIMIT ?`,
-    [limit]
+    `SELECT * FROM workouts WHERE user_id = ? ORDER BY performed_on DESC, created_at DESC LIMIT ?`,
+    [userId, limit]
   );
   return rows.map(decodeWorkout);
 }
@@ -110,9 +126,10 @@ export type WorkoutWithExercises = Workout & {
 };
 
 export async function getRecentWorkoutsWithExercises(limit = 60): Promise<WorkoutWithExercises[]> {
+  const userId = await getCurrentUserId();
   const workoutRows = await powersync.getAll<WorkoutRow>(
-    `SELECT * FROM workouts ORDER BY performed_on DESC, created_at DESC LIMIT ?`,
-    [limit]
+    `SELECT * FROM workouts WHERE user_id = ? ORDER BY performed_on DESC, created_at DESC LIMIT ?`,
+    [userId, limit]
   );
   if (workoutRows.length === 0) return [];
 
@@ -184,19 +201,21 @@ export async function getLastSetsForExercise(
   exerciseId: string,
   limit = 10
 ): Promise<Array<{ set: WorkoutSet; performedOn: string }>> {
+  const userId = await getCurrentUserId();
   const rows = await powersync.getAll<WorkoutSetRow & { performed_on: string }>(
     `SELECT s.*, w.performed_on AS performed_on
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
-     WHERE s.exercise_id = ?
+     WHERE s.exercise_id = ? AND w.user_id = ?
      ORDER BY w.performed_on DESC, s.position DESC
      LIMIT ?`,
-    [exerciseId, limit]
+    [exerciseId, userId, limit]
   );
   return rows.map((r) => ({ set: decodeSet(r), performedOn: r.performed_on }));
 }
 
 export async function getSetsWithExerciseSince(sinceIso: string): Promise<SetWithExerciseRow[]> {
+  const userId = await getCurrentUserId();
   const rows = await powersync.getAll<
     WorkoutSetRow & { performed_on: string; workout_id_alias: string; exercise_json: string }
   >(
@@ -204,9 +223,9 @@ export async function getSetsWithExerciseSince(sinceIso: string): Promise<SetWit
     `SELECT s.*, w.performed_on AS performed_on, w.id AS workout_id_alias
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
-     WHERE w.performed_on >= ?
+     WHERE w.user_id = ? AND w.performed_on >= ?
      ORDER BY w.performed_on DESC`,
-    [sinceIso]
+    [userId, sinceIso]
   );
 
   const exerciseIds = [...new Set(rows.map((r) => r.exercise_id).filter((v): v is string => !!v))];
@@ -238,28 +257,31 @@ export async function getAllSetsWithExercise(): Promise<SetWithExerciseRow[]> {
 export async function getWorkoutsInRange(
   sinceIso: string
 ): Promise<Array<{ performedOn: string; sessionType: string }>> {
+  const userId = await getCurrentUserId();
   return powersync.getAll<{ performedOn: string; sessionType: string }>(
     `SELECT performed_on AS performedOn, session_type AS sessionType
      FROM workouts
-     WHERE performed_on >= ?
+     WHERE user_id = ? AND performed_on >= ?
      ORDER BY performed_on ASC`,
-    [sinceIso]
+    [userId, sinceIso]
   );
 }
 
 export async function countSessionsSince(sinceIso: string): Promise<number> {
+  const userId = await getCurrentUserId();
   const row = await powersync.get<{ count: number }>(
-    `SELECT COUNT(*) AS count FROM workouts WHERE performed_on >= ?`,
-    [sinceIso]
+    `SELECT COUNT(*) AS count FROM workouts WHERE user_id = ? AND performed_on >= ?`,
+    [userId, sinceIso]
   );
   return row.count;
 }
 
 export async function countWorkoutsSince(sinceIso: string): Promise<number> {
+  const userId = await getCurrentUserId();
   const row = await powersync.get<{ count: number }>(
     `SELECT COUNT(*) AS count FROM workouts
-     WHERE performed_on >= ? AND session_type = 'workout'`,
-    [sinceIso]
+     WHERE user_id = ? AND performed_on >= ? AND session_type = 'workout'`,
+    [userId, sinceIso]
   );
   return row.count;
 }
@@ -267,8 +289,10 @@ export async function countWorkoutsSince(sinceIso: string): Promise<number> {
 // Current consecutive-day streak. If today has no session yet, start from
 // yesterday so the streak only breaks after a full day has been missed.
 export async function getDayStreak(): Promise<number> {
+  const userId = await getCurrentUserId();
   const rows = await powersync.getAll<{ performed_on: string }>(
-    `SELECT DISTINCT performed_on FROM workouts`
+    `SELECT DISTINCT performed_on FROM workouts WHERE user_id = ?`,
+    [userId]
   );
   if (rows.length === 0) return 0;
 
@@ -295,7 +319,8 @@ export async function getExerciseHistory(
   exerciseId: string,
   excludeWorkoutId?: string
 ): Promise<ExerciseHistoryEntry[]> {
-  const params: unknown[] = [exerciseId];
+  const userId = await getCurrentUserId();
+  const params: unknown[] = [exerciseId, userId];
   let exclude = "";
   if (excludeWorkoutId) {
     exclude = "AND w.id != ?";
@@ -307,7 +332,7 @@ export async function getExerciseHistory(
     `SELECT s.*, w.id AS workout_id_alias, w.name AS workout_name, w.performed_on AS performed_on
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
-     WHERE s.exercise_id = ? ${exclude}
+     WHERE s.exercise_id = ? AND w.user_id = ? ${exclude}
      ORDER BY w.performed_on DESC, s.position ASC`,
     params
   );
@@ -332,7 +357,11 @@ export async function getExerciseHistory(
 }
 
 export async function getUserFieldOptionsRaw(): Promise<UserFieldOptionRow[]> {
-  return powersync.getAll<UserFieldOptionRow>(`SELECT * FROM user_field_options`);
+  const userId = await getCurrentUserId();
+  return powersync.getAll<UserFieldOptionRow>(
+    `SELECT * FROM user_field_options WHERE user_id = ?`,
+    [userId]
+  );
 }
 
 export async function getUserFieldOptions() {
@@ -366,4 +395,54 @@ export async function getUserFieldOptions() {
   }));
 
   return { categories, equipment, muscleGroups };
+}
+
+// ----- Friends feed -----
+// Reads spanning friends' data, explicitly named so callers can't confuse
+// them with "my data". The sync rules in powersync/sync_rules.yaml stream
+// each followee's workouts/sets/exercises/profile into local SQLite.
+
+export type FeedSession = {
+  workoutId: string;
+  userId: string;
+  name: string;
+  performedOn: string;
+  createdAt: string;
+  sessionType: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorAvatarUrl: string | null;
+};
+
+// Fetches a single feed session detail (workout + sets) regardless of owner,
+// alongside the author's profile snapshot for display.
+export async function getFriendSessionDetail(workoutId: string): Promise<
+  | {
+      workout: Workout;
+      sets: WorkoutSet[];
+      author: Profile | null;
+    }
+  | null
+> {
+  const workoutRow = await powersync.getOptional<WorkoutRow>(
+    `SELECT * FROM workouts WHERE id = ?`,
+    [workoutId]
+  );
+  if (!workoutRow || !workoutRow.user_id) return null;
+
+  const setRows = await powersync.getAll<WorkoutSetRow>(
+    `SELECT * FROM sets WHERE workout_id = ? ORDER BY position ASC`,
+    [workoutId]
+  );
+
+  const profileRow = await powersync.getOptional<ProfileRow>(
+    `SELECT * FROM profiles WHERE id = ?`,
+    [workoutRow.user_id]
+  );
+
+  return {
+    workout: decodeWorkout(workoutRow),
+    sets: setRows.map(decodeSet),
+    author: profileRow ? decodeProfile(profileRow) : null,
+  };
 }

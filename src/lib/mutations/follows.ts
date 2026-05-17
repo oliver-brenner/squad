@@ -1,18 +1,12 @@
 import { z } from "zod";
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { nowISO, uuid } from "@/lib/db/encoding";
-import { supabase } from "@/lib/supabase/client";
-
-async function currentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Not authenticated");
-  return data.user.id;
-}
 
 const followeeIdSchema = z.string().uuid();
 
 export async function followUser(followeeId: string): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const id = followeeIdSchema.parse(followeeId);
   if (id === userId) throw new Error("Cannot follow yourself");
 
@@ -32,7 +26,7 @@ export async function followUser(followeeId: string): Promise<void> {
 }
 
 export async function unfollowUser(followeeId: string): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const id = followeeIdSchema.parse(followeeId);
   await powersync.execute(
     `DELETE FROM follows WHERE follower_id = ? AND followee_id = ?`,

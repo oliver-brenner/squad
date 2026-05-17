@@ -1,7 +1,7 @@
 import { z } from "zod";
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { nowISO, uuid } from "@/lib/db/encoding";
-import { supabase } from "@/lib/supabase/client";
 
 const setInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -28,16 +28,10 @@ const workoutInputSchema = z.object({
   sets: z.array(setInputSchema),
 });
 
-async function currentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Not authenticated");
-  return data.user.id;
-}
-
 // Save a workout and replace its set list in one transaction.
 // Same single-entry-point pattern as gymtracker's saveWorkout.
 export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Promise<string> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const parsed = workoutInputSchema.parse(input);
   const now = nowISO();
   const workoutId = parsed.id ?? uuid();
@@ -62,13 +56,14 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
     for (const s of parsed.sets) {
       await tx.execute(
         `INSERT INTO sets (
-          id, workout_id, exercise_id, position,
+          id, user_id, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
         [
           s.id ?? uuid(),
+          userId,
           workoutId,
           s.exerciseId,
           s.position,
@@ -98,7 +93,7 @@ const createWorkoutSchema = z.object({
 });
 
 export async function createWorkout(input: z.infer<typeof createWorkoutSchema>): Promise<string> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const parsed = createWorkoutSchema.parse(input);
   const id = uuid();
   const now = nowISO();
@@ -121,7 +116,7 @@ const updateWorkoutDetailsSchema = z.object({
 export async function updateWorkoutDetails(
   input: z.infer<typeof updateWorkoutDetailsSchema>
 ): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const parsed = updateWorkoutDetailsSchema.parse(input);
   const now = nowISO();
 
@@ -148,7 +143,7 @@ const copyWorkoutSchema = z.object({
 });
 
 export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Promise<string> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const parsed = copyWorkoutSchema.parse(input);
   const newId = uuid();
   const now = nowISO();
@@ -185,13 +180,14 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
     for (const s of sourceSets) {
       await tx.execute(
         `INSERT INTO sets (
-          id, workout_id, exercise_id, position,
+          id, user_id, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
         [
           uuid(),
+          userId,
           newId,
           s.exercise_id,
           s.position,
@@ -215,7 +211,7 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
 }
 
 export async function deleteWorkout(id: string): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   // Sets cascade-delete via Postgres FK; locally we delete both to keep SQLite consistent.
   await powersync.writeTransaction(async (tx) => {
     await tx.execute(`DELETE FROM sets WHERE workout_id = ?`, [id]);

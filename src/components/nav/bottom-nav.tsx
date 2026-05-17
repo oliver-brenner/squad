@@ -27,11 +27,11 @@ export function BottomNav() {
               <Link
                 to={href}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-1.5 pt-3 pb-2 text-base transition-colors",
+                  "flex flex-col items-center justify-center gap-1 pt-2.5 pb-2 text-xs transition-colors",
                   active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon className="h-8 w-8" strokeWidth={active ? 2.5 : 2} />
+                <Icon className="h-6 w-6" strokeWidth={active ? 2.5 : 2} />
                 <span>{label}</span>
               </Link>
             </li>

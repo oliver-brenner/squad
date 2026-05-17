@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { format, subDays } from "date-fns";
 import { useQuery } from "@powersync/react";
+import { useAuth } from "@/lib/auth/auth-context";
 import { decodeExercise, decodeSet } from "@/lib/db/decoders";
 import type { WorkoutSetRow, ExerciseRow } from "@/lib/db/schema";
 import type { SetWithExerciseRow } from "@/lib/db/types";
@@ -63,6 +64,8 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
 }
 
 export function ExerciseBreakdown() {
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const [days, setDays] = useState<7 | 30 | "all">(7);
   const { muscleGroups } = useUserFieldOptions();
 
@@ -86,8 +89,8 @@ export function ExerciseBreakdown() {
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
      INNER JOIN exercises e ON s.exercise_id = e.id
-     WHERE w.performed_on >= ?`,
-    [sinceIso]
+     WHERE w.user_id = ? AND w.performed_on >= ?`,
+    [userId, sinceIso]
   );
 
   const data = useMemo(() => {

@@ -1,7 +1,7 @@
 import { z } from "zod";
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { arrStr, boolInt, nowISO, uuid } from "@/lib/db/encoding";
-import { supabase } from "@/lib/supabase/client";
 
 const exerciseSchema = z.object({
   name: z.string().trim().min(1).max(80),
@@ -24,14 +24,8 @@ const exerciseSchema = z.object({
   secondaryMuscles: z.array(z.string()).nullable().optional(),
 });
 
-async function currentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Not authenticated");
-  return data.user.id;
-}
-
 export async function createExercise(input: z.infer<typeof exerciseSchema>): Promise<string> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const data = exerciseSchema.parse(input);
   const id = uuid();
   const now = nowISO();
@@ -77,7 +71,7 @@ export async function updateExercise(
   id: string,
   input: z.infer<typeof exerciseSchema>
 ): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const data = exerciseSchema.parse(input);
 
   await powersync.execute(
@@ -115,7 +109,7 @@ export async function updateExercise(
 }
 
 export async function archiveExercise(id: string): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   await powersync.execute(
     `UPDATE exercises SET archived_at = ? WHERE id = ? AND user_id = ?`,
     [nowISO(), id, userId]
@@ -123,7 +117,7 @@ export async function archiveExercise(id: string): Promise<void> {
 }
 
 export async function unarchiveExercise(id: string): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   await powersync.execute(
     `UPDATE exercises SET archived_at = NULL WHERE id = ? AND user_id = ?`,
     [id, userId]

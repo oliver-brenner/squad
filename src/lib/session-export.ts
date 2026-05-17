@@ -2,6 +2,7 @@
 // Joins workouts → sets → exercises → user_field_options to resolve every
 // category/equipment/muscle key into its display label.
 
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { decodeExercise, decodeWorkout } from "@/lib/db/decoders";
 import type {
@@ -72,12 +73,16 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
   const exerciseIds = [...new Set(setRows.map((s) => s.exercise_id).filter((v): v is string => !!v))];
   const placeholders = exerciseIds.map(() => "?").join(",");
 
+  const userId = await getCurrentUserId();
   const [exerciseRows, optionRows] = await Promise.all([
     powersync.getAll<ExerciseRow>(
       `SELECT * FROM exercises WHERE id IN (${placeholders})`,
       exerciseIds
     ),
-    powersync.getAll<UserFieldOptionRow>(`SELECT * FROM user_field_options`),
+    powersync.getAll<UserFieldOptionRow>(
+      `SELECT * FROM user_field_options WHERE user_id = ?`,
+      [userId]
+    ),
   ]);
 
   const exerciseById = new Map(exerciseRows.map((e) => [e.id, decodeExercise(e)]));

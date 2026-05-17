@@ -24,14 +24,15 @@ bucket_definitions:
     data:
       - SELECT * FROM workouts WHERE user_id = bucket.user_id
 
-  # Sets has no user_id column. We derive a bucket per workout the user owns,
-  # then sync the sets belonging to each. PowerSync's data queries cannot JOIN,
-  # but parameter queries can SELECT from tables, so this two-step setup works.
+  # `user_id` is denormalised onto `sets` (kept in sync by a Postgres trigger
+  # — see `db/migrations` notes). Lets us bucket sets directly by user without
+  # the parameter query needing to join `workouts`, which PowerSync's
+  # single-table parser doesn't allow.
   user_sets:
     parameters:
-      - SELECT id as workout_id FROM workouts WHERE user_id = request.user_id()
+      - SELECT request.user_id() as user_id
     data:
-      - SELECT * FROM sets WHERE workout_id = bucket.workout_id
+      - SELECT * FROM sets WHERE user_id = bucket.user_id
 
   user_field_options:
     parameters:
@@ -47,3 +48,39 @@ bucket_definitions:
     data:
       - SELECT * FROM follows WHERE follower_id = bucket.user_id
       - SELECT * FROM follows WHERE followee_id = bucket.user_id
+
+  # ----- Followee data (powers the Friends feed) -----
+  # One bucket per user this user follows. PowerSync re-evaluates parameter
+  # queries when follows rows change, so following someone immediately starts
+  # syncing their data; unfollowing immediately stops.
+
+  # Profile snapshots for everyone you follow — needed to render their name
+  # and avatar in the feed.
+  followee_profiles:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM profiles WHERE id = bucket.user_id
+
+  # Followees' exercise library, so we can resolve exercise_id → name in
+  # their sessions without a server round-trip.
+  followee_exercises:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM exercises WHERE user_id = bucket.user_id
+
+  # Followees' workouts — the rows the feed lists chronologically.
+  followee_workouts:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM workouts WHERE user_id = bucket.user_id
+
+  # Followee sets — same denormalised-user_id pattern as user_sets. One bucket
+  # per followee, parameterised straight off `follows`.
+  followee_sets:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM sets WHERE user_id = bucket.user_id

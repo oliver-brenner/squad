@@ -71,6 +71,9 @@ const workouts = new Table(
 
 const sets = new Table(
   {
+    // Denormalised from workouts.user_id — kept in sync by a Postgres trigger.
+    // Needed so the followee_sets sync bucket can filter without a JOIN.
+    user_id: column.text,
     workout_id: column.text,
     exercise_id: column.text,
     position: column.integer,

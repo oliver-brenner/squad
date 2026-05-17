@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useQuery } from "@powersync/react";
+import { useAuth } from "@/lib/auth/auth-context";
 import { decodeUserFieldOption } from "@/lib/db/decoders";
 import type { UserFieldOptionRow } from "@/lib/db/schema";
 import type { UserFieldOptions, MuscleGroupNode } from "@/lib/user-field-options";
@@ -10,8 +11,11 @@ const Ctx = createContext<UserFieldOptions | null>(null);
 // remote updates streaming down from another device). The provider mounts inside
 // PowerSyncProvider, so the database is guaranteed to exist when this runs.
 export function UserFieldOptionsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? "";
   const { data: rawRows } = useQuery<UserFieldOptionRow>(
-    `SELECT * FROM user_field_options`
+    `SELECT * FROM user_field_options WHERE user_id = ?`,
+    [userId]
   );
 
   const value = useMemo<UserFieldOptions>(() => {

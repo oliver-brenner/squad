@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
-import { supabase } from "@/lib/supabase/client";
 
 // Lowercase letters, digits, underscores, and hyphens. Case-insensitive
 // uniqueness is enforced server-side by a unique partial index on
@@ -21,16 +21,10 @@ export function validateUsername(input: string): string | null {
   return result.success ? null : result.error.issues[0]?.message ?? "Invalid username";
 }
 
-async function currentUserId(): Promise<string> {
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("Not authenticated");
-  return data.user.id;
-}
-
 // Pass `null` or an empty string to clear the username back to its initial
 // null state. Any non-empty value is validated against `usernameSchema`.
 export async function updateUsername(input: string | null): Promise<void> {
-  const userId = await currentUserId();
+  const userId = await getCurrentUserId();
   const value =
     input === null || input.trim() === "" ? null : usernameSchema.parse(input);
   await powersync.execute(
