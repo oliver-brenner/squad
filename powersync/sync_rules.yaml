@@ -70,6 +70,15 @@ bucket_definitions:
     data:
       - SELECT * FROM exercises WHERE user_id = bucket.user_id
 
+  # Followees' field options (their custom categories, equipment, muscle
+  # groups) — so their exercise tags render with the labels they intended,
+  # not whatever the viewer happens to have locally.
+  followee_field_options:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM user_field_options WHERE user_id = bucket.user_id
+
   # Followees' workouts — the rows the feed lists chronologically.
   followee_workouts:
     parameters:

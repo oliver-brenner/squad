@@ -32,6 +32,51 @@ export function arrStr(v: string[] | null | undefined): string | null {
   return JSON.stringify(v);
 }
 
+// Some Postgres text[] values arrive as raw array literals (e.g. `{barbell}`
+// or `{"big lifts"}`) rather than JSON-encoded strings — this happens when
+// PowerSync streams down a column the client expects to be a scalar text.
+// Historically gymtracker stored `exercises.equipment` as text[] even though
+// the app uses it as a single value, and inserts done outside the client can
+// leak the same shape. This helper normalises both forms back to a plain
+// string: passthrough for plain text, first element for an array literal,
+// `null` for an empty array literal.
+export function unwrapPgArrayLiteral(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  if (v.length < 2 || v[0] !== "{" || v[v.length - 1] !== "}") return v;
+  const inner = v.slice(1, -1);
+  if (inner === "") return null;
+  // Take the first element. Quoted form (`"foo bar"`) → unquote and unescape.
+  const first = splitFirstArrayElement(inner);
+  if (first.length >= 2 && first.startsWith('"') && first.endsWith('"')) {
+    return first.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  return first || null;
+}
+
+function splitFirstArrayElement(inner: string): string {
+  // Quoted strings can contain escaped quotes and commas — naive split on `,`
+  // would butcher them. Walk char-by-char until the first unquoted comma.
+  let inQuote = false;
+  let escape = false;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (ch === "," && !inQuote) return inner.slice(0, i);
+  }
+  return inner;
+}
+
 export function nowISO(): string {
   return new Date().toISOString();
 }

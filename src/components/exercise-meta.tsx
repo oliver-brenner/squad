@@ -1,5 +1,5 @@
 import React from "react";
-import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
+import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 import { buildMuscleLabelMap, flattenMuscleKeys } from "@/lib/user-field-options";
 
 export function BarbellIcon({ className }: { className?: string; strokeWidth?: number }) {
@@ -33,6 +33,12 @@ function Dot() {
 }
 
 type ExerciseMeta = {
+  // Owner of the exercise — used to resolve category/equipment/muscle keys
+  // against THEIR field options, so a friend's tags render with their own
+  // custom labels rather than the viewer's. Optional for backwards-compat
+  // with call sites that haven't been threaded yet; falls back to the
+  // current user's options.
+  userId?: string | null;
   categories?: string[] | null;
   equipment?: string | null;
   muscles?: string[] | null;
@@ -43,7 +49,8 @@ type ExerciseMeta = {
 };
 
 export function ExerciseMetaTags({ e }: { e: ExerciseMeta }) {
-  const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
+  const { categories, equipment: equipmentOptions, muscleGroups } =
+    useUserFieldOptionsForUser(e.userId);
   const muscleLabels = buildMuscleLabelMap(muscleGroups);
   const orderedMuscleKeys = flattenMuscleKeys(muscleGroups);
   const primaryMuscles = e.muscles ?? [];
