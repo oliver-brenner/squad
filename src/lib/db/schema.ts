@@ -74,6 +74,10 @@ const sets = new Table(
     // Denormalised from workouts.user_id — kept in sync by a Postgres trigger.
     // Needed so the followee_sets sync bucket can filter without a JOIN.
     user_id: column.text,
+    // Denormalised from workouts.performed_on — also trigger-maintained. Lets
+    // the followee_sets sync bucket apply the rolling `feed_since` window
+    // without joining workouts.
+    performed_on: column.text,
     workout_id: column.text,
     exercise_id: column.text,
     position: column.integer,

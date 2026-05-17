@@ -51,6 +51,7 @@ export type Workout = {
 export type WorkoutSet = {
   id: string;
   userId: string;
+  performedOn: string;
   workoutId: string;
   exerciseId: string;
   position: number;

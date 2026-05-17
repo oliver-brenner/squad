@@ -80,14 +80,21 @@ bucket_definitions:
       - SELECT * FROM user_field_options WHERE user_id = bucket.user_id
 
   # Followees' workouts — the rows the feed lists chronologically.
+  #
+  # NOTE: we explored a rolling "last 30 days" cap at the sync layer but
+  # PowerSync rules don't currently support it (bucket params only allow
+  # equality, request.parameters isn't available in data queries, parameter
+  # queries can't JOIN/subquery). `performed_on` is still denormalised onto
+  # `sets` — defensive and ready to use the moment PowerSync lifts one of
+  # those restrictions, or if we route this through a Postgres view that
+  # bakes in `CURRENT_DATE - 30`.
   followee_workouts:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
       - SELECT * FROM workouts WHERE user_id = bucket.user_id
 
-  # Followee sets — same denormalised-user_id pattern as user_sets. One bucket
-  # per followee, parameterised straight off `follows`.
+  # Followee sets — same caveat as followee_workouts.
   followee_sets:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()

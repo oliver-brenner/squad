@@ -56,14 +56,15 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
     for (const s of parsed.sets) {
       await tx.execute(
         `INSERT INTO sets (
-          id, user_id, workout_id, exercise_id, position,
+          id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
+          parsed.performedOn,
           workoutId,
           s.exerciseId,
           s.position,
@@ -120,19 +121,27 @@ export async function updateWorkoutDetails(
   const parsed = updateWorkoutDetailsSchema.parse(input);
   const now = nowISO();
 
-  if (parsed.sessionType !== undefined) {
-    await powersync.execute(
-      `UPDATE workouts SET name = ?, performed_on = ?, session_type = ?, updated_at = ?
-       WHERE id = ? AND user_id = ?`,
-      [parsed.name, parsed.performedOn, parsed.sessionType, now, parsed.id, userId]
+  // Workout + sets share the denormalised performed_on; keep them in lock-step
+  // within a single transaction so a reactive useQuery never sees a mismatch.
+  await powersync.writeTransaction(async (tx) => {
+    if (parsed.sessionType !== undefined) {
+      await tx.execute(
+        `UPDATE workouts SET name = ?, performed_on = ?, session_type = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+        [parsed.name, parsed.performedOn, parsed.sessionType, now, parsed.id, userId]
+      );
+    } else {
+      await tx.execute(
+        `UPDATE workouts SET name = ?, performed_on = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+        [parsed.name, parsed.performedOn, now, parsed.id, userId]
+      );
+    }
+    await tx.execute(
+      `UPDATE sets SET performed_on = ? WHERE workout_id = ?`,
+      [parsed.performedOn, parsed.id]
     );
-  } else {
-    await powersync.execute(
-      `UPDATE workouts SET name = ?, performed_on = ?, updated_at = ?
-       WHERE id = ? AND user_id = ?`,
-      [parsed.name, parsed.performedOn, now, parsed.id, userId]
-    );
-  }
+  });
 }
 
 const copyWorkoutSchema = z.object({
@@ -180,14 +189,15 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
     for (const s of sourceSets) {
       await tx.execute(
         `INSERT INTO sets (
-          id, user_id, workout_id, exercise_id, position,
+          id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
         [
           uuid(),
           userId,
+          parsed.performedOn,
           newId,
           s.exercise_id,
           s.position,

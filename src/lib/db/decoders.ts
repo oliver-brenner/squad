@@ -74,6 +74,7 @@ export function decodeSet(r: WorkoutSetRow): WorkoutSet {
   return {
     id: r.id,
     userId: r.user_id ?? "",
+    performedOn: r.performed_on ?? "",
     workoutId: r.workout_id ?? "",
     exerciseId: r.exercise_id ?? "",
     position: r.position ?? 0,

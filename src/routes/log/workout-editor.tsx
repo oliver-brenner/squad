@@ -142,7 +142,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         for (const eg of item.exercises) {
           for (const s of eg.sets) {
             rows.push({
-              set: toWorkoutSet(s, eg.exerciseId, workout.id, workout.userId),
+              set: toWorkoutSet(s, eg.exerciseId, workout.id, workout.userId, workout.performedOn),
               exercise: eg.exercise,
               performedOn: workout.performedOn,
               workoutId: workout.id,
@@ -152,7 +152,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       } else {
         for (const s of item.sets) {
           rows.push({
-            set: toWorkoutSet(s, item.exerciseId, workout.id, workout.userId),
+            set: toWorkoutSet(s, item.exerciseId, workout.id, workout.userId, workout.performedOn),
             exercise: item.exercise,
             performedOn: workout.performedOn,
             workoutId: workout.id,
@@ -584,11 +584,13 @@ function toWorkoutSet(
   s: DraftSet,
   exerciseId: string,
   workoutId: string,
-  userId: string
+  userId: string,
+  performedOn: string
 ): WorkoutSet {
   return {
     id: s.id ?? "",
     userId,
+    performedOn,
     workoutId,
     exerciseId,
     position: 0,
