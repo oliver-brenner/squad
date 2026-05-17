@@ -84,32 +84,60 @@ function FollowingView() {
     enabled: !!myId,
   });
 
+  if (isLoading) {
+    return (
+      <div className="mt-8 flex justify-center">
+        <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <p className="mt-4 px-1 text-sm text-red-600">
+        Couldn't load suggestions. {error instanceof Error ? error.message : ""}
+      </p>
+    );
+  }
+  if (profiles.length === 0) {
+    return (
+      <p className="mt-4 px-1 text-sm text-muted-foreground">No other users yet.</p>
+    );
+  }
+
+  const following = profiles.filter((p) => followingIds.has(p.id));
+  const suggested = profiles.filter((p) => !followingIds.has(p.id));
+
   return (
-    <section className="mt-4 flex flex-col gap-2">
-      <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Suggested
-      </h2>
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
-        </div>
-      ) : error ? (
-        <p className="px-1 text-sm text-red-600">
-          Couldn't load suggestions. {error instanceof Error ? error.message : ""}
-        </p>
-      ) : profiles.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">No other users yet.</p>
-      ) : (
-        <Card className="p-0 divide-y divide-border">
-          {profiles.map((p) => (
-            <SuggestedRow
-              key={p.id}
-              profile={p}
-              isFollowing={followingIds.has(p.id)}
-            />
-          ))}
-        </Card>
+    <div className="mt-4 flex flex-col gap-6">
+      {following.length > 0 && (
+        <ProfileSection title="Following" profiles={following} isFollowing={true} />
       )}
+      {suggested.length > 0 && (
+        <ProfileSection title="Suggested" profiles={suggested} isFollowing={false} />
+      )}
+    </div>
+  );
+}
+
+function ProfileSection({
+  title,
+  profiles,
+  isFollowing,
+}: {
+  title: string;
+  profiles: PublicProfile[];
+  isFollowing: boolean;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
+      <Card className="p-0 divide-y divide-border">
+        {profiles.map((p) => (
+          <SuggestedRow key={p.id} profile={p} isFollowing={isFollowing} />
+        ))}
+      </Card>
     </section>
   );
 }
