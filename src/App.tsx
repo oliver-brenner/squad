@@ -79,6 +79,13 @@ const router = createBrowserRouter([
             },
           },
           {
+            path: "/friends",
+            lazy: async () => {
+              const { Friends } = await import("@/routes/friends/friends");
+              return { Component: Friends };
+            },
+          },
+          {
             path: "/settings",
             lazy: async () => {
               const { Settings } = await import("@/routes/settings/settings");

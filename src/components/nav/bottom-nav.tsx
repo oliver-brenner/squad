@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, List, User } from "lucide-react";
+import { Home, List, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BarbellIcon } from "@/components/exercise-meta";
 
@@ -7,6 +7,7 @@ const items = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/log", label: "Log", icon: List },
   { href: "/exercises", label: "Exercises", icon: BarbellIcon },
+  { href: "/friends", label: "Friends", icon: Users },
   { href: "/settings", label: "You", icon: User },
 ] as const;
 
