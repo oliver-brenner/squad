@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Minus, MoreHorizontal, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
@@ -30,7 +30,6 @@ export function CircuitRows({
   onEditExercise,
 }: Props) {
   const [activeTray, setActiveTray] = useState<{ exIdx: number; draft: DraftSet } | null>(null);
-  const [roundsTray, setRoundsTray] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -99,9 +98,37 @@ export function CircuitRows({
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
-            className="flex items-center gap-3 px-3 pt-3 pb-2"
+            className="flex items-start gap-3 px-3 pt-3 pb-2"
           >
-            <div className="flex-1 flex items-center gap-2 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="float-right ml-3 flex items-center gap-2 shrink-0">
+                <span className="text-base font-medium text-primary">
+                  {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdate({ ...circuit, rounds: Math.max(0, circuit.rounds - 1) });
+                  }}
+                  disabled={circuit.rounds <= 0}
+                  className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90 disabled:opacity-40 disabled:hover:bg-white"
+                  aria-label="Decrease rounds"
+                >
+                  <Minus className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUpdate({ ...circuit, rounds: Math.min(999, circuit.rounds + 1) });
+                  }}
+                  className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90"
+                  aria-label="Increase rounds"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
               {renamingName ? (
                 <input
                   ref={nameInputRef}
@@ -119,7 +146,7 @@ export function CircuitRows({
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="font-medium text-primary bg-transparent border-b border-primary/40 outline-none w-32 min-w-0"
+                  className="text-base font-medium text-primary bg-transparent border-b border-primary/40 outline-none w-32 min-w-0"
                 />
               ) : (
                 <button
@@ -128,31 +155,11 @@ export function CircuitRows({
                     e.stopPropagation();
                     setRenamingName(true);
                   }}
-                  className="font-medium text-primary hover:text-primary/70 text-left"
+                  className="block text-base font-medium text-primary hover:text-primary/70 text-left break-words"
                 >
                   {circuit.name}
                 </button>
               )}
-              <svg
-                viewBox="0 0 6 6"
-                width="5"
-                height="5"
-                fill="currentColor"
-                aria-hidden="true"
-                className="shrink-0 text-muted-foreground opacity-40"
-              >
-                <circle cx="3" cy="3" r="2" />
-              </svg>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setRoundsTray(true);
-                }}
-                className="font-medium text-primary hover:text-primary/70"
-              >
-                {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
-              </button>
             </div>
             <Button
               size="icon"
@@ -216,17 +223,6 @@ export function CircuitRows({
           }
           onConfirm={confirmSetTray}
           onClose={() => setActiveTray(null)}
-        />
-      )}
-
-      {roundsTray && (
-        <RoundsTray
-          rounds={circuit.rounds}
-          onConfirm={(r) => {
-            onUpdate({ ...circuit, rounds: r });
-            setRoundsTray(false);
-          }}
-          onClose={() => setRoundsTray(false)}
         />
       )}
 
@@ -425,70 +421,6 @@ function CircuitExerciseMenu({
           >
             Delete entry
           </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function RoundsTray({
-  rounds,
-  onConfirm,
-  onClose,
-}: {
-  rounds: number;
-  onConfirm: (rounds: number) => void;
-  onClose: () => void;
-}) {
-  const [value, setValue] = useState(rounds);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setVisible(true));
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div
-        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out ${
-          visible ? "translate-y-0" : "translate-y-full"
-        }`}
-      >
-        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
-        <div className="flex items-center justify-between px-4 pt-3 pb-2">
-          <h2 className="font-semibold">Circuit rounds</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="px-4 pb-4 flex items-center justify-center gap-4">
-          <button
-            type="button"
-            onClick={() => setValue((v) => Math.max(1, v - 1))}
-            className="h-12 w-12 rounded-full border border-border text-2xl font-light flex items-center justify-center hover:bg-muted"
-          >
-            −
-          </button>
-          <span className="text-4xl font-semibold w-16 text-center">{value}</span>
-          <button
-            type="button"
-            onClick={() => setValue((v) => Math.min(999, v + 1))}
-            className="h-12 w-12 rounded-full border border-border text-2xl font-light flex items-center justify-center hover:bg-muted"
-          >
-            +
-          </button>
-        </div>
-        <div className="px-4 pb-8">
-          <Button onClick={() => onConfirm(value)} className="w-full" size="lg">
-            Save
-          </Button>
         </div>
       </div>
     </>

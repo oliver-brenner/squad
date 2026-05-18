@@ -409,7 +409,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       {
         groupKey: crypto.randomUUID(),
         name: "Circuit",
-        rounds: 1,
+        rounds: 0,
         exercises: [],
       },
     ]);
@@ -832,7 +832,7 @@ function buildItems(sets: WorkoutSet[], exercises: Exercise[]): WorkoutItem[] {
         result.push({
           groupKey: s.circuitId,
           name: s.circuitName ?? "Circuit",
-          rounds: s.circuitRounds ?? 1,
+          rounds: s.circuitRounds ?? 0,
           exercises: [],
         });
       }
