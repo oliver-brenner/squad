@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { getExerciseById, getFriendSessionDetail } from "@/lib/db/queries";
 import type { Exercise, Profile, Workout, WorkoutSet } from "@/lib/db/types";
 import { sessionTypeColor } from "@/lib/session-type-color";
+import { copyExerciseFromFriend } from "@/lib/mutations/exercises";
 import {
   buildReadOnlyItems,
   SessionReadOnlyItems,
@@ -116,7 +117,12 @@ export function FriendSession() {
 
       <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
 
-      <SessionReadOnlyItems items={items} />
+      <SessionReadOnlyItems
+        items={items}
+        onCopyExercise={async (exerciseId) => {
+          await copyExerciseFromFriend({ sourceExerciseId: exerciseId });
+        }}
+      />
     </div>
   );
 }

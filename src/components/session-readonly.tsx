@@ -1,3 +1,5 @@
+import { useEffect, useState, useTransition } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
@@ -92,7 +94,17 @@ export function buildReadOnlyItems(
   return out;
 }
 
-export function SessionReadOnlyItems({ items }: { items: ReadOnlyItem[] }) {
+// `onCopyExercise` is the only interactive entry point — supplying it turns
+// on a "···" menu next to each exercise (top-level and inside circuits)
+// with a Copy action. Friend-session passes it; future own-readonly callers
+// can omit it for a purely passive view.
+export function SessionReadOnlyItems({
+  items,
+  onCopyExercise,
+}: {
+  items: ReadOnlyItem[];
+  onCopyExercise?: (exerciseId: string) => Promise<void>;
+}) {
   if (items.length === 0) {
     return (
       <Card className="p-6 text-center text-sm text-muted-foreground">
@@ -104,20 +116,34 @@ export function SessionReadOnlyItems({ items }: { items: ReadOnlyItem[] }) {
     <div className="flex flex-col gap-3">
       {items.map((item) =>
         item.kind === "circuit" ? (
-          <CircuitCard key={item.key} item={item} />
+          <CircuitCard
+            key={item.key}
+            item={item}
+            onCopyExercise={onCopyExercise}
+          />
         ) : (
-          <ExerciseCard key={item.key} item={item} />
+          <ExerciseCard
+            key={item.key}
+            item={item}
+            onCopyExercise={onCopyExercise}
+          />
         )
       )}
     </div>
   );
 }
 
-function ExerciseCard({ item }: { item: ReadOnlyExerciseItem }) {
+function ExerciseCard({
+  item,
+  onCopyExercise,
+}: {
+  item: ReadOnlyExerciseItem;
+  onCopyExercise?: (exerciseId: string) => Promise<void>;
+}) {
   const ex = item.exercise;
   return (
     <Card>
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex items-start gap-3 p-3">
         <div className="min-w-0 flex-1 flex flex-col gap-0.5">
           <span className="font-medium">{ex?.name ?? "Unknown exercise"}</span>
           {ex && (
@@ -126,6 +152,13 @@ function ExerciseCard({ item }: { item: ReadOnlyExerciseItem }) {
             </span>
           )}
         </div>
+        {onCopyExercise && ex && (
+          <ExerciseMenuButton
+            exerciseId={item.exerciseId}
+            exerciseName={ex.name}
+            onCopyExercise={onCopyExercise}
+          />
+        )}
       </div>
       <div className="px-3 pb-3 flex flex-col gap-0.5">
         {item.sets.map((s, i) => (
@@ -136,7 +169,13 @@ function ExerciseCard({ item }: { item: ReadOnlyExerciseItem }) {
   );
 }
 
-function CircuitCard({ item }: { item: ReadOnlyCircuitItem }) {
+function CircuitCard({
+  item,
+  onCopyExercise,
+}: {
+  item: ReadOnlyCircuitItem;
+  onCopyExercise?: (exerciseId: string) => Promise<void>;
+}) {
   return (
     <Card className="border-dashed border-muted-foreground/30">
       <div className="flex items-center gap-3 px-3 pt-3 pb-2">
@@ -159,7 +198,11 @@ function CircuitCard({ item }: { item: ReadOnlyCircuitItem }) {
       </div>
       <div className="px-3 pb-3 flex flex-col gap-2">
         {item.exercises.map((eg) => (
-          <CircuitExerciseRow key={eg.exerciseId} eg={eg} />
+          <CircuitExerciseRow
+            key={eg.exerciseId}
+            eg={eg}
+            onCopyExercise={onCopyExercise}
+          />
         ))}
       </div>
     </Card>
@@ -168,8 +211,10 @@ function CircuitCard({ item }: { item: ReadOnlyCircuitItem }) {
 
 function CircuitExerciseRow({
   eg,
+  onCopyExercise,
 }: {
   eg: ReadOnlyCircuitItem["exercises"][number];
+  onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   const set = eg.sets[0];
   const hasData =
@@ -185,7 +230,7 @@ function CircuitExerciseRow({
   const distanceUnit = (eg.exercise?.distanceUnit ?? "km") as DistanceUnit;
 
   return (
-    <div className="flex items-center gap-2 rounded-md px-1 py-1.5">
+    <div className="flex items-start gap-2 rounded-md px-1 py-1.5">
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <span className="text-sm font-medium">
           {eg.exercise?.name ?? "Unknown exercise"}
@@ -201,6 +246,13 @@ function CircuitExerciseRow({
           </p>
         )}
       </div>
+      {onCopyExercise && eg.exercise && (
+        <ExerciseMenuButton
+          exerciseId={eg.exerciseId}
+          exerciseName={eg.exercise.name}
+          onCopyExercise={onCopyExercise}
+        />
+      )}
     </div>
   );
 }
@@ -234,5 +286,97 @@ function SetSummary({
         {formatSetSummary(set, exercise, distanceUnit)}
       </span>
     </div>
+  );
+}
+
+function ExerciseMenuButton({
+  exerciseId,
+  exerciseName,
+  onCopyExercise,
+}: {
+  exerciseId: string;
+  exerciseName: string;
+  onCopyExercise: (exerciseId: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground shrink-0 -mr-1 -mt-1"
+        aria-label={`Options for ${exerciseName}`}
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </button>
+      {open && (
+        <ExerciseActionsSheet
+          exerciseId={exerciseId}
+          onCopyExercise={onCopyExercise}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function ExerciseActionsSheet({
+  exerciseId,
+  onCopyExercise,
+  onClose,
+}: {
+  exerciseId: string;
+  onCopyExercise: (exerciseId: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function handleCopy() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        await onCopyExercise(exerciseId);
+        setCopied(true);
+        // Brief success state, then close. Long enough to register; short
+        // enough not to feel sluggish.
+        setTimeout(onClose, 900);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't copy exercise");
+      }
+    });
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out ${
+          visible ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
+        <div className="flex flex-col py-4 gap-2 px-4">
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={pending || copied}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50 disabled:opacity-60"
+          >
+            {copied ? "Copied to your library" : pending ? "Copying…" : "Copy exercise"}
+          </button>
+          {error && (
+            <p className="text-center text-sm text-red-600 px-2">{error}</p>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
