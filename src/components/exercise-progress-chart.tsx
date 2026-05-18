@@ -14,6 +14,11 @@ type Series = {
   invertY?: boolean;
 };
 
+function setRounds(s: { circuitId: string | null; circuitRounds: number | null }): number {
+  // Non-circuit sets count once; circuit sets multiply by their rounds.
+  return s.circuitId ? s.circuitRounds ?? 0 : 1;
+}
+
 function strengthSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Series[] {
   const ormPts: DataPoint[] = [];
   const volPts: DataPoint[] = [];
@@ -27,7 +32,7 @@ function strengthSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Se
       if (!w || !r || r < 1) continue;
       const eff = exercise.doubleReps ? r * 2 : r;
       if (w > bestWeight) bestWeight = w;
-      totalVol += eff * w;
+      totalVol += eff * w * setRounds(s);
     }
     if (bestWeight > 0) ormPts.push({ date: entry.performedOn, value: bestWeight });
     if (totalVol > 0) volPts.push({ date: entry.performedOn, value: Math.round(totalVol) });
@@ -49,7 +54,7 @@ function bodyweightSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): 
       const r = s.reps ?? 0;
       const eff = exercise.doubleReps ? r * 2 : r;
       if (eff > maxReps) maxReps = eff;
-      totalReps += eff;
+      totalReps += eff * setRounds(s);
     }
     if (maxReps > 0) bestPts.push({ date: entry.performedOn, value: maxReps });
     if (totalReps > 0) volPts.push({ date: entry.performedOn, value: totalReps });
@@ -92,8 +97,9 @@ function cardioSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Seri
       let dist = 0;
       let sec = 0;
       for (const s of entry.sets) {
-        dist += s.distanceKm ?? 0;
-        sec += s.durationSec ?? 0;
+        const mult = setRounds(s);
+        dist += (s.distanceKm ?? 0) * mult;
+        sec += (s.durationSec ?? 0) * mult;
       }
       if (dist > 0 && sec > 0) pts.push({ date: entry.performedOn, value: sec / dist });
     }
@@ -122,7 +128,7 @@ function cardioSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Seri
     const pts: DataPoint[] = [];
     for (const entry of [...history].reverse()) {
       let dist = 0;
-      for (const s of entry.sets) dist += s.distanceKm ?? 0;
+      for (const s of entry.sets) dist += (s.distanceKm ?? 0) * setRounds(s);
       if (dist > 0) pts.push({ date: entry.performedOn, value: toDisplayDist(dist) });
     }
     if (pts.length > 0) {
@@ -140,7 +146,7 @@ function cardioSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Seri
     const pts: DataPoint[] = [];
     for (const entry of [...history].reverse()) {
       let totalSec = 0;
-      for (const s of entry.sets) totalSec += s.durationSec ?? 0;
+      for (const s of entry.sets) totalSec += (s.durationSec ?? 0) * setRounds(s);
       if (totalSec > 0) pts.push({ date: entry.performedOn, value: totalSec });
     }
     if (pts.length > 0) {

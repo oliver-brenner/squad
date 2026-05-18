@@ -18,7 +18,7 @@ const setInputSchema = z.object({
   inclinePct: z.number().min(-50).max(50).nullable(),
   restSec: z.number().int().min(0).max(3600).nullable(),
   circuitId: z.string().uuid().nullable().optional(),
-  circuitRounds: z.number().int().min(1).max(999).nullable().optional(),
+  circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
 });
 

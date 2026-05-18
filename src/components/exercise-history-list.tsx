@@ -88,7 +88,15 @@ export function ExerciseHistoryList({
                     <span className="text-muted-foreground w-5 shrink-0 text-center text-xs">
                       {i + 1}
                     </span>
-                    <span>{formatSet(s, exercise)}</span>
+                    <span>
+                      {formatSet(s, exercise)}
+                      {s.circuitId && (
+                        <span className="text-muted-foreground">
+                          {" · "}
+                          Circuit x{s.circuitRounds ?? 0}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>
