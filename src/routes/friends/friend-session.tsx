@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { getExerciseById, getFriendSessionDetail } from "@/lib/db/queries";
@@ -12,6 +12,14 @@ import {
 } from "@/components/session-readonly";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Only accept in-app relative paths as the back target. Rejects anything that
+// could escape the SPA (protocol-relative `//evil.com`, full URLs, etc.).
+function sanitizeBackHref(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
 
 type LoadState =
   | { state: "loading" }
@@ -26,6 +34,11 @@ type LoadState =
 
 export function FriendSession() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  // `?from=...` lets the caller pick the back target. The profile page passes
+  // its own URL so back returns there; the feed omits it, which falls through
+  // to the default `/friends` landing.
+  const backHref = sanitizeBackHref(searchParams.get("from")) ?? "/friends";
   const [data, setData] = useState<LoadState>({ state: "loading" });
 
   useEffect(() => {
@@ -83,7 +96,7 @@ export function FriendSession() {
     <div className="flex flex-col gap-4 pb-4">
       <header className="flex items-center gap-2 pt-4">
         <Link
-          to="/friends"
+          to={backHref}
           className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Back"
         >

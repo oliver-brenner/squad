@@ -127,7 +127,11 @@ function UserProfileInner({ userId }: { userId: string }) {
           </Card>
         ) : (
           <SessionList
-            linkHref={(id) => (isMe ? `/log/${id}` : `/friends/sessions/${id}`)}
+            linkHref={(id) =>
+              isMe
+                ? `/log/${id}`
+                : `/friends/sessions/${id}?from=${encodeURIComponent(`/users/${userId}`)}`
+            }
             showMenu={isMe}
             sessions={sessions.map((w) => ({
               id: w.id,
