@@ -78,11 +78,11 @@ function FeedView() {
        p.avatar_url AS author_avatar_url
      FROM workouts w
      LEFT JOIN profiles p ON p.id = w.user_id
-     WHERE w.user_id != ?
-       AND EXISTS (
-         SELECT 1 FROM follows f
-         WHERE f.follower_id = ? AND f.followee_id = w.user_id
-       )
+     WHERE w.user_id = ?
+        OR EXISTS (
+          SELECT 1 FROM follows f
+          WHERE f.follower_id = ? AND f.followee_id = w.user_id
+        )
      ORDER BY w.performed_on DESC, w.created_at DESC
      LIMIT 100`,
     [myId, myId]
@@ -134,7 +134,11 @@ function FeedView() {
               )}
             </Link>
             <Link
-              to={`/friends/sessions/${r.workout_id}`}
+              to={
+                r.author_id === myId
+                  ? `/log/${r.workout_id}?from=${encodeURIComponent("/friends")}`
+                  : `/friends/sessions/${r.workout_id}`
+              }
               className="flex items-center gap-3 flex-1 p-4 pl-2 min-w-0 hover:bg-muted/30"
             >
               <div className="min-w-0 flex-1">

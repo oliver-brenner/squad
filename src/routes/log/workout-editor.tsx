@@ -1,5 +1,5 @@
 import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from "react";
-import { Link, useNavigate, useParams, Navigate } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
 import {
@@ -22,6 +22,7 @@ import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
 import { sessionTypeColor } from "@/lib/session-type-color";
+import { sanitizeReturnHref } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
@@ -98,6 +99,11 @@ interface Props {
 
 function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initialExercises }: Props) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // `?from=…` lets the caller decide where Back returns. Friends feed passes
+  // `/friends` for own sessions opened there; Log-tab links omit it and
+  // fall through to the default `/log`.
+  const backHref = sanitizeReturnHref(searchParams.get("from")) ?? "/log";
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -396,7 +402,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     <div className="flex flex-col gap-4 pb-4">
       <header className="flex items-center gap-1 pt-4 pb-0">
         <Link
-          to="/log"
+          to={backHref}
           onClick={() => {
             if (saveTimerRef.current) {
               clearTimeout(saveTimerRef.current);
