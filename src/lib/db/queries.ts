@@ -45,12 +45,10 @@ export async function getExerciseById(exerciseId: string): Promise<Exercise | nu
   return row ? decodeExercise(row) : null;
 }
 
-export async function getUserExercises(includeArchived = false): Promise<Exercise[]> {
+export async function getUserExercises(): Promise<Exercise[]> {
   const userId = await getCurrentUserId();
   const rows = await powersync.getAll<ExerciseRow>(
-    includeArchived
-      ? `SELECT * FROM exercises WHERE user_id = ? ORDER BY name ASC`
-      : `SELECT * FROM exercises WHERE user_id = ? AND archived_at IS NULL ORDER BY name ASC`,
+    `SELECT * FROM exercises WHERE user_id = ? ORDER BY name ASC`,
     [userId]
   );
   return rows.map(decodeExercise);
@@ -58,14 +56,12 @@ export async function getUserExercises(includeArchived = false): Promise<Exercis
 
 // Order exercises by most recent use: latest performed_on across all the sets
 // for that exercise, then latest position within that day. NULLS LAST.
-export async function getUserExercisesOrderedByLastLogged(
-  includeArchived = false
-): Promise<Exercise[]> {
+export async function getUserExercisesOrderedByLastLogged(): Promise<Exercise[]> {
   const userId = await getCurrentUserId();
   const sql = `
     SELECT e.*
     FROM exercises e
-    WHERE e.user_id = ? ${includeArchived ? "" : "AND e.archived_at IS NULL"}
+    WHERE e.user_id = ?
     ORDER BY
       (SELECT MAX(w.performed_on)
        FROM sets s JOIN workouts w ON s.workout_id = w.id

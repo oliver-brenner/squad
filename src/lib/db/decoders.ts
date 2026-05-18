@@ -52,7 +52,6 @@ export function decodeExercise(r: ExerciseRow): Exercise {
     trackRest: bool(r.track_rest),
     muscles: arr(r.muscles),
     secondaryMuscles: arr(r.secondary_muscles),
-    archivedAt: r.archived_at,
     createdAt: r.created_at ?? "",
   };
 }

@@ -280,7 +280,6 @@ export async function copyFriendSession(
         `SELECT id FROM exercises
          WHERE user_id = ?
            AND LOWER(name) = LOWER(?)
-           AND archived_at IS NULL
            AND (
              (equipment IS NULL AND ? IS NULL)
              OR equipment = ?

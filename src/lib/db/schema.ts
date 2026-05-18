@@ -39,7 +39,6 @@ const exercises = new Table(
     track_rest: column.integer,
     muscles: column.text,
     secondary_muscles: column.text,
-    archived_at: column.text,
     created_at: column.text,
   },
   {

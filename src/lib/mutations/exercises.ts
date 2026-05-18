@@ -44,8 +44,8 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest,
-      muscles, secondary_muscles, archived_at, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?)`,
+      muscles, secondary_muscles, created_at
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?)`,
     [
       id,
       userId,
@@ -67,7 +67,6 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       boolInt(data.trackRest),
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
-      null,
       now,
     ]
   );
@@ -115,20 +114,32 @@ export async function updateExercise(
   );
 }
 
-export async function archiveExercise(id: string): Promise<void> {
+// Counts the user's own sets that reference this exercise. UI uses this to
+// warn before a hard delete that wipes historical references too.
+export async function countSetsForExercise(id: string): Promise<number> {
   const userId = await getCurrentUserId();
-  await powersync.execute(
-    `UPDATE exercises SET archived_at = ? WHERE id = ? AND user_id = ?`,
-    [nowISO(), id, userId]
-  );
-}
-
-export async function unarchiveExercise(id: string): Promise<void> {
-  const userId = await getCurrentUserId();
-  await powersync.execute(
-    `UPDATE exercises SET archived_at = NULL WHERE id = ? AND user_id = ?`,
+  const row = await powersync.get<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM sets WHERE exercise_id = ? AND user_id = ?`,
     [id, userId]
   );
+  return row.count;
+}
+
+// Hard delete. Sets referencing this exercise are removed first so the
+// exercise vanishes from past sessions too — matches the user-confirmed
+// "disappears from those sessions and the exercise list" behaviour.
+export async function deleteExercise(id: string): Promise<void> {
+  const userId = await getCurrentUserId();
+  await powersync.writeTransaction(async (tx) => {
+    await tx.execute(
+      `DELETE FROM sets WHERE exercise_id = ? AND user_id = ?`,
+      [id, userId]
+    );
+    await tx.execute(
+      `DELETE FROM exercises WHERE id = ? AND user_id = ?`,
+      [id, userId]
+    );
+  });
 }
 
 // Copies a friend's exercise into the signed-in user's library. The exercise
@@ -253,8 +264,8 @@ export async function copyExerciseInTx(
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest,
-      muscles, secondary_muscles, archived_at, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?)`,
+      muscles, secondary_muscles, created_at
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -276,7 +287,6 @@ export async function copyExerciseInTx(
       boolInt(source.trackRest),
       arrStr(source.muscles ?? null),
       arrStr(source.secondaryMuscles ?? null),
-      null,
       nowISO(),
     ]
   );

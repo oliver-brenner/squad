@@ -1,15 +1,13 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
 import { useQuery } from "@powersync/react";
-import { Plus, ArchiveRestore, MoreHorizontal } from "lucide-react";
-import { ExerciseMetaTags } from "@/components/exercise-meta";
+import { Plus, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { Exercise } from "@/lib/db/types";
 import type { ExerciseRow } from "@/lib/db/schema";
 import { decodeExercise } from "@/lib/db/decoders";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { ExerciseCard } from "@/components/exercise-card";
-import { archiveExercise, unarchiveExercise } from "@/lib/mutations/exercises";
+import { countSetsForExercise, deleteExercise } from "@/lib/mutations/exercises";
 import { PageHeader } from "@/components/nav/page-header";
 import { ExerciseForm } from "./exercise-form";
 import { ExerciseFilteredList } from "@/components/exercise-filtered-list";
@@ -42,12 +40,10 @@ export function Exercises() {
   const [editing, setEditing] = useState<Exercise | null>(null);
   const [creating, setCreating] = useState(false);
   const [menuExercise, setMenuExercise] = useState<Exercise | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
-
-  const archived = useMemo(() => exercises.filter((e) => e.archivedAt), [exercises]);
 
   if (creating) {
     return <ExerciseForm onClose={() => setCreating(false)} />;
@@ -96,46 +92,23 @@ export function Exercises() {
             setMenuExercise(null);
             setEditing(menuExercise);
           }}
-          onArchive={() => {
+          onDelete={() => {
             const id = menuExercise.id;
+            const name = menuExercise.name;
             setMenuExercise(null);
             startTransition(async () => {
-              await archiveExercise(id);
+              const setCount = await countSetsForExercise(id);
+              if (setCount > 0) {
+                const ok = confirm(
+                  `${name} is logged in past sessions. Are you sure you want to delete it? It will disappear from those sessions too.`
+                );
+                if (!ok) return;
+              }
+              await deleteExercise(id);
             });
           }}
           onClose={() => setMenuExercise(null)}
         />
-      )}
-
-      {archived.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Archived
-          </h2>
-          {archived.map((e) => (
-            <Card key={e.id} className="flex items-center gap-3 p-3 opacity-60">
-              <div className="min-w-0 flex-1 flex items-center justify-between gap-4">
-                <span className="font-medium truncate">{e.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0 inline-flex items-center gap-0.5">
-                  <ExerciseMetaTags e={e} />
-                </span>
-              </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                disabled={isPending}
-                onClick={() =>
-                  startTransition(async () => {
-                    await unarchiveExercise(e.id);
-                  })
-                }
-                aria-label={`Restore ${e.name}`}
-              >
-                <ArchiveRestore className="h-4 w-4" />
-              </Button>
-            </Card>
-          ))}
-        </section>
       )}
     </div>
   );
@@ -143,11 +116,11 @@ export function Exercises() {
 
 function ExerciseMenu({
   onEdit,
-  onArchive,
+  onDelete,
   onClose,
 }: {
   onEdit: () => void;
-  onArchive: () => void;
+  onDelete: () => void;
   onClose: () => void;
 }) {
   const [visible, setVisible] = useState(false);
@@ -176,7 +149,7 @@ function ExerciseMenu({
           </button>
           <button
             type="button"
-            onClick={onArchive}
+            onClick={onDelete}
             className="w-full py-4 text-center text-base font-medium rounded-xl text-red-500 hover:bg-muted/50"
           >
             Delete exercise

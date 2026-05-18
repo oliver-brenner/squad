@@ -33,7 +33,6 @@ export type Exercise = {
   trackRest: boolean;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
-  archivedAt: string | null;
   createdAt: string;
 };
 

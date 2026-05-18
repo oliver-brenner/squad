@@ -32,7 +32,6 @@ type SetExerciseJoinRow = WorkoutSetRow & {
   ex_track_rest: number | null;
   ex_muscles: string | null;
   ex_secondary_muscles: string | null;
-  ex_archived_at: string | null;
   ex_created_at: string | null;
 };
 
@@ -58,7 +57,6 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     track_rest: r.ex_track_rest,
     muscles: r.ex_muscles,
     secondary_muscles: r.ex_secondary_muscles,
-    archived_at: r.ex_archived_at,
     created_at: r.ex_created_at,
   };
 }
@@ -84,7 +82,7 @@ export function ExerciseBreakdown() {
             e.track_speed AS ex_track_speed, e.speed_unit AS ex_speed_unit,
             e.track_incline AS ex_track_incline, e.incline_unit AS ex_incline_unit,
             e.track_rest AS ex_track_rest, e.muscles AS ex_muscles,
-            e.secondary_muscles AS ex_secondary_muscles, e.archived_at AS ex_archived_at,
+            e.secondary_muscles AS ex_secondary_muscles,
             e.created_at AS ex_created_at
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id

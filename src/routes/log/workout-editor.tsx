@@ -60,7 +60,7 @@ export function WorkoutEditorRoute() {
         setData({ state: "not-found" });
         return;
       }
-      const exercises = await getUserExercisesOrderedByLastLogged(false);
+      const exercises = await getUserExercisesOrderedByLastLogged();
       setData({
         state: "ready",
         workout: workout.workout,

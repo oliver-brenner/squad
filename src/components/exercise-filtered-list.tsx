@@ -48,7 +48,6 @@ export function ExerciseFilteredList({
     const expanded =
       muscleFilter.size > 0 ? expandMuscleFilter(muscleFilter, muscleGroups) : null;
     return exercises
-      .filter((e) => !e.archivedAt)
       .filter((e) => !q || e.name.toLowerCase().includes(q))
       .filter(
         (e) =>
