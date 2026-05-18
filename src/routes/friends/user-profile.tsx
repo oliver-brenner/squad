@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft } from "lucide-react";
 import { useQuery } from "@powersync/react";
+import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
   type UserProfileStats,
   type WorkoutWithExercises,
 } from "@/lib/db/queries";
+import { fetchProfileById } from "@/lib/supabase/profiles";
 import { followUser, unfollowUser } from "@/lib/mutations/follows";
 import { SessionList } from "@/routes/log/session-list";
 
@@ -31,12 +33,25 @@ function UserProfileInner({ userId }: { userId: string }) {
   const myId = user?.id ?? "";
   const isMe = myId === userId;
 
-  // Reactive: profile + follow status both stream in via PowerSync.
+  // Local profile from PowerSync. Present when (a) it's you or (b) you follow
+  // them — the sync rules wire up `followee_profiles` accordingly.
   const { data: profileRows } = useQuery<ProfileRow>(
     `SELECT * FROM profiles WHERE id = ? LIMIT 1`,
     [userId]
   );
-  const profile = profileRows[0] ? decodeProfile(profileRows[0]) : null;
+  const localProfile = profileRows[0] ? decodeProfile(profileRows[0]) : null;
+
+  // Fallback for the no-local-row case: just unfollowed (sync evicted the
+  // profile), or viewing a Suggested user you've never followed. Supabase
+  // returns the same fields. Disabled when we already have the local row to
+  // avoid a redundant network hit.
+  const { data: remoteProfile } = useReactQuery({
+    queryKey: ["profile-fallback", userId],
+    queryFn: () => fetchProfileById(userId),
+    enabled: !localProfile,
+  });
+
+  const profile = localProfile ?? remoteProfile ?? null;
 
   const { data: followRows } = useQuery<FollowRow>(
     `SELECT * FROM follows WHERE follower_id = ? AND followee_id = ? LIMIT 1`,
@@ -44,11 +59,35 @@ function UserProfileInner({ userId }: { userId: string }) {
   );
   const isFollowing = followRows.length > 0;
 
-  // One-shot — matches the Log tab's pattern. Re-loads on remount.
+  // Stats + sessions live only in local SQLite, so they're only populated
+  // when isFollowing or isMe. When not following, we render an empty state.
   const [stats, setStats] = useState<UserProfileStats | null>(null);
   const [sessions, setSessions] = useState<WorkoutWithExercises[] | null>(null);
+  const hasLocalData = isMe || isFollowing;
+
+  // Reactive signature that captures every change relevant to this profile's
+  // stats/sessions. Without it, tapping Follow would flip the page into
+  // "loading" but the one-shot fetch would race PowerSync's stream — landing
+  // on empty results before the data arrives. By depending on this signature
+  // the effect re-fetches as rows trickle in.
+  const { data: sigRows = [] } = useQuery<{ sig: string }>(
+    `SELECT
+       COALESCE((SELECT COUNT(*) FROM workouts WHERE user_id = ?), 0)
+       || '|' ||
+       COALESCE((SELECT COUNT(*) FROM sets WHERE user_id = ?), 0)
+       || '|' ||
+       COALESCE((SELECT MAX(updated_at) FROM workouts WHERE user_id = ?), '')
+       AS sig`,
+    [userId, userId, userId]
+  );
+  const dataSignature = sigRows[0]?.sig ?? "";
 
   useEffect(() => {
+    if (!hasLocalData) {
+      setStats(null);
+      setSessions(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       const [s, w] = await Promise.all([
@@ -63,11 +102,10 @@ function UserProfileInner({ userId }: { userId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, hasLocalData, dataSignature]);
 
-  const handle = profile?.username
-    ? `@${profile.username}`
-    : profile?.displayName ?? "Unknown user";
+  const usernameLabel = profile?.username ? `@${profile.username}` : null;
+  const handle = usernameLabel ?? profile?.displayName ?? "Unknown user";
   const initial = (profile?.username ?? profile?.displayName ?? "?")
     .slice(0, 1)
     .toUpperCase();
@@ -108,16 +146,20 @@ function UserProfileInner({ userId }: { userId: string }) {
       </section>
 
       <section className="grid grid-cols-3 gap-2">
-        <StatCard label="Sessions" value={stats?.totalSessions ?? "—"} />
-        <StatCard label="Sets" value={stats?.totalSets ?? "—"} />
-        <StatCard label="Reps" value={formatReps(stats?.totalReps)} />
+        <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
+        <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
+        <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
       </section>
 
       <section className="flex flex-col gap-2">
         <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Sessions
         </h2>
-        {sessions === null ? (
+        {!hasLocalData ? (
+          <Card className="p-6 text-center text-sm text-muted-foreground">
+            Follow {usernameLabel ?? handle} to see their sessions.
+          </Card>
+        ) : sessions === null ? (
           <div className="py-8 flex justify-center">
             <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
           </div>

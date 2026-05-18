@@ -26,10 +26,28 @@ export async function fetchDiscoverableProfiles(currentUserId: string): Promise<
     .neq("id", currentUserId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((r) => ({
+  return (data ?? []).map(rowToPublicProfile);
+}
+
+// Single-profile lookup. Used by the user-profile page when the local DB
+// hasn't synced a row (e.g. you're viewing someone you don't follow, or just
+// unfollowed and PowerSync evicted their profile). Same RLS requirements as
+// fetchDiscoverableProfiles.
+export async function fetchProfileById(id: string): Promise<PublicProfile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? rowToPublicProfile(data) : null;
+}
+
+function rowToPublicProfile(r: Record<string, unknown>): PublicProfile {
+  return {
     id: r.id as string,
     username: (r.username as string | null) ?? null,
     displayName: (r.display_name as string | null) ?? null,
     avatarUrl: (r.avatar_url as string | null) ?? null,
-  }));
+  };
 }
