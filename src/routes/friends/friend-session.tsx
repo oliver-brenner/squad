@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useState, useTransition } from "react";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import { getExerciseById, getFriendSessionDetail } from "@/lib/db/queries";
 import type { Exercise, Profile, Workout, WorkoutSet } from "@/lib/db/types";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { copyExerciseFromFriend } from "@/lib/mutations/exercises";
+import { copyFriendSession } from "@/lib/mutations/workouts";
 import {
   buildReadOnlyItems,
   SessionReadOnlyItems,
@@ -20,6 +21,66 @@ function sanitizeBackHref(raw: string | null): string | null {
   if (!raw) return null;
   if (!raw.startsWith("/") || raw.startsWith("//")) return null;
   return raw;
+}
+
+function SessionActionsSheet({
+  sessionId,
+  onClose,
+}: {
+  sessionId: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const [visible, setVisible] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function handleCopy() {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const newWorkoutId = await copyFriendSession({ sourceWorkoutId: sessionId });
+        onClose();
+        // Land the user on their freshly-copied session in the editor — the
+        // copy is in their library, and they can start logging or edit
+        // immediately. Tangible success feedback.
+        navigate(`/log/${newWorkoutId}`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Couldn't copy session");
+      }
+    });
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out ${
+          visible ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
+        <div className="flex flex-col py-4 gap-2 px-4">
+          <button
+            type="button"
+            onClick={handleCopy}
+            disabled={pending}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50 disabled:opacity-60"
+          >
+            {pending ? "Copying…" : "Copy session"}
+          </button>
+          {error && (
+            <p className="text-center text-sm text-red-600 px-2">{error}</p>
+          )}
+        </div>
+      </div>
+    </>
+  );
 }
 
 type LoadState =
@@ -41,6 +102,7 @@ export function FriendSession() {
   // to the default `/friends` landing.
   const backHref = sanitizeBackHref(searchParams.get("from")) ?? "/friends";
   const [data, setData] = useState<LoadState>({ state: "loading" });
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!id || !UUID_RE.test(id)) {
@@ -113,7 +175,22 @@ export function FriendSession() {
             <span>{format(parseISO(workout.performedOn), "EEE d MMM")}</span>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground -mr-2"
+          aria-label="Session options"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </button>
       </header>
+
+      {menuOpen && (
+        <SessionActionsSheet
+          sessionId={workout.id}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
 
       <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
 
