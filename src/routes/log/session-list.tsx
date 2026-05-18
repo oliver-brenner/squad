@@ -92,25 +92,44 @@ function SessionMenu({
   );
 }
 
-export function SessionList({ sessions }: { sessions: SessionItem[] }) {
+type SessionListProps = {
+  sessions: SessionItem[];
+  // Where each row links to. Defaults to the owner's editor at `/log/:id`.
+  // Friend-profile callers pass `/friends/sessions/:id` (the read-only view).
+  linkHref?: (id: string) => string;
+  // Whether to render the "···" menu (Edit / Copy / Export / Delete). Off on
+  // friend profiles since none of those actions apply to someone else's session.
+  showMenu?: boolean;
+};
+
+export function SessionList({ sessions, linkHref, showMenu = true }: SessionListProps) {
+  const href = linkHref ?? ((id: string) => `/log/${id}`);
   return (
     <ul className="flex flex-col gap-2">
       {sessions.map((s) => (
-        <SessionRow key={s.id} session={s} />
+        <SessionRow key={s.id} session={s} href={href(s.id)} showMenu={showMenu} />
       ))}
     </ul>
   );
 }
 
-function SessionRow({ session }: { session: SessionItem }) {
+function SessionRow({
+  session,
+  href,
+  showMenu,
+}: {
+  session: SessionItem;
+  href: string;
+  showMenu: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
   return (
     <li className="relative flex items-center rounded-2xl border border-border bg-card overflow-hidden">
       <Link
-        to={`/log/${session.id}`}
-        className="flex flex-1 flex-col gap-1 p-4 pr-12 min-w-0"
+        to={href}
+        className={`flex flex-1 flex-col gap-1 p-4 min-w-0 ${showMenu ? "pr-12" : ""}`}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
@@ -142,26 +161,33 @@ function SessionRow({ session }: { session: SessionItem }) {
           </div>
         )}
       </Link>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          setOpen(true);
-        }}
-        className="absolute right-0 top-0 bottom-0 flex items-center px-4 text-muted-foreground"
-        aria-label={`Options for ${session.name}`}
-      >
-        <MoreHorizontal className="h-4 w-4" />
-      </button>
-      {open && (
-        <SessionMenu
-          session={session}
-          onClose={() => setOpen(false)}
-          onExport={() => setReceiptOpen(true)}
-        />
-      )}
-      {receiptOpen && (
-        <SessionReceiptSheet workoutId={session.id} onClose={() => setReceiptOpen(false)} />
+      {showMenu && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              setOpen(true);
+            }}
+            className="absolute right-0 top-0 bottom-0 flex items-center px-4 text-muted-foreground"
+            aria-label={`Options for ${session.name}`}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {open && (
+            <SessionMenu
+              session={session}
+              onClose={() => setOpen(false)}
+              onExport={() => setReceiptOpen(true)}
+            />
+          )}
+          {receiptOpen && (
+            <SessionReceiptSheet
+              workoutId={session.id}
+              onClose={() => setReceiptOpen(false)}
+            />
+          )}
+        </>
       )}
     </li>
   );

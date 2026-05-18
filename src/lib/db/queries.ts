@@ -125,8 +125,13 @@ export type WorkoutWithExercises = Workout & {
   totalReps: number;
 };
 
-export async function getRecentWorkoutsWithExercises(limit = 60): Promise<WorkoutWithExercises[]> {
-  const userId = await getCurrentUserId();
+export async function getRecentWorkoutsWithExercises(
+  limit = 60,
+  forUserId?: string
+): Promise<WorkoutWithExercises[]> {
+  // Defaults to the signed-in user. Pass `forUserId` to render a friend's
+  // session list (their profile page) — same query shape, different filter.
+  const userId = forUserId ?? (await getCurrentUserId());
   const workoutRows = await powersync.getAll<WorkoutRow>(
     `SELECT * FROM workouts WHERE user_id = ? ORDER BY performed_on DESC, created_at DESC LIMIT ?`,
     [userId, limit]
@@ -395,6 +400,45 @@ export async function getUserFieldOptions() {
   }));
 
   return { categories, equipment, muscleGroups };
+}
+
+// ----- Profile stats -----
+// Top-of-profile aggregates. Same multiplier rules as the per-session totals
+// in getRecentWorkoutsWithExercises (circuit rounds and doubleReps both fold
+// into the count). Pass any user_id — yours or a followee's.
+
+export type UserProfileStats = {
+  totalSessions: number;
+  totalSets: number;
+  totalReps: number;
+};
+
+export async function getUserProfileStats(userId: string): Promise<UserProfileStats> {
+  const sessionsRow = await powersync.get<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM workouts WHERE user_id = ?`,
+    [userId]
+  );
+  const aggRow = await powersync.get<{
+    total_sets: number | null;
+    total_reps: number | null;
+  }>(
+    `SELECT
+       SUM(COALESCE(s.circuit_rounds, 1)) AS total_sets,
+       SUM(
+         COALESCE(s.reps, 1)
+         * COALESCE(s.circuit_rounds, 1)
+         * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+       ) AS total_reps
+     FROM sets s
+     INNER JOIN exercises e ON s.exercise_id = e.id
+     WHERE s.user_id = ?`,
+    [userId]
+  );
+  return {
+    totalSessions: sessionsRow.count,
+    totalSets: Number(aggRow.total_sets ?? 0),
+    totalReps: Number(aggRow.total_reps ?? 0),
+  };
 }
 
 // ----- Friends feed -----

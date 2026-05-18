@@ -16,6 +16,7 @@ import { EditSession } from "@/routes/log/edit-session";
 import { WorkoutEditorRoute } from "@/routes/log/workout-editor";
 import { Friends } from "@/routes/friends/friends";
 import { FriendSession } from "@/routes/friends/friend-session";
+import { UserProfile } from "@/routes/friends/user-profile";
 
 const router = createBrowserRouter([
   { path: "/", element: <Landing /> },
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
           { path: "/log/:id/edit", element: <EditSession /> },
           { path: "/friends", element: <Friends /> },
           { path: "/friends/sessions/:id", element: <FriendSession /> },
+          { path: "/users/:id", element: <UserProfile /> },
           { path: "/settings", element: <Settings /> },
           { path: "/settings/fields", element: <FieldsEditor /> },
         ],

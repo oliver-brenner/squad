@@ -112,30 +112,37 @@ function FeedView() {
           .slice(0, 1)
           .toUpperCase();
         return (
-          <li key={r.workout_id}>
+          <li
+            key={r.workout_id}
+            className="flex items-center rounded-2xl border border-border bg-card overflow-hidden"
+          >
+            <Link
+              to={`/users/${r.author_id}`}
+              className="p-4 pr-2 hover:bg-muted/30"
+              aria-label={`${author}'s profile`}
+            >
+              {r.author_avatar_url ? (
+                <img
+                  src={r.author_avatar_url}
+                  alt=""
+                  className="h-10 w-10 rounded-full shrink-0"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-medium shrink-0">
+                  {initial}
+                </div>
+              )}
+            </Link>
             <Link
               to={`/friends/sessions/${r.workout_id}`}
-              className="block rounded-2xl border border-border bg-card p-4 hover:bg-muted/30"
+              className="flex items-center gap-3 flex-1 p-4 pl-2 min-w-0 hover:bg-muted/30"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                {r.author_avatar_url ? (
-                  <img
-                    src={r.author_avatar_url}
-                    alt=""
-                    className="h-10 w-10 rounded-full shrink-0"
-                  />
-                ) : (
-                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-medium shrink-0">
-                    {initial}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{r.workout_name}</div>
-                  <div className="truncate text-xs text-muted-foreground">{author}</div>
-                </div>
-                <div className="text-sm text-muted-foreground shrink-0">
-                  {format(parseISO(r.performed_on), "EEE d MMM")}
-                </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">{r.workout_name}</div>
+                <div className="truncate text-xs text-muted-foreground">{author}</div>
+              </div>
+              <div className="text-sm text-muted-foreground shrink-0">
+                {format(parseISO(r.performed_on), "EEE d MMM")}
               </div>
             </Link>
           </li>
@@ -256,27 +263,32 @@ function SuggestedRow({
 
   return (
     <div className="flex items-center gap-3 p-3">
-      {profile.avatarUrl ? (
-        <img
-          src={profile.avatarUrl}
-          alt=""
-          className="h-10 w-10 rounded-full flex-shrink-0"
-        />
-      ) : (
-        <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-medium flex-shrink-0">
-          {initial}
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">
-          {profile.username ? `@${profile.username}` : label}
-        </div>
-        {profile.username && profile.displayName && (
-          <div className="truncate text-sm text-muted-foreground">
-            {profile.displayName}
+      <Link
+        to={`/users/${profile.id}`}
+        className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80"
+      >
+        {profile.avatarUrl ? (
+          <img
+            src={profile.avatarUrl}
+            alt=""
+            className="h-10 w-10 rounded-full flex-shrink-0"
+          />
+        ) : (
+          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-medium flex-shrink-0">
+            {initial}
           </div>
         )}
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-medium">
+            {profile.username ? `@${profile.username}` : label}
+          </div>
+          {profile.username && profile.displayName && (
+            <div className="truncate text-sm text-muted-foreground">
+              {profile.displayName}
+            </div>
+          )}
+        </div>
+      </Link>
       <Button
         size="sm"
         variant={isFollowing ? "outline" : "default"}
