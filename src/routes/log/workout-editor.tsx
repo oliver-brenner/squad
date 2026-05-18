@@ -4,13 +4,13 @@ import { format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   PointerSensor,
   TouchSensor,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import type { DragEndEvent } from "@dnd-kit/core";
+import type { DragEndEvent, DragOverEvent } from "@dnd-kit/core";
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -33,6 +33,7 @@ import { ExercisePicker } from "./exercise-picker";
 import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
 import {
+  CIRCUIT_BODY_PREFIX,
   isCircuitGroup,
   type CircuitGroup,
   type DraftSet,
@@ -41,6 +42,70 @@ import {
 } from "./workout-editor-types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const ROOT = "ROOT";
+
+function findContainer(id: string, items: WorkoutItem[]): string | null {
+  if (id.startsWith(CIRCUIT_BODY_PREFIX)) return id.slice(CIRCUIT_BODY_PREFIX.length);
+  for (const item of items) {
+    if (item.groupKey === id) return ROOT;
+    if (isCircuitGroup(item) && item.exercises.some((eg) => eg.groupKey === id)) {
+      return item.groupKey;
+    }
+  }
+  return null;
+}
+
+function findExerciseGroupAnywhere(id: string, items: WorkoutItem[]): ExerciseGroup | null {
+  for (const item of items) {
+    if (isCircuitGroup(item)) {
+      const eg = item.exercises.find((e) => e.groupKey === id);
+      if (eg) return eg;
+    } else if (item.groupKey === id) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function removeExerciseFromContainer(items: WorkoutItem[], id: string): WorkoutItem[] {
+  return items
+    .map((item) => {
+      if (isCircuitGroup(item)) {
+        const filtered = item.exercises.filter((eg) => eg.groupKey !== id);
+        if (filtered.length === item.exercises.length) return item;
+        return { ...item, exercises: filtered };
+      }
+      return item;
+    })
+    .filter((item) => isCircuitGroup(item) || item.groupKey !== id);
+}
+
+function insertExerciseIntoContainer(
+  items: WorkoutItem[],
+  exercise: ExerciseGroup,
+  container: string,
+  overId: string
+): WorkoutItem[] {
+  if (container === ROOT) {
+    const overIndex = items.findIndex((i) => i.groupKey === overId);
+    const insertAt = overIndex === -1 ? items.length : overIndex;
+    return [...items.slice(0, insertAt), exercise, ...items.slice(insertAt)];
+  }
+  return items.map((item) => {
+    if (!isCircuitGroup(item) || item.groupKey !== container) return item;
+    const overIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
+    const insertAt = overIndex === -1 ? item.exercises.length : overIndex;
+    return {
+      ...item,
+      exercises: [
+        ...item.exercises.slice(0, insertAt),
+        exercise,
+        ...item.exercises.slice(insertAt),
+      ],
+    };
+  });
+}
 
 export function WorkoutEditorRoute() {
   const { id } = useParams<{ id: string }>();
@@ -274,13 +339,53 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 5 } })
   );
 
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    setItems((prev) => {
+      const activeContainer = findContainer(activeId, prev);
+      const overContainer = findContainer(overId, prev);
+      if (!activeContainer || !overContainer) return prev;
+      if (activeContainer === overContainer) return prev;
+
+      const activeItem = findExerciseGroupAnywhere(activeId, prev);
+      if (!activeItem) return prev;
+
+      const without = removeExerciseFromContainer(prev, activeId);
+      return insertExerciseIntoContainer(without, activeItem, overContainer, overId);
+    });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
     setItems((prev) => {
-      const oldIndex = prev.findIndex((g) => g.groupKey === active.id);
-      const newIndex = prev.findIndex((g) => g.groupKey === over.id);
-      return arrayMove(prev, oldIndex, newIndex);
+      const activeContainer = findContainer(activeId, prev);
+      const overContainer = findContainer(overId, prev);
+      if (!activeContainer || !overContainer) return prev;
+      if (activeContainer !== overContainer) return prev;
+
+      if (activeContainer === ROOT) {
+        const oldIndex = prev.findIndex((g) => g.groupKey === activeId);
+        const newIndex = prev.findIndex((g) => g.groupKey === overId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+        return arrayMove(prev, oldIndex, newIndex);
+      }
+
+      return prev.map((item) => {
+        if (!isCircuitGroup(item) || item.groupKey !== activeContainer) return item;
+        const oldIndex = item.exercises.findIndex((eg) => eg.groupKey === activeId);
+        const newIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return item;
+        return { ...item, exercises: arrayMove(item.exercises, oldIndex, newIndex) };
+      });
     });
   }
 
@@ -519,7 +624,12 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
       <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(workout.sessionType)}`} />
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
         <SortableContext
           items={items.map((g) => g.groupKey)}
           strategy={verticalListSortingStrategy}

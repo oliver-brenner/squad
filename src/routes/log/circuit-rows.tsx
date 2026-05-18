@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSortable } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import type { Exercise } from "@/lib/db/types";
-import type { DraftSet, ExerciseGroup, CircuitGroup } from "./workout-editor-types";
+import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
 import { SetTray } from "./set-rows";
 
 interface Props {
@@ -34,14 +35,24 @@ export function CircuitRows({
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: circuit.groupKey,
-  });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: circuit.groupKey });
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
   };
+
+  const { setNodeRef: setBodyDroppableRef, isOver: isBodyOver } = useDroppable({
+    id: circuitBodyId(circuit.groupKey),
+  });
 
   function openSetTray(exIdx: number) {
     const eg = circuit.exercises[exIdx];
@@ -82,9 +93,14 @@ export function CircuitRows({
 
   return (
     <>
-      <div ref={setNodeRef} style={dragStyle} {...attributes} {...listeners}>
+      <div ref={setNodeRef} style={dragStyle}>
         <Card className="border-dashed border-muted-foreground/30">
-          <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+          <div
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            className="flex items-center gap-3 px-3 pt-3 pb-2"
+          >
             <div className="flex-1 flex items-center gap-2 min-w-0">
               {renamingName ? (
                 <input
@@ -151,20 +167,30 @@ export function CircuitRows({
             </Button>
           </div>
 
-          <div className="px-3 pb-3 flex flex-col gap-2">
-            {circuit.exercises.length === 0 && (
-              <p className="text-sm text-muted-foreground py-2 text-center">No exercises yet</p>
-            )}
-            {circuit.exercises.map((eg, i) => (
-              <CircuitExerciseRow
-                key={eg.groupKey}
-                exGroup={eg}
-                workoutId={workoutId}
-                onClick={() => openSetTray(i)}
-                onRemove={() => removeExercise(i)}
-                onEdit={() => onEditExercise(eg.exercise)}
-              />
-            ))}
+          <div
+            ref={setBodyDroppableRef}
+            className={`px-3 pb-3 flex flex-col gap-2 rounded-b-xl transition-colors ${
+              isBodyOver ? "bg-primary/5" : ""
+            }`}
+          >
+            <SortableContext
+              items={circuit.exercises.map((eg) => eg.groupKey)}
+              strategy={verticalListSortingStrategy}
+            >
+              {circuit.exercises.length === 0 && (
+                <p className="text-sm text-muted-foreground py-2 text-center">No exercises yet</p>
+              )}
+              {circuit.exercises.map((eg, i) => (
+                <CircuitExerciseRow
+                  key={eg.groupKey}
+                  exGroup={eg}
+                  workoutId={workoutId}
+                  onClick={() => openSetTray(i)}
+                  onRemove={() => removeExercise(i)}
+                  onEdit={() => onEditExercise(eg.exercise)}
+                />
+              ))}
+            </SortableContext>
             <Button
               variant="ghost"
               size="sm"
@@ -234,6 +260,15 @@ function CircuitExerciseRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: exGroup.groupKey,
+  });
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : undefined,
+  };
+
   const set = exGroup.sets[0];
   const hasData =
     set &&
@@ -248,7 +283,13 @@ function CircuitExerciseRow({
 
   return (
     <>
-      <div className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/50">
+      <div
+        ref={setNodeRef}
+        style={dragStyle}
+        {...attributes}
+        {...listeners}
+        className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/50"
+      >
         <button type="button" onClick={onClick} className="flex-1 text-left min-w-0">
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-medium">{exGroup.exercise.name}</span>

@@ -32,3 +32,9 @@ export type WorkoutItem = ExerciseGroup | CircuitGroup;
 export function isCircuitGroup(item: WorkoutItem): item is CircuitGroup {
   return "exercises" in item && !("exerciseId" in item);
 }
+
+export const CIRCUIT_BODY_PREFIX = "circuit-body-";
+
+export function circuitBodyId(circuitKey: string): string {
+  return `${CIRCUIT_BODY_PREFIX}${circuitKey}`;
+}
