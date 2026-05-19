@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
+import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { PBBadges } from "@/components/pb-badge";
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -49,11 +51,24 @@ function toDisplayDist(km: number, unit: "m" | "km" | "yd"): number {
   return km;
 }
 
+// `futureSets` represents sets that are chronologically newer than the rows
+// rendered here (e.g. sets in the active workout, when this list is shown via
+// `excludeWorkoutId`). They aren't displayed, but they ARE folded into PB
+// computation so the badge always lands on the current PB-holder rather than
+// staying stuck on a historical set whose record has since been beaten.
+type FutureSet = {
+  reps: number | null;
+  weightKg: number | null;
+  distanceKm: number | null;
+  durationSec: number | null;
+};
+
 interface Props {
   exerciseId: string;
   exercise: Exercise;
   excludeWorkoutId?: string;
   initialEntries?: ExerciseHistoryEntry[];
+  futureSets?: FutureSet[];
 }
 
 export function ExerciseHistoryList({
@@ -61,6 +76,7 @@ export function ExerciseHistoryList({
   exercise,
   excludeWorkoutId,
   initialEntries,
+  futureSets,
 }: Props) {
   const [entries, setEntries] = useState<ExerciseHistoryEntry[] | null>(initialEntries ?? null);
 
@@ -68,6 +84,25 @@ export function ExerciseHistoryList({
     if (initialEntries) return;
     getExerciseHistory(exerciseId, excludeWorkoutId).then(setEntries);
   }, [exerciseId, excludeWorkoutId, initialEntries]);
+
+  const pbsBySetId = useMemo(() => {
+    const map = new Map<string, PBType[]>();
+    if (!entries || entries.length === 0) return map;
+    // entries are newest-first; flatten in chronological order (oldest → newest)
+    // so the running-max logic in computePBsInOrder marks the right sets.
+    const flat: WorkoutSet[] = [];
+    for (let i = entries.length - 1; i >= 0; i--) {
+      for (const s of entries[i].sets) flat.push(s);
+    }
+    // Append future (e.g. active-session) sets so they can claim the latest PB
+    // and supersede earlier historical holders. They don't get rendered here.
+    const combined = futureSets && futureSets.length > 0 ? [...flat, ...futureSets] : flat;
+    const pbs = computePBsInOrder(combined, exercise);
+    flat.forEach((s, i) => {
+      if (pbs[i].length > 0) map.set(s.id, pbs[i]);
+    });
+    return map;
+  }, [entries, exercise, futureSets]);
 
   return (
     <div className="flex flex-col">
@@ -83,22 +118,28 @@ export function ExerciseHistoryList({
                 <span className="text-xs font-medium text-muted-foreground">
                   {formatDate(entry.performedOn)}
                 </span>
-                {entry.sets.map((s, i) => (
-                  <div key={s.id} className="flex items-baseline gap-2 text-sm">
-                    <span className="text-muted-foreground w-5 shrink-0 text-center text-xs">
-                      {i + 1}
-                    </span>
-                    <span>
-                      {formatSet(s, exercise)}
-                      {s.circuitId && (
-                        <span className="text-muted-foreground">
-                          {" · "}
-                          Circuit x{s.circuitRounds ?? 0}
+                {entry.sets.map((s, i) => {
+                  const pbs = pbsBySetId.get(s.id);
+                  return (
+                    <div key={s.id} className="flex items-baseline gap-2 text-sm">
+                      <span className="text-muted-foreground w-5 shrink-0 text-center text-xs">
+                        {i + 1}
+                      </span>
+                      <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span>
+                          {formatSet(s, exercise)}
+                          {s.circuitId && (
+                            <span className="text-muted-foreground">
+                              {" · "}
+                              Circuit x{s.circuitRounds ?? 0}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </div>
-                ))}
+                        {pbs && <PBBadges types={pbs} />}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>

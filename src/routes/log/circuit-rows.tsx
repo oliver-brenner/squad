@@ -326,6 +326,7 @@ function CircuitExerciseRow({
             exerciseId={exGroup.exerciseId}
             exercise={exGroup.exercise}
             excludeWorkoutId={workoutId}
+            futureSets={exGroup.sets}
           />
         </div>
       )}

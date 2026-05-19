@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
@@ -8,9 +8,11 @@ import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
-import type { Exercise } from "@/lib/db/types";
+import { PBBadges } from "@/components/pb-badge";
+import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
-import { getLastSetsForExercise } from "@/lib/db/queries";
+import { getExerciseHistory, getLastSetsForExercise } from "@/lib/db/queries";
+import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 
 interface Props {
   group: ExerciseGroup;
@@ -41,6 +43,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
   }> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [priorSetsAsc, setPriorSetsAsc] = useState<WorkoutSet[] | null>(null);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.groupKey,
@@ -117,6 +120,36 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.exerciseId]);
 
+  // Pull prior sets for this exercise (excluding the current workout) so we
+  // can detect PBs hit by sets being logged right now.
+  useEffect(() => {
+    let cancelled = false;
+    getExerciseHistory(group.exerciseId, workoutId)
+      .then((entries) => {
+        if (cancelled) return;
+        // Entries are newest-first; flatten chronologically (oldest → newest).
+        const flat: WorkoutSet[] = [];
+        for (let i = entries.length - 1; i >= 0; i--) {
+          for (const s of entries[i].sets) flat.push(s);
+        }
+        setPriorSetsAsc(flat);
+      })
+      .catch((err) => {
+        console.error("[set-rows] failed to load PB history:", err);
+        setPriorSetsAsc([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [group.exerciseId, workoutId]);
+
+  const pbsByCurrentSetIndex = useMemo<PBType[][]>(() => {
+    if (priorSetsAsc === null) return group.sets.map(() => []);
+    const combined = [...priorSetsAsc, ...group.sets];
+    const all = computePBsInOrder(combined, group.exercise);
+    return all.slice(priorSetsAsc.length);
+  }, [priorSetsAsc, group.sets, group.exercise]);
+
   function openAddTray() {
     const last = group.sets[group.sets.length - 1];
     const historySuggestion = lastLoggedRef.current?.[0]
@@ -192,6 +225,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
                 set={s}
                 exercise={ex}
                 distanceUnit={distanceUnit}
+                pbs={pbsByCurrentSetIndex[i] ?? []}
                 onClick={() => openEditTray(i)}
                 onRemove={() => removeSet(i)}
               />
@@ -218,6 +252,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
                 exerciseId={group.exerciseId}
                 exercise={ex}
                 excludeWorkoutId={workoutId}
+                futureSets={group.sets}
               />
             </div>
           )}
@@ -303,6 +338,7 @@ function SetSummaryRow({
   set,
   exercise,
   distanceUnit,
+  pbs,
   onClick,
   onRemove,
 }: {
@@ -310,14 +346,20 @@ function SetSummaryRow({
   set: DraftSet;
   exercise: Exercise;
   distanceUnit: "m" | "km" | "yd";
+  pbs: PBType[];
   onClick: () => void;
   onRemove: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/50">
       <span className="text-sm text-muted-foreground w-6 shrink-0 text-center">{index}</span>
-      <button type="button" onClick={onClick} className="flex-1 text-left text-sm py-0.5">
-        {formatSetSummary(set, exercise, distanceUnit)}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex-1 text-left text-sm py-0.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1"
+      >
+        <span>{formatSetSummary(set, exercise, distanceUnit)}</span>
+        <PBBadges types={pbs} />
       </button>
       <button
         type="button"
