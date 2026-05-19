@@ -134,6 +134,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
         speedMs: null,
         inclinePct: null,
         restSec: null,
+        calories: null,
       },
       suggestion: last ?? historySuggestion,
     });

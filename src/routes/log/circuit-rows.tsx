@@ -68,6 +68,7 @@ export function CircuitRows({
           speedMs: null,
           inclinePct: null,
           restSec: null,
+          calories: null,
         };
     setActiveTray({ exIdx, draft });
   }

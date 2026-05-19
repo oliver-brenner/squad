@@ -55,6 +55,7 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     track_incline: r.ex_track_incline,
     incline_unit: r.ex_incline_unit,
     track_rest: r.ex_track_rest,
+    track_calories: null,
     muscles: r.ex_muscles,
     secondary_muscles: r.ex_secondary_muscles,
     created_at: r.ex_created_at,
