@@ -243,13 +243,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   key={eq.id}
                   type="button"
                   size="sm"
-                  variant={equipment === eq.key ? "default" : "outline"}
+                  variant={equipment === eq.key ? "default" : "secondary"}
                   onClick={() => setEquipment(equipment === eq.key ? null : eq.key)}
-                  className={
-                    equipment !== eq.key
-                      ? "bg-zinc-900 border-zinc-900 text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100"
-                      : ""
-                  }
                 >
                   {eq.label}
                 </Button>
@@ -308,7 +303,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                         ? "bg-blue-800 border-blue-800 text-white hover:bg-blue-900 hover:text-white"
                         : state === "secondary"
                           ? "bg-teal-700 border-teal-700 text-white hover:bg-teal-800 hover:text-white"
-                          : "bg-zinc-800 border-zinc-800 text-zinc-100 hover:bg-zinc-700 hover:text-zinc-100"
+                          : "bg-muted text-foreground hover:bg-muted/80"
                     }
                   >
                     {g.label}
@@ -359,7 +354,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                             ? "bg-blue-800 border-blue-800 text-white hover:bg-blue-900 hover:text-white"
                             : state === "secondary"
                               ? "bg-teal-700 border-teal-700 text-white hover:bg-teal-800 hover:text-white"
-                              : "bg-zinc-700 border-zinc-700 text-zinc-100 hover:bg-zinc-600 hover:text-zinc-100"
+                              : "bg-muted text-foreground hover:bg-muted/80"
                         }
                       >
                         {c.label}
