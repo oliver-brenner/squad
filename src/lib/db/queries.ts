@@ -316,6 +316,24 @@ export async function getDayStreak(): Promise<number> {
   return streak;
 }
 
+// All sets the given user has logged for an exercise, oldest-first per row but
+// grouped newest-workout-first. Used to compute PB badges on a friend's
+// session: we need their full history, not the current user's.
+export async function getExerciseSetsForUser(
+  exerciseId: string,
+  userId: string
+): Promise<WorkoutSet[]> {
+  const rows = await powersync.getAll<WorkoutSetRow & { performed_on: string }>(
+    `SELECT s.*, w.performed_on AS performed_on
+     FROM sets s
+     INNER JOIN workouts w ON s.workout_id = w.id
+     WHERE s.exercise_id = ? AND w.user_id = ?
+     ORDER BY w.performed_on ASC, s.position ASC`,
+    [exerciseId, userId]
+  );
+  return rows.map((r) => decodeSet(r));
+}
+
 export async function getExerciseHistory(
   exerciseId: string,
   excludeWorkoutId?: string

@@ -2,8 +2,12 @@ import { useEffect, useState, useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
+import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
+import type { PBType } from "@/lib/stats/set-pbs";
 import { formatSetSummary, type DistanceUnit } from "@/lib/set-format";
+
+export type PBMap = Map<string, PBType[]>;
 
 // Read-only renderer shared by the Friends feed session view (current) and
 // any future "view-only my own session" mode. Visually mirrors the personal
@@ -100,9 +104,11 @@ export function buildReadOnlyItems(
 // can omit it for a purely passive view.
 export function SessionReadOnlyItems({
   items,
+  pbsBySetId,
   onCopyExercise,
 }: {
   items: ReadOnlyItem[];
+  pbsBySetId?: PBMap;
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   if (items.length === 0) {
@@ -119,12 +125,14 @@ export function SessionReadOnlyItems({
           <CircuitCard
             key={item.key}
             item={item}
+            pbsBySetId={pbsBySetId}
             onCopyExercise={onCopyExercise}
           />
         ) : (
           <ExerciseCard
             key={item.key}
             item={item}
+            pbsBySetId={pbsBySetId}
             onCopyExercise={onCopyExercise}
           />
         )
@@ -135,9 +143,11 @@ export function SessionReadOnlyItems({
 
 function ExerciseCard({
   item,
+  pbsBySetId,
   onCopyExercise,
 }: {
   item: ReadOnlyExerciseItem;
+  pbsBySetId?: PBMap;
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   const ex = item.exercise;
@@ -162,7 +172,13 @@ function ExerciseCard({
       </div>
       <div className="px-3 pb-3 flex flex-col gap-0.5">
         {item.sets.map((s, i) => (
-          <SetSummary key={s.id} index={i + 1} set={s} exercise={ex} />
+          <SetSummary
+            key={s.id}
+            index={i + 1}
+            set={s}
+            exercise={ex}
+            pbs={pbsBySetId?.get(s.id)}
+          />
         ))}
       </div>
     </Card>
@@ -171,9 +187,11 @@ function ExerciseCard({
 
 function CircuitCard({
   item,
+  pbsBySetId,
   onCopyExercise,
 }: {
   item: ReadOnlyCircuitItem;
+  pbsBySetId?: PBMap;
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   return (
@@ -201,6 +219,7 @@ function CircuitCard({
           <CircuitExerciseRow
             key={eg.exerciseId}
             eg={eg}
+            pbsBySetId={pbsBySetId}
             onCopyExercise={onCopyExercise}
           />
         ))}
@@ -211,9 +230,11 @@ function CircuitCard({
 
 function CircuitExerciseRow({
   eg,
+  pbsBySetId,
   onCopyExercise,
 }: {
   eg: ReadOnlyCircuitItem["exercises"][number];
+  pbsBySetId?: PBMap;
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   const set = eg.sets[0];
@@ -228,6 +249,7 @@ function CircuitExerciseRow({
       set.inclinePct != null ||
       set.restSec != null);
   const distanceUnit = (eg.exercise?.distanceUnit ?? "km") as DistanceUnit;
+  const pbs = set ? pbsBySetId?.get(set.id) : undefined;
 
   return (
     <div className="flex items-start gap-2 rounded-md px-1 py-1.5">
@@ -241,8 +263,9 @@ function CircuitExerciseRow({
           </span>
         )}
         {hasData && eg.exercise && (
-          <p className="text-sm mt-3 pl-3 before:content-['•'] before:mr-2 before:text-muted-foreground">
-            {formatSetSummary(set, eg.exercise, distanceUnit)}
+          <p className="text-sm mt-3 pl-3 before:content-['•'] before:mr-2 before:text-muted-foreground inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span>{formatSetSummary(set, eg.exercise, distanceUnit)}</span>
+            {pbs && <PBBadges types={pbs} />}
           </p>
         )}
       </div>
@@ -261,10 +284,12 @@ function SetSummary({
   index,
   set,
   exercise,
+  pbs,
 }: {
   index: number;
   set: WorkoutSet;
   exercise: Exercise | null;
+  pbs?: PBType[];
 }) {
   if (!exercise) {
     return (
@@ -282,8 +307,9 @@ function SetSummary({
       <span className="text-sm text-muted-foreground w-6 shrink-0 text-center">
         {index}
       </span>
-      <span className="flex-1 text-left text-sm py-0.5">
-        {formatSetSummary(set, exercise, distanceUnit)}
+      <span className="flex-1 text-left text-sm py-0.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>{formatSetSummary(set, exercise, distanceUnit)}</span>
+        {pbs && <PBBadges types={pbs} />}
       </span>
     </div>
   );

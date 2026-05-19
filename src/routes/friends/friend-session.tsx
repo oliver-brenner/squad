@@ -2,7 +2,11 @@ import { useEffect, useState, useTransition } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft, MoreHorizontal } from "lucide-react";
-import { getExerciseById, getFriendSessionDetail } from "@/lib/db/queries";
+import {
+  getExerciseById,
+  getExerciseSetsForUser,
+  getFriendSessionDetail,
+} from "@/lib/db/queries";
 import type { Exercise, Profile, Workout, WorkoutSet } from "@/lib/db/types";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { copyExerciseFromFriend } from "@/lib/mutations/exercises";
@@ -10,8 +14,10 @@ import { copyFriendSession } from "@/lib/mutations/workouts";
 import {
   buildReadOnlyItems,
   SessionReadOnlyItems,
+  type PBMap,
   type ReadOnlyItem,
 } from "@/components/session-readonly";
+import { computePBsInOrder } from "@/lib/stats/set-pbs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -92,6 +98,7 @@ type LoadState =
       sets: WorkoutSet[];
       author: Profile | null;
       items: ReadOnlyItem[];
+      pbsBySetId: PBMap;
     };
 
 export function FriendSession() {
@@ -128,12 +135,29 @@ export function FriendSession() {
         if (ex) exercises.set(exId, ex);
       }
       if (cancelled) return;
+
+      // Compute PB badges using the friend's full history per exercise. The
+      // newest-wins post-pass inside computePBsInOrder strips any record that
+      // they've since beaten — so a set badged here is still their current PB.
+      const pbsBySetId: PBMap = new Map();
+      await Promise.all(
+        [...exercises.entries()].map(async ([exId, ex]) => {
+          const history = await getExerciseSetsForUser(exId, detail.workout.userId);
+          const pbs = computePBsInOrder(history, ex);
+          history.forEach((s, i) => {
+            if (pbs[i].length > 0) pbsBySetId.set(s.id, pbs[i]);
+          });
+        })
+      );
+      if (cancelled) return;
+
       setData({
         state: "ready",
         workout: detail.workout,
         sets: detail.sets,
         author: detail.author,
         items: buildReadOnlyItems(detail.sets, exercises),
+        pbsBySetId,
       });
     })();
     return () => {
@@ -150,7 +174,7 @@ export function FriendSession() {
     );
   }
 
-  const { workout, author, items } = data;
+  const { workout, author, items, pbsBySetId } = data;
   const authorLabel = author?.username
     ? `@${author.username}`
     : author?.displayName ?? "Unknown user";
@@ -196,6 +220,7 @@ export function FriendSession() {
 
       <SessionReadOnlyItems
         items={items}
+        pbsBySetId={pbsBySetId}
         onCopyExercise={async (exerciseId) => {
           await copyExerciseFromFriend({ sourceExerciseId: exerciseId });
         }}
