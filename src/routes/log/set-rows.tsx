@@ -424,6 +424,7 @@ export function SetTray({
         speedMs: draft.speedMs ?? suggestion.speedMs,
         inclinePct: draft.inclinePct ?? suggestion.inclinePct,
         restSec: draft.restSec ?? suggestion.restSec,
+        calories: draft.calories ?? suggestion.calories,
       });
     } else {
       onConfirm(draft);
@@ -439,6 +440,7 @@ export function SetTray({
   const showResistance = ex.trackResistance;
   const showDistance = !!ex.distanceUnit;
   const showRest = ex.trackRest;
+  const showCalories = ex.trackCalories;
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
   const timeUnit = (ex.timeUnit ?? "min") as "h" | "min" | "sec";
   const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
@@ -591,6 +593,17 @@ export function SetTray({
                 onChange={(v) => patch({ restSec: v != null ? Math.round(v) : null })}
                 step={5}
                 placeholder={sg?.restSec != null ? String(sg.restSec) : "60"}
+                className="w-full"
+              />
+            </TrayField>
+          )}
+          {showCalories && (
+            <TrayField label="Calories" unit="kcal">
+              <NumInput
+                value={draft.calories}
+                onChange={(v) => patch({ calories: v != null ? Math.round(v) : null })}
+                step={1}
+                placeholder={sg?.calories != null ? String(sg.calories) : "100"}
                 className="w-full"
               />
             </TrayField>

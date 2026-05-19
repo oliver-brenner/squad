@@ -281,6 +281,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             speedMs: s.speedMs,
             inclinePct: s.inclinePct,
             restSec: s.restSec,
+            calories: s.calories ?? null,
             circuitId: item.groupKey,
             circuitRounds: item.rounds,
             circuitName: item.name,
@@ -299,6 +300,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
           speedMs: s.speedMs,
           inclinePct: s.inclinePct,
           restSec: s.restSec,
+          calories: s.calories ?? null,
           circuitId: null as string | null,
           circuitRounds: null as number | null,
           circuitName: null as string | null,
@@ -718,6 +720,7 @@ function toWorkoutSet(
     speedMs: s.speedMs,
     inclinePct: s.inclinePct,
     restSec: s.restSec,
+    calories: s.calories,
     circuitId: null,
     circuitRounds: null,
     circuitName: null,
@@ -800,6 +803,7 @@ function emptySet(ex: Exercise): DraftSet {
     speedMs: null,
     inclinePct: null,
     restSec: null,
+    calories: null,
   };
 }
 
@@ -824,6 +828,7 @@ function buildItems(sets: WorkoutSet[], exercises: Exercise[]): WorkoutItem[] {
       speedMs: s.speedMs,
       inclinePct: s.inclinePct,
       restSec: s.restSec,
+      calories: s.calories,
     };
 
     if (s.circuitId) {

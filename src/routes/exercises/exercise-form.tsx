@@ -18,7 +18,8 @@ type Metric =
   | "incline"
   | "resistance"
   | "distance"
-  | "rest";
+  | "rest"
+  | "calories";
 type DistanceUnit = "m" | "km" | "yd";
 type TimeUnit = "h" | "min" | "sec";
 type InclineUnit = "pct" | "setting";
@@ -55,6 +56,7 @@ const METRICS: Metric[] = [
   "resistance",
   "distance",
   "rest",
+  "calories",
 ];
 
 function deriveMetrics(exercise: Exercise): Set<Metric> {
@@ -67,6 +69,7 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.trackResistance) m.add("resistance");
   if (exercise.distanceUnit) m.add("distance");
   if (exercise.trackRest) m.add("rest");
+  if (exercise.trackCalories) m.add("calories");
   return m;
 }
 
@@ -149,6 +152,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           trackIncline: metrics.has("incline"),
           inclineUnit: metrics.has("incline") ? inclineUnit : null,
           trackRest: metrics.has("rest"),
+          trackCalories: metrics.has("calories"),
           muscles: (() => {
             const p = [...muscleMap.entries()]
               .filter(([, v]) => v === "primary")
