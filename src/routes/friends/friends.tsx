@@ -30,7 +30,7 @@ export function Friends() {
 
   return (
     <>
-      <PageHeader title="Friends" />
+      <PageHeader title="Squad" />
       <SegmentedTabs
         value={tab}
         onChange={setTab}
