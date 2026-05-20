@@ -44,9 +44,15 @@ export function Dashboard() {
   );
   const recentWorkouts = recentRows.map(decodeWorkout);
 
-  const { data: calendarDots = [] } = useQuery<{ performed_on: string; session_type: string }>(
-    `SELECT performed_on, session_type FROM workouts
-     WHERE user_id = ? AND performed_on >= ? ORDER BY performed_on ASC`,
+  const { data: calendarDots = [] } = useQuery<{
+    id: string;
+    name: string;
+    performed_on: string;
+    session_type: string;
+  }>(
+    `SELECT id, name, performed_on, session_type FROM workouts
+     WHERE user_id = ? AND performed_on >= ?
+     ORDER BY performed_on ASC, created_at ASC`,
     [userId, since30Iso]
   );
 
@@ -79,7 +85,9 @@ export function Dashboard() {
 
       <div className="mt-4">
         <ActivityCalendar
-          dots={calendarDots.map((d) => ({
+          sessions={calendarDots.map((d) => ({
+            id: d.id,
+            name: d.name,
             performedOn: d.performed_on,
             sessionType: d.session_type,
           }))}
