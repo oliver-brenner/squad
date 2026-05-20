@@ -8,6 +8,7 @@ export type PublicProfile = {
   username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
+  createdAt: string | null;
 };
 
 // Returns every profile except the signed-in user.
@@ -22,7 +23,7 @@ export type PublicProfile = {
 export async function fetchDiscoverableProfiles(currentUserId: string): Promise<PublicProfile[]> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url")
+    .select("id, username, display_name, avatar_url, created_at")
     .neq("id", currentUserId)
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -36,7 +37,7 @@ export async function fetchDiscoverableProfiles(currentUserId: string): Promise<
 export async function fetchProfileById(id: string): Promise<PublicProfile | null> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, display_name, avatar_url")
+    .select("id, username, display_name, avatar_url, created_at")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -49,5 +50,6 @@ function rowToPublicProfile(r: Record<string, unknown>): PublicProfile {
     username: (r.username as string | null) ?? null,
     displayName: (r.display_name as string | null) ?? null,
     avatarUrl: (r.avatar_url as string | null) ?? null,
+    createdAt: (r.created_at as string | null) ?? null,
   };
 }

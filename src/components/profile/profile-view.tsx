@@ -1,7 +1,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, Settings as SettingsIcon } from "lucide-react";
+import { CalendarDays, ChevronLeft, Settings as SettingsIcon } from "lucide-react";
+import { BarbellIcon } from "@/components/exercise-meta";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -146,6 +147,17 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
         </div>
       </section>
 
+      <div className="flex items-center justify-center gap-5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarDays className="h-3.5 w-3.5" />
+          Joined: {formatJoinedDate(profile?.createdAt)}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <BarbellIcon className="h-3.5 w-3.5" />
+          {hasLocalData ? stats?.totalSessions ?? "—" : "—"} sessions
+        </span>
+      </div>
+
       <SegmentedTabs
         value={tab}
         onChange={setTab}
@@ -231,6 +243,15 @@ function FollowButton({
       {isFollowing ? "Unfollow" : "Follow"}
     </Button>
   );
+}
+
+function formatJoinedDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return format(parseISO(iso), "MMM yyyy");
+  } catch {
+    return "—";
+  }
 }
 
 function formatReps(n: number | undefined): string {
