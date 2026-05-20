@@ -131,7 +131,7 @@ export function ProfileStatsCharts({ sessions, workoutDates }: Props) {
   const metrics = useMemo(() => buildMetrics(sessions, workoutDates), [sessions, workoutDates]);
 
   const [activeKey, setActiveKey] = useState<MetricKey>(() => {
-    const preferred: MetricKey[] = ["volume", "sets", "reps", "exercises", "workouts"];
+    const preferred: MetricKey[] = ["exercises", "sets", "reps", "volume", "workouts"];
     for (const k of preferred) {
       if ((metrics.find((m) => m.key === k)?.points.length ?? 0) >= 2) return k;
     }
