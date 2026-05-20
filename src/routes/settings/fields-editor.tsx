@@ -1,5 +1,6 @@
 import { useState, useTransition, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { sanitizeReturnHref } from "@/lib/utils";
 import {
   ChevronLeft,
   ChevronDown,
@@ -38,9 +39,21 @@ import { Input } from "@/components/ui/input";
 
 export function FieldsEditor() {
   const initial = useUserFieldOptions();
+  const [searchParams] = useSearchParams();
+  // `?from=…` lets the caller pick the back target. Exercise-form opens this
+  // with from=/exercises?open=<id> so back returns to the form re-opened.
+  // Default is /settings (the You tab card path).
+  const backHref = sanitizeReturnHref(searchParams.get("from")) ?? "/settings";
   const [categories, setCategories] = useState<FieldOption[]>(initial.categories);
   const [equipment, setEquipment] = useState<FieldOption[]>(initial.equipment);
   const [muscleGroups, setMuscleGroups] = useState<MuscleGroupNode[]>(initial.muscleGroups);
+
+  // Router preserves scroll position across navigations, which lands the user
+  // at the bottom of the page when they arrive from the in-form button. Pop
+  // them back to the top on mount.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   useEffect(() => {
     setCategories(initial.categories);
@@ -56,7 +69,7 @@ export function FieldsEditor() {
     <div className="flex flex-col gap-4">
       <header className="flex items-center gap-2 py-2">
         <Link
-          to="/settings"
+          to={backHref}
           className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Back"
         >

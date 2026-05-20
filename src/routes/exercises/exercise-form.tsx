@@ -1,5 +1,6 @@
 import { useState, useTransition, useEffect } from "react";
-import { ChevronLeft } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
 import type { Exercise } from "@/lib/db/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,16 @@ interface Props {
 
 export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
   const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
+  const location = useLocation();
+  // The form is rendered inline (no dedicated URL), so to come back to it
+  // after a Customise-fields trip we encode the editing target in `?open=`.
+  // The parent route picks this up on return and re-opens the form. New-form
+  // returns are best-effort: in-progress field values aren't preserved
+  // (would need URL-state or sessionStorage to fix; not done here).
+  const openValue = exercise?.id ?? "new";
+  const customiseFieldsHref = `/settings/fields?from=${encodeURIComponent(
+    `${location.pathname}?open=${openValue}`
+  )}`;
   const [isPending, startTransition] = useTransition();
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -518,6 +529,20 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           {isPending ? "Saving…" : "Save"}
         </Button>
       </div>
+
+      <Link
+        to={customiseFieldsHref}
+        className="flex items-center gap-3 p-4 mt-4 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+      >
+        <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Customise fields</div>
+          <div className="text-sm text-muted-foreground">
+            Edit categories, equipment, and muscle groups
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
     </div>
   );
 }

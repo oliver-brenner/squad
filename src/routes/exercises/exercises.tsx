@@ -1,4 +1,5 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { Plus, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -44,6 +45,39 @@ export function Exercises() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // `?open=` re-opens the form after a Customise-fields round-trip.
+  // - `new` → opens the create form (in-progress fields aren't preserved)
+  // - <uuid> → re-opens the edit form for that exercise
+  // We strip the param once consumed so a refresh doesn't keep re-opening.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openParam = searchParams.get("open");
+  useEffect(() => {
+    if (!openParam) return;
+    if (openParam === "new") {
+      setCreating(true);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("open");
+          return next;
+        },
+        { replace: true }
+      );
+      return;
+    }
+    if (exercises.length === 0) return; // wait for the library to load
+    const ex = exercises.find((e) => e.id === openParam);
+    if (ex) setEditing(ex);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [openParam, exercises, setSearchParams]);
 
   if (creating) {
     return <ExerciseForm onClose={() => setCreating(false)} />;
