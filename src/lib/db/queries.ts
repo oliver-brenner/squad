@@ -427,6 +427,7 @@ export type UserProfileStats = {
   totalSessions: number;
   totalSets: number;
   totalReps: number;
+  totalVolumeKg: number;
 };
 
 // Per-session aggregates over a user's full history. Powers the timeseries
@@ -510,6 +511,7 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
   const aggRow = await powersync.get<{
     total_sets: number | null;
     total_reps: number | null;
+    total_volume_kg: number | null;
   }>(
     `SELECT
        SUM(COALESCE(s.circuit_rounds, 1)) AS total_sets,
@@ -517,7 +519,18 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
          COALESCE(s.reps, 1)
          * COALESCE(s.circuit_rounds, 1)
          * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
-       ) AS total_reps
+       ) AS total_reps,
+       SUM(
+         CASE
+           WHEN s.reps IS NOT NULL AND s.reps > 0
+                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)) > 0
+           THEN s.reps
+                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0))
+                * COALESCE(s.circuit_rounds, 1)
+                * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+           ELSE 0
+         END
+       ) AS total_volume_kg
      FROM sets s
      INNER JOIN exercises e ON s.exercise_id = e.id
      WHERE s.user_id = ?`,
@@ -527,6 +540,7 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
     totalSessions: sessionsRow.count,
     totalSets: Number(aggRow.total_sets ?? 0),
     totalReps: Number(aggRow.total_reps ?? 0),
+    totalVolumeKg: Number(aggRow.total_volume_kg ?? 0),
   };
 }
 

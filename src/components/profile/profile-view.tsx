@@ -216,10 +216,11 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
         </section>
       ) : (
         <section className="flex flex-col gap-3">
-          <div className="grid grid-cols-3 gap-2">
-            <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
-            <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
-            <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
+          <div className="grid grid-cols-4 gap-2">
+            <StatCard compact label="Sessions" value={hasLocalData ? (stats ? withCommas(stats.totalSessions) : "—") : "—"} />
+            <StatCard compact label="Sets" value={hasLocalData ? (stats ? withCommas(stats.totalSets) : "—") : "—"} />
+            <StatCard compact label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
+            <StatCard compact label="Volume" value={hasLocalData ? formatVolume(stats?.totalVolumeKg) : "—"} />
           </div>
           {hasLocalData && sessionAggregates && workoutDates && (
             <ProfileStatsCharts sessions={sessionAggregates} workoutDates={workoutDates} />
@@ -271,8 +272,16 @@ function formatJoinedDate(iso: string | null | undefined): string {
   }
 }
 
+function withCommas(n: number): string {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 function formatReps(n: number | undefined): string {
   if (n == null) return "—";
-  if (n < 1000) return String(n);
-  return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return withCommas(n);
+}
+
+function formatVolume(n: number | undefined): string {
+  if (n == null || n === 0) return "—";
+  return `${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}kg`;
 }
