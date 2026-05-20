@@ -61,6 +61,7 @@ type FutureSet = {
   weightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
+  speedMs: number | null;
 };
 
 interface Props {

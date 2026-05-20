@@ -1,7 +1,7 @@
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import { estimateOneRepMax } from "./one-rep-max";
 
-export type PBType = "1RM" | "Volume" | "Distance" | "Reps" | "Time";
+export type PBType = "1RM" | "Volume" | "Distance" | "Reps" | "Time" | "Speed";
 
 export const PB_LABEL: Record<PBType, string> = {
   "1RM": "1RM",
@@ -9,9 +9,13 @@ export const PB_LABEL: Record<PBType, string> = {
   Distance: "Dist",
   Reps: "Reps",
   Time: "Time",
+  Speed: "Speed",
 };
 
-type PBInputSet = Pick<WorkoutSet, "reps" | "weightKg" | "distanceKm" | "durationSec">;
+type PBInputSet = Pick<
+  WorkoutSet,
+  "reps" | "weightKg" | "distanceKm" | "durationSec" | "speedMs"
+>;
 
 function effectiveReps(s: PBInputSet, ex: Exercise): number | null {
   if (s.reps == null || s.reps < 1) return null;
@@ -48,6 +52,7 @@ export function computePBsInOrder<T extends PBInputSet>(
   const isStrength = exercise.trackReps && !exercise.isBodyweight;
   const tracksDistance = !!exercise.distanceUnit;
   const tracksTime = exercise.trackTime;
+  const tracksSpeed = exercise.trackSpeed;
   // Pure rep-count exercises (pullups, pushups, dips): bodyweight + reps with
   // no other primary metric. Weighted-rep exercises get tracked via 1RM/Volume
   // instead, so this only kicks in when those can't be computed.
@@ -61,6 +66,7 @@ export function computePBsInOrder<T extends PBInputSet>(
   let maxVolume: number | null = null;
   let maxDistance: number | null = null;
   let maxDurationSec: number | null = null;
+  let maxSpeedMs: number | null = null;
   let maxReps: number | null = null;
 
   // First pass: record every set that established a new max at its point in time.
@@ -99,6 +105,13 @@ export function computePBsInOrder<T extends PBInputSet>(
       if (maxDurationSec == null || s.durationSec > maxDurationSec) {
         pbs.push("Time");
         maxDurationSec = s.durationSec;
+      }
+    }
+
+    if (tracksSpeed && s.speedMs != null) {
+      if (maxSpeedMs == null || s.speedMs > maxSpeedMs) {
+        pbs.push("Speed");
+        maxSpeedMs = s.speedMs;
       }
     }
 
