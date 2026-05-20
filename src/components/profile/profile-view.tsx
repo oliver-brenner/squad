@@ -1,5 +1,7 @@
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
+import { ChevronLeft, Settings as SettingsIcon } from "lucide-react";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -20,11 +22,10 @@ import { SessionList } from "@/routes/log/session-list";
 
 type ProfileViewProps = {
   userId: string;
-  topLeft?: ReactNode;
-  topRight?: ReactNode;
+  backHref?: string;
 };
 
-export function ProfileView({ userId, topLeft, topRight }: ProfileViewProps) {
+export function ProfileView({ userId, backHref }: ProfileViewProps) {
   const { user } = useAuth();
   const myId = user?.id ?? "";
   const isMe = myId === userId;
@@ -100,30 +101,46 @@ export function ProfileView({ userId, topLeft, topRight }: ProfileViewProps) {
 
   return (
     <div className="flex flex-col gap-6 pb-4">
-      <header className="flex items-center justify-between gap-2 pt-4">
-        <div className="flex items-center">{topLeft}</div>
-        <div className="flex items-center">{topRight}</div>
-      </header>
-
-      <section className="flex flex-col items-center gap-3 text-center">
+      <section className="flex items-center gap-3 pt-4">
+        {backHref && (
+          <Link
+            to={backHref}
+            className="-ml-2 -mr-2 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground flex-shrink-0"
+            aria-label="Back"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </Link>
+        )}
         {profile?.avatarUrl ? (
           <img
             src={profile.avatarUrl}
             alt=""
-            className="h-20 w-20 rounded-full"
+            className="h-16 w-16 rounded-full flex-shrink-0"
           />
         ) : (
-          <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center text-2xl font-semibold">
+          <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-xl font-semibold flex-shrink-0">
             {initial}
           </div>
         )}
-        <div className="flex flex-col gap-0.5">
-          <div className="text-xl font-semibold tracking-tight">{handle}</div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-lg font-semibold tracking-tight">{handle}</div>
           {profile?.username && profile?.displayName && (
-            <div className="text-sm text-muted-foreground">{profile.displayName}</div>
+            <div className="truncate text-sm text-muted-foreground">{profile.displayName}</div>
           )}
         </div>
-        {!isMe && <FollowButton userId={userId} isFollowing={isFollowing} />}
+        <div className="flex-shrink-0">
+          {isMe ? (
+            <Link
+              to="/settings"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Settings"
+            >
+              <SettingsIcon className="h-6 w-6" />
+            </Link>
+          ) : (
+            <FollowButton userId={userId} isFollowing={isFollowing} />
+          )}
+        </div>
       </section>
 
       <section className="grid grid-cols-3 gap-2">
@@ -198,8 +215,7 @@ function FollowButton({
       onClick={toggle}
       disabled={pending}
       variant={isFollowing ? "outline" : "default"}
-      size="lg"
-      className="min-w-32"
+      size="sm"
     >
       {isFollowing ? "Unfollow" : "Follow"}
     </Button>
