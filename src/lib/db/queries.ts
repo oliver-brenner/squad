@@ -429,6 +429,79 @@ export type UserProfileStats = {
   totalReps: number;
 };
 
+// Per-session aggregates over a user's full history. Powers the timeseries
+// charts on the profile stats tab. Multiplier rules match getUserProfileStats:
+// circuit_rounds folds into sets/reps/volume, double_reps doubles effective
+// reps. Volume only counts sets that actually had weight × reps logged.
+export type UserSessionAggregate = {
+  performedOn: string;
+  sessionType: string | null;
+  totalExercises: number;
+  totalSets: number;
+  totalReps: number;
+  totalVolumeKg: number;
+};
+
+export async function getUserSessionAggregates(userId: string): Promise<UserSessionAggregate[]> {
+  const rows = await powersync.getAll<{
+    performed_on: string;
+    session_type: string | null;
+    total_exercises: number | null;
+    total_sets: number | null;
+    total_reps: number | null;
+    total_volume_kg: number | null;
+  }>(
+    `SELECT
+       w.performed_on,
+       w.session_type,
+       COUNT(DISTINCT s.exercise_id || '|' || COALESCE(s.circuit_id, '')) AS total_exercises,
+       SUM(COALESCE(s.circuit_rounds, 1)) AS total_sets,
+       SUM(
+         COALESCE(s.reps, 1)
+         * COALESCE(s.circuit_rounds, 1)
+         * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+       ) AS total_reps,
+       SUM(
+         CASE
+           WHEN s.reps IS NOT NULL AND s.reps > 0
+                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)) > 0
+           THEN s.reps
+                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0))
+                * COALESCE(s.circuit_rounds, 1)
+                * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+           ELSE 0
+         END
+       ) AS total_volume_kg
+     FROM workouts w
+     INNER JOIN sets s ON s.workout_id = w.id
+     INNER JOIN exercises e ON s.exercise_id = e.id
+     WHERE w.user_id = ? AND w.session_type = 'workout'
+     GROUP BY w.id, w.performed_on, w.session_type
+     ORDER BY w.performed_on ASC`,
+    [userId]
+  );
+  return rows.map((r) => ({
+    performedOn: r.performed_on,
+    sessionType: r.session_type,
+    totalExercises: Number(r.total_exercises ?? 0),
+    totalSets: Number(r.total_sets ?? 0),
+    totalReps: Number(r.total_reps ?? 0),
+    totalVolumeKg: Number(r.total_volume_kg ?? 0),
+  }));
+}
+
+// Dates of every `session_type = 'workout'` session, oldest-first. The profile
+// chart buckets these into ISO weeks (Mon–Sun) in JS to plot workouts/week.
+export async function getUserWorkoutDates(userId: string): Promise<string[]> {
+  const rows = await powersync.getAll<{ performed_on: string }>(
+    `SELECT performed_on FROM workouts
+     WHERE user_id = ? AND session_type = 'workout'
+     ORDER BY performed_on ASC`,
+    [userId]
+  );
+  return rows.map((r) => r.performed_on);
+}
+
 export async function getUserProfileStats(userId: string): Promise<UserProfileStats> {
   const sessionsRow = await powersync.get<{ count: number }>(
     `SELECT COUNT(*) AS count FROM workouts WHERE user_id = ?`,

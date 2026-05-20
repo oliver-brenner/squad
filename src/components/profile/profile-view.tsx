@@ -10,12 +10,16 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatCard } from "@/components/stats/stat-card";
+import { ProfileStatsCharts } from "@/components/profile/profile-stats-charts";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { FollowRow, ProfileRow } from "@/lib/db/schema";
 import {
   getRecentWorkoutsWithExercises,
   getUserProfileStats,
+  getUserSessionAggregates,
+  getUserWorkoutDates,
   type UserProfileStats,
+  type UserSessionAggregate,
   type WorkoutWithExercises,
 } from "@/lib/db/queries";
 import { fetchProfileById } from "@/lib/supabase/profiles";
@@ -56,6 +60,8 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
 
   const [stats, setStats] = useState<UserProfileStats | null>(null);
   const [sessions, setSessions] = useState<WorkoutWithExercises[] | null>(null);
+  const [sessionAggregates, setSessionAggregates] = useState<UserSessionAggregate[] | null>(null);
+  const [workoutDates, setWorkoutDates] = useState<string[] | null>(null);
   const hasLocalData = isMe || isFollowing;
 
   // Reactive signature so stats/sessions re-fetch when PowerSync streams in
@@ -77,17 +83,23 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
     if (!hasLocalData) {
       setStats(null);
       setSessions(null);
+      setSessionAggregates(null);
+      setWorkoutDates(null);
       return;
     }
     let cancelled = false;
     (async () => {
-      const [s, w] = await Promise.all([
+      const [s, w, agg, wd] = await Promise.all([
         getUserProfileStats(userId),
         getRecentWorkoutsWithExercises(60, userId),
+        getUserSessionAggregates(userId),
+        getUserWorkoutDates(userId),
       ]);
       if (!cancelled) {
         setStats(s);
         setSessions(w);
+        setSessionAggregates(agg);
+        setWorkoutDates(wd);
       }
     })();
     return () => {
@@ -203,10 +215,15 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
           )}
         </section>
       ) : (
-        <section className="grid grid-cols-3 gap-2">
-          <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
-          <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
-          <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
+        <section className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
+            <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
+            <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
+          </div>
+          {hasLocalData && sessionAggregates && workoutDates && (
+            <ProfileStatsCharts sessions={sessionAggregates} workoutDates={workoutDates} />
+          )}
         </section>
       )}
     </div>
