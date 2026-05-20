@@ -138,7 +138,7 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-lg font-semibold tracking-tight">{handle}</div>
+          <div className="text-lg font-semibold tracking-tight break-words">{handle}</div>
           {profile?.username && profile?.displayName && (
             <div className="truncate text-sm text-muted-foreground">{profile.displayName}</div>
           )}
