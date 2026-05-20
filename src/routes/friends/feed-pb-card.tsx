@@ -24,7 +24,7 @@ export function FeedPBCard({ highlight, isMine }: Props) {
 
   return (
     <article className="overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="flex items-center gap-3 p-3">
+      <header className="flex items-center gap-3 border-b border-amber-500/20 bg-gradient-to-r from-transparent via-amber-500/5 to-amber-500/20 p-3 pr-5">
         <Link
           to={`/users/${highlight.authorId}`}
           className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80"
@@ -43,22 +43,26 @@ export function FeedPBCard({ highlight, isMine }: Props) {
           )}
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{author}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {dateLabel}
-              {highlight.workoutName ? ` · ${highlight.workoutName}` : ""}
-            </div>
+            {highlight.workoutName && (
+              <div className="break-words text-xs text-muted-foreground">
+                {highlight.workoutName}
+              </div>
+            )}
+            <div className="truncate text-xs text-muted-foreground">{dateLabel}</div>
           </div>
+        </Link>
+        <Link
+          to={sessionHref}
+          className="flex flex-shrink-0 items-center gap-2 hover:opacity-80"
+        >
+          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-amber-500/25 text-amber-700 dark:text-amber-300">
+            <Trophy className="h-4 w-4" strokeWidth={2.5} />
+          </span>
+          <span className="whitespace-nowrap text-sm font-semibold">{pbCountLabel}</span>
         </Link>
       </header>
 
       <Link to={sessionHref} className="block transition-colors hover:bg-muted/30">
-        <div className="flex items-center gap-2.5 border-y border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent px-4 py-2.5">
-          <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
-            <Trophy className="h-4 w-4" strokeWidth={2.5} />
-          </span>
-          <span className="text-sm font-semibold">{pbCountLabel}</span>
-        </div>
-
         <ul className="flex flex-col divide-y divide-border">
           {highlight.exercises.map((ex) => (
             <li key={ex.exerciseId} className="px-4 py-2.5">
