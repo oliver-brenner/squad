@@ -53,14 +53,6 @@ export function computePBsInOrder<T extends PBInputSet>(
   const tracksDistance = !!exercise.distanceUnit;
   const tracksTime = exercise.trackTime;
   const tracksSpeed = exercise.trackSpeed;
-  // Pure rep-count exercises (pullups, pushups, dips): bodyweight + reps with
-  // no other primary metric. Weighted-rep exercises get tracked via 1RM/Volume
-  // instead, so this only kicks in when those can't be computed.
-  const isRepsOnly =
-    exercise.trackReps &&
-    exercise.isBodyweight &&
-    !exercise.trackTime &&
-    !tracksDistance;
 
   let maxOneRm: number | null = null;
   let maxVolume: number | null = null;
@@ -89,9 +81,20 @@ export function computePBsInOrder<T extends PBInputSet>(
       }
     }
 
-    if (isRepsOnly) {
+    // PB Reps is decided per-set: if the only metric on a set is reps (no
+    // weight, distance, time, or speed actually logged), it's eligible. This
+    // catches pullups/pushups, but also weight-tracking exercises where the
+    // user just logged reps without weight — the running max only competes
+    // across pure-rep sets, so weighted sets don't poison the comparison.
+    if (exercise.trackReps) {
       const r = effectiveReps(s, exercise);
-      if (r != null && (maxReps == null || r > maxReps)) {
+      const setIsPureReps =
+        r != null &&
+        effectiveWeightKg(s, exercise) == null &&
+        s.distanceKm == null &&
+        s.durationSec == null &&
+        s.speedMs == null;
+      if (setIsPureReps && (maxReps == null || r > maxReps)) {
         pbs.push("Reps");
         maxReps = r;
       }
