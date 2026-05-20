@@ -1,14 +1,22 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  startOfMonth,
+  endOfMonth,
   startOfWeek,
+  endOfWeek,
+  addMonths,
+  subMonths,
   subDays,
   format,
   eachDayOfInterval,
   isToday,
   isAfter,
+  isBefore,
+  isSameMonth,
   parseISO,
 } from "date-fns";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { sessionTypeColor } from "@/lib/session-type-color";
 
 interface SessionEntry {
@@ -22,29 +30,42 @@ const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const SESSION_HREF = (id: string) =>
   `/log/${id}?from=${encodeURIComponent("/dashboard")}`;
 const DEFAULT_LOOKBACK_DAYS = 27;
-const ROW_GAP_PX = 2;
-const FALLBACK_ROW_HEIGHT = 41;
+// Minimum horizontal travel to register as a month swipe — too low and a tap
+// drift triggers it; too high and the gesture feels unresponsive.
+const SWIPE_THRESHOLD_PX = 50;
 
 export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
   const navigate = useNavigate();
   const today = new Date();
+
+  // Cap range — earliest month the user can swipe back to is the month of
+  // their first logged session (falling back to a default lookback so the
+  // first-launch state isn't a single-day grid). Latest is the current month.
   const earliestDate =
     sessions.length > 0
       ? parseISO(sessions[0].performedOn)
       : subDays(today, DEFAULT_LOOKBACK_DAYS);
-  const gridStart = startOfWeek(earliestDate, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start: gridStart, end: today });
+  const minMonth = startOfMonth(earliestDate);
+  const maxMonth = startOfMonth(today);
+
+  const [viewMonth, setViewMonth] = useState<Date>(maxMonth);
+
+  // Build the visible grid for the displayed month: weeks starting Monday,
+  // with leading/trailing padding so every row is exactly 7 days. Days
+  // outside the current month render as empty cells.
+  const gridStart = startOfWeek(viewMonth, { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+  const weeks: Date[][] = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
 
   const sessionMap = new Map<string, SessionEntry[]>();
   for (const s of sessions) {
     const arr = sessionMap.get(s.performedOn) ?? [];
     arr.push(s);
     sessionMap.set(s.performedOn, arr);
-  }
-
-  const weeks: Date[][] = [];
-  for (let i = 0; i < days.length; i += 7) {
-    weeks.push(days.slice(i, i + 7));
   }
 
   const [trayDate, setTrayDate] = useState<string | null>(null);
@@ -59,52 +80,62 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
     setTrayDate(dateStr);
   }
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
-  const rowHeightRef = useRef(FALLBACK_ROW_HEIGHT);
+  const canGoBack = isAfter(viewMonth, minMonth);
+  const canGoForward = isBefore(viewMonth, maxMonth);
 
-  const [activeWeekIdx, setActiveWeekIdx] = useState(() =>
-    Math.max(0, weeks.length - 1)
-  );
+  function goPrev() {
+    if (!canGoBack) return;
+    setViewMonth((m) => subMonths(m, 1));
+  }
+  function goNext() {
+    if (!canGoForward) return;
+    setViewMonth((m) => addMonths(m, 1));
+  }
 
-  const computeActiveWeek = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const rowH = rowHeightRef.current || FALLBACK_ROW_HEIGHT;
-    const bottomY = el.scrollTop + el.clientHeight;
-    // The bottommost visible week best represents "what the user is looking at"
-    // — at the default scroll-to-bottom position this is today's week.
-    const idx = Math.max(
-      0,
-      Math.min(weeks.length - 1, Math.ceil(bottomY / rowH) - 1)
-    );
-    setActiveWeekIdx(idx);
-  }, [weeks.length]);
+  // Swipe: capture x at touchstart, compare at touchend. Vertical drags still
+  // scroll the page because the container declares `touch-action: pan-y` —
+  // browser keeps native vertical panning, hands horizontal motion to us.
+  const touchStartX = useRef<number | null>(null);
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    if (start == null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return;
+    if (dx < 0) goNext();
+    else goPrev();
+  }
 
-  const gridStartMs = gridStart.getTime();
-  useLayoutEffect(() => {
-    if (rowRef.current) {
-      rowHeightRef.current = rowRef.current.offsetHeight + ROW_GAP_PX;
-    }
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-    computeActiveWeek();
-  }, [gridStartMs, computeActiveWeek]);
-
-  const activeWeek = weeks[activeWeekIdx];
-  // Thursday (index 3) represents the week's month better than Monday, which
-  // can fall in the prior month for cross-month weeks.
-  const monthLabel = activeWeek
-    ? format(activeWeek[3] ?? activeWeek[0], "MMMM yyyy")
-    : "";
+  const monthLabel = format(viewMonth, "MMMM yyyy");
 
   return (
     <>
       <div className="rounded-2xl border border-border bg-card px-3 pt-3 pb-4">
         <div className="mb-2 flex items-center justify-between px-0.5">
+          <button
+            type="button"
+            onClick={goPrev}
+            disabled={!canGoBack}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-foreground/80 hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
           <span className="text-sm font-semibold text-foreground/80 tabular-nums">
             {monthLabel}
           </span>
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={!canGoForward}
+            className="flex h-6 w-6 items-center justify-center rounded-full text-foreground/80 hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="grid grid-cols-7 mb-2">
@@ -118,21 +149,26 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
         </div>
 
         <div
-          ref={scrollRef}
-          onScroll={computeActiveWeek}
-          className="max-h-[210px] overflow-y-auto no-scrollbar"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
           style={{ touchAction: "pan-y" }}
         >
           <div className="flex flex-col gap-0.5">
             {weeks.map((week, wi) => (
-              <div
-                key={wi}
-                ref={wi === 0 ? rowRef : undefined}
-                className="grid grid-cols-7"
-              >
+              <div key={wi} className="grid grid-cols-7">
                 {week.map((day, di) => {
-                  if (isAfter(day, today)) return <div key={di} className="py-1" />;
+                  // Future days (beyond today) and pre-cap days stay blank —
+                  // no data could exist for them. Days from neighbouring
+                  // months that fall in the active data range render the same
+                  // cell as in-month days, just dimmed to distinguish them.
+                  if (isAfter(day, today)) {
+                    return <div key={di} className="py-1" />;
+                  }
+                  if (isBefore(day, minMonth)) {
+                    return <div key={di} className="py-1" />;
+                  }
 
+                  const inMonth = isSameMonth(day, viewMonth);
                   const dateStr = format(day, "yyyy-MM-dd");
                   const daySessions = sessionMap.get(dateStr) ?? [];
                   const isCurrentDay = isToday(day);
@@ -163,7 +199,9 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
                     </div>
                   );
 
-                  if (!hasSession) return <div key={di}>{cell}</div>;
+                  const wrappedCell = inMonth ? cell : <div className="opacity-50">{cell}</div>;
+
+                  if (!hasSession) return <div key={di}>{wrappedCell}</div>;
 
                   return (
                     <button
@@ -173,7 +211,7 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
                       className="rounded-md hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       aria-label={`${format(day, "EEEE d MMMM")} — ${daySessions.length} session${daySessions.length > 1 ? "s" : ""}`}
                     >
-                      {cell}
+                      {wrappedCell}
                     </button>
                   );
                 })}
