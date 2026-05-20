@@ -7,6 +7,7 @@ import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { StatCard } from "@/components/stats/stat-card";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { FollowRow, ProfileRow } from "@/lib/db/schema";
@@ -99,6 +100,8 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
     .slice(0, 1)
     .toUpperCase();
 
+  const [tab, setTab] = useState<"log" | "stats">("log");
+
   return (
     <div className="flex flex-col gap-6 pb-4">
       <section className="flex items-center gap-3 pt-4">
@@ -143,49 +146,57 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
-        <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
-        <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
-        <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
-      </section>
+      <SegmentedTabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "log", label: "Log" },
+          { value: "stats", label: "Stats" },
+        ]}
+      />
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Sessions
-        </h2>
-        {!hasLocalData ? (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            Follow {usernameLabel ?? handle} to see their sessions.
-          </Card>
-        ) : sessions === null ? (
-          <div className="py-8 flex justify-center">
-            <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
-          </div>
-        ) : sessions.length === 0 ? (
-          <Card className="p-6 text-center text-sm text-muted-foreground">
-            No sessions logged yet.
-          </Card>
-        ) : (
-          <SessionList
-            linkHref={(id) =>
-              isMe
-                ? `/log/${id}`
-                : `/friends/sessions/${id}?from=${encodeURIComponent(`/users/${userId}`)}`
-            }
-            showMenu={isMe}
-            sessions={sessions.map((w) => ({
-              id: w.id,
-              name: w.name,
-              dateLabel: format(parseISO(w.performedOn), "EEE d MMM"),
-              exerciseNames: w.exerciseNames,
-              sessionType: w.sessionType,
-              totalExercises: w.totalExercises,
-              totalSets: w.totalSets,
-              totalReps: w.totalReps,
-            }))}
-          />
-        )}
-      </section>
+      {tab === "log" ? (
+        <section className="flex flex-col gap-2">
+          {!hasLocalData ? (
+            <Card className="p-6 text-center text-sm text-muted-foreground">
+              Follow {usernameLabel ?? handle} to see their sessions.
+            </Card>
+          ) : sessions === null ? (
+            <div className="py-8 flex justify-center">
+              <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+            </div>
+          ) : sessions.length === 0 ? (
+            <Card className="p-6 text-center text-sm text-muted-foreground">
+              No sessions logged yet.
+            </Card>
+          ) : (
+            <SessionList
+              linkHref={(id) =>
+                isMe
+                  ? `/log/${id}`
+                  : `/friends/sessions/${id}?from=${encodeURIComponent(`/users/${userId}`)}`
+              }
+              showMenu={isMe}
+              sessions={sessions.map((w) => ({
+                id: w.id,
+                name: w.name,
+                dateLabel: format(parseISO(w.performedOn), "EEE d MMM"),
+                exerciseNames: w.exerciseNames,
+                sessionType: w.sessionType,
+                totalExercises: w.totalExercises,
+                totalSets: w.totalSets,
+                totalReps: w.totalReps,
+              }))}
+            />
+          )}
+        </section>
+      ) : (
+        <section className="grid grid-cols-3 gap-2">
+          <StatCard label="Sessions" value={hasLocalData ? stats?.totalSessions ?? "—" : "—"} />
+          <StatCard label="Sets" value={hasLocalData ? stats?.totalSets ?? "—" : "—"} />
+          <StatCard label="Reps" value={hasLocalData ? formatReps(stats?.totalReps) : "—"} />
+        </section>
+      )}
     </div>
   );
 }

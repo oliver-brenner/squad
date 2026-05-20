@@ -7,7 +7,7 @@ import { Users } from "lucide-react";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { FollowRow } from "@/lib/db/schema";
 import { fetchDiscoverableProfiles, type PublicProfile } from "@/lib/supabase/profiles";
@@ -31,31 +31,16 @@ export function Friends() {
   return (
     <>
       <PageHeader title="Friends" />
-      <TabSwitcher value={tab} onChange={setTab} />
+      <SegmentedTabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "feed", label: "Feed" },
+          { value: "following", label: "Following" },
+        ]}
+      />
       {tab === "feed" ? <FeedView /> : <FollowingView />}
     </>
-  );
-}
-
-function TabSwitcher({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
-  return (
-    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-muted">
-      {(["feed", "following"] as const).map((t) => (
-        <button
-          key={t}
-          type="button"
-          onClick={() => onChange(t)}
-          className={cn(
-            "h-10 rounded-lg text-sm font-medium transition-colors",
-            value === t
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {t === "feed" ? "Feed" : "Following"}
-        </button>
-      ))}
-    </div>
   );
 }
 
