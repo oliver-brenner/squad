@@ -69,8 +69,8 @@ export function FeedPBCard({ highlight, isMine }: Props) {
               <div className="mb-1 truncate text-sm font-medium">{ex.exerciseName}</div>
               <ul className="flex flex-col gap-1">
                 {ex.sets.map((s) => (
-                  <li key={s.setId} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-                    <span>{s.setLabel}</span>
+                  <li key={s.setId} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-sm text-muted-foreground">{s.setLabel}</span>
                     <PBBadges types={s.types} />
                   </li>
                 ))}
