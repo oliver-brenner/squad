@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { format, parseISO, startOfWeek, subDays } from "date-fns";
+import { format, parseISO, startOfWeek } from "date-fns";
 import { useQuery } from "@powersync/react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { decodeWorkout } from "@/lib/db/decoders";
@@ -23,7 +23,6 @@ export function Dashboard() {
   const userId = user?.id ?? "";
   const today = new Date();
   const weekStartIso = format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
-  const since30Iso = format(subDays(today, 29), "yyyy-MM-dd");
 
   const { data: weekWorkoutCount = [{ count: 0 }] } = useQuery<{ count: number }>(
     `SELECT COUNT(*) AS count FROM workouts
@@ -44,16 +43,16 @@ export function Dashboard() {
   );
   const recentWorkouts = recentRows.map(decodeWorkout);
 
-  const { data: calendarDots = [] } = useQuery<{
+  const { data: calendarSessions = [] } = useQuery<{
     id: string;
     name: string;
     performed_on: string;
     session_type: string;
   }>(
     `SELECT id, name, performed_on, session_type FROM workouts
-     WHERE user_id = ? AND performed_on >= ?
+     WHERE user_id = ?
      ORDER BY performed_on ASC, created_at ASC`,
-    [userId, since30Iso]
+    [userId]
   );
 
   const dayStreak = computeStreak(streakDays.map((r) => r.performed_on));
@@ -85,7 +84,7 @@ export function Dashboard() {
 
       <div className="mt-4">
         <ActivityCalendar
-          sessions={calendarDots.map((d) => ({
+          sessions={calendarSessions.map((d) => ({
             id: d.id,
             name: d.name,
             performedOn: d.performed_on,

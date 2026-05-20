@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   startOfWeek,
@@ -6,8 +6,8 @@ import {
   format,
   eachDayOfInterval,
   isToday,
-  isBefore,
   isAfter,
+  parseISO,
 } from "date-fns";
 import { sessionTypeColor } from "@/lib/session-type-color";
 
@@ -19,16 +19,20 @@ interface SessionEntry {
 }
 
 const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
-
 const SESSION_HREF = (id: string) =>
   `/log/${id}?from=${encodeURIComponent("/dashboard")}`;
+const DEFAULT_LOOKBACK_DAYS = 27;
+const ROW_GAP_PX = 2;
+const FALLBACK_ROW_HEIGHT = 41;
 
 export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
   const navigate = useNavigate();
   const today = new Date();
-  const rangeStart = subDays(today, 29);
-  const gridStart = startOfWeek(rangeStart, { weekStartsOn: 1 });
-
+  const earliestDate =
+    sessions.length > 0
+      ? parseISO(sessions[0].performedOn)
+      : subDays(today, DEFAULT_LOOKBACK_DAYS);
+  const gridStart = startOfWeek(earliestDate, { weekStartsOn: 1 });
   const days = eachDayOfInterval({ start: gridStart, end: today });
 
   const sessionMap = new Map<string, SessionEntry[]>();
@@ -55,9 +59,54 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
     setTrayDate(dateStr);
   }
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rowHeightRef = useRef(FALLBACK_ROW_HEIGHT);
+
+  const [activeWeekIdx, setActiveWeekIdx] = useState(() =>
+    Math.max(0, weeks.length - 1)
+  );
+
+  const computeActiveWeek = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const rowH = rowHeightRef.current || FALLBACK_ROW_HEIGHT;
+    const bottomY = el.scrollTop + el.clientHeight;
+    // The bottommost visible week best represents "what the user is looking at"
+    // — at the default scroll-to-bottom position this is today's week.
+    const idx = Math.max(
+      0,
+      Math.min(weeks.length - 1, Math.ceil(bottomY / rowH) - 1)
+    );
+    setActiveWeekIdx(idx);
+  }, [weeks.length]);
+
+  const gridStartMs = gridStart.getTime();
+  useLayoutEffect(() => {
+    if (rowRef.current) {
+      rowHeightRef.current = rowRef.current.offsetHeight + ROW_GAP_PX;
+    }
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    computeActiveWeek();
+  }, [gridStartMs, computeActiveWeek]);
+
+  const activeWeek = weeks[activeWeekIdx];
+  // Thursday (index 3) represents the week's month better than Monday, which
+  // can fall in the prior month for cross-month weeks.
+  const monthLabel = activeWeek
+    ? format(activeWeek[3] ?? activeWeek[0], "MMMM yyyy")
+    : "";
+
   return (
     <>
       <div className="rounded-2xl border border-border bg-card px-3 pt-3 pb-4">
+        <div className="mb-2 flex items-center justify-between px-0.5">
+          <span className="text-sm font-semibold text-foreground/80 tabular-nums">
+            {monthLabel}
+          </span>
+        </div>
+
         <div className="grid grid-cols-7 mb-2">
           {DAY_LABELS.map((label, i) => (
             <div key={i} className="flex justify-center">
@@ -68,66 +117,75 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
           ))}
         </div>
 
-        <div className="flex flex-col gap-0.5">
-          {weeks.map((week, wi) => (
-            <div key={wi} className="grid grid-cols-7">
-              {week.map((day, di) => {
-                const inRange = !isBefore(day, rangeStart) && !isAfter(day, today);
+        <div
+          ref={scrollRef}
+          onScroll={computeActiveWeek}
+          className="max-h-[210px] overflow-y-auto no-scrollbar"
+          style={{ touchAction: "pan-y" }}
+        >
+          <div className="flex flex-col gap-0.5">
+            {weeks.map((week, wi) => (
+              <div
+                key={wi}
+                ref={wi === 0 ? rowRef : undefined}
+                className="grid grid-cols-7"
+              >
+                {week.map((day, di) => {
+                  if (isAfter(day, today)) return <div key={di} className="py-1" />;
 
-                if (!inRange) return <div key={di} className="py-1" />;
+                  const dateStr = format(day, "yyyy-MM-dd");
+                  const daySessions = sessionMap.get(dateStr) ?? [];
+                  const isCurrentDay = isToday(day);
+                  const hasSession = daySessions.length > 0;
 
-                const dateStr = format(day, "yyyy-MM-dd");
-                const daySessions = sessionMap.get(dateStr) ?? [];
-                const isCurrentDay = isToday(day);
-                const hasSession = daySessions.length > 0;
+                  const cell = (
+                    <div className="flex flex-col items-center gap-[5px] py-1">
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] leading-none tabular-nums transition-colors ${
+                          isCurrentDay
+                            ? "bg-foreground text-background font-semibold"
+                            : hasSession
+                              ? "text-foreground/80 font-medium"
+                              : "text-muted-foreground/25"
+                        }`}
+                      >
+                        {format(day, "d")}
+                      </span>
 
-                const cell = (
-                  <div className="flex flex-col items-center gap-[5px] py-1">
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] leading-none tabular-nums transition-colors ${
-                        isCurrentDay
-                          ? "bg-foreground text-background font-semibold"
-                          : hasSession
-                            ? "text-foreground/80 font-medium"
-                            : "text-muted-foreground/25"
-                      }`}
-                    >
-                      {format(day, "d")}
-                    </span>
-
-                    <div className="flex gap-[3px] h-1.5 items-center">
-                      {daySessions.slice(0, 3).map((s, i) => (
-                        <div
-                          key={i}
-                          className={`h-1.5 w-1.5 rounded-full ${sessionTypeColor(s.sessionType)}`}
-                        />
-                      ))}
+                      <div className="flex gap-[3px] h-1.5 items-center">
+                        {daySessions.slice(0, 3).map((s, i) => (
+                          <div
+                            key={i}
+                            className={`h-1.5 w-1.5 rounded-full ${sessionTypeColor(s.sessionType)}`}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
 
-                if (!hasSession) return <div key={di}>{cell}</div>;
+                  if (!hasSession) return <div key={di}>{cell}</div>;
 
-                return (
-                  <button
-                    key={di}
-                    type="button"
-                    onClick={() => handleDayClick(dateStr, daySessions)}
-                    className="rounded-md hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    aria-label={`${format(day, "EEEE d MMMM")} — ${daySessions.length} session${daySessions.length > 1 ? "s" : ""}`}
-                  >
-                    {cell}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+                  return (
+                    <button
+                      key={di}
+                      type="button"
+                      onClick={() => handleDayClick(dateStr, daySessions)}
+                      className="rounded-md hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      aria-label={`${format(day, "EEEE d MMMM")} — ${daySessions.length} session${daySessions.length > 1 ? "s" : ""}`}
+                    >
+                      {cell}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {trayDate && (
         <SessionPickerTray
-          dateLabel={format(new Date(trayDate), "EEEE d MMMM")}
+          dateLabel={format(parseISO(trayDate), "EEEE d MMMM")}
           sessions={traySessions}
           onSelect={(id) => {
             setTrayDate(null);
