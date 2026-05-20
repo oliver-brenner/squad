@@ -40,10 +40,11 @@ export function setVolumeKg(s: PBInputSet, ex: Exercise): number | null {
 }
 
 // Given an ordered list of sets (oldest → newest), returns a parallel array of
-// PB types where ONLY the most recent set that holds each PB type carries that
-// badge. Older sets that previously held the record are unbadged so the UI
-// shows just the current standing rather than the full progression history.
-export function computePBsInOrder<T extends PBInputSet>(
+// PB types where EVERY set that established a new max at its point in time is
+// flagged — even if a later set has since beaten it. Used by the feed: a PB
+// hit on a session is a historical achievement and shouldn't disappear just
+// because the user later topped it.
+export function computeHistoricalPBs<T extends PBInputSet>(
   sets: T[],
   exercise: Exercise
 ): PBType[][] {
@@ -61,9 +62,9 @@ export function computePBsInOrder<T extends PBInputSet>(
   let maxSpeedMs: number | null = null;
   let maxReps: number | null = null;
 
-  // First pass: record every set that established a new max at its point in time.
+  // Record every set that established a new max at its point in time.
   // Ties don't count, so subsequent equal-value sets won't steal the badge.
-  const awarded: PBType[][] = sets.map((s) => {
+  return sets.map((s) => {
     const pbs: PBType[] = [];
 
     // Push order mirrors the metric display order on a set row (weight → reps
@@ -127,9 +128,17 @@ export function computePBsInOrder<T extends PBInputSet>(
 
     return pbs;
   });
+}
 
-  // Second pass (newest → oldest): for each PB type, keep only the most recent
-  // awarding. Earlier records get stripped so the badge marks the current holder.
+// Same as computeHistoricalPBs, but applies a newest-wins post-pass that strips
+// any earlier PB whose record has since been beaten. The result marks only the
+// CURRENT PB-holder per type — used in the exercise history view and the
+// read-only session view so a badge means "this is still their record."
+export function computePBsInOrder<T extends PBInputSet>(
+  sets: T[],
+  exercise: Exercise
+): PBType[][] {
+  const awarded = computeHistoricalPBs(sets, exercise);
   const seen = new Set<PBType>();
   for (let i = awarded.length - 1; i >= 0; i--) {
     awarded[i] = awarded[i].filter((t) => {
@@ -138,6 +147,5 @@ export function computePBsInOrder<T extends PBInputSet>(
       return true;
     });
   }
-
   return awarded;
 }

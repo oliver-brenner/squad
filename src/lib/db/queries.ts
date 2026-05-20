@@ -34,6 +34,8 @@ import type {
   ExerciseHistoryEntry,
   SetWithExerciseRow,
 } from "./types";
+import { computeHistoricalPBs, type PBType } from "@/lib/stats/set-pbs";
+import { formatSetSummary, type DistanceUnit } from "@/lib/set-format";
 
 export async function getExerciseById(exerciseId: string): Promise<Exercise | null> {
   // Looked up by globally-unique id — no user filter needed; callers fetching
@@ -471,6 +473,208 @@ export type FeedSession = {
   authorDisplayName: string | null;
   authorAvatarUrl: string | null;
 };
+
+// ----- Feed PB highlights -----
+// One feed entry per workout (own or followee) that earned at least one PB
+// at the time of logging. Uses historical PB semantics — a PB once earned
+// stays in the feed even after the user later beats it, so achievements
+// don't disappear from people's timelines.
+
+export type FeedPBSet = {
+  setId: string;
+  setLabel: string;
+  types: PBType[];
+};
+
+export type FeedPBExercise = {
+  exerciseId: string;
+  exerciseName: string;
+  sets: FeedPBSet[];
+};
+
+export type FeedPBHighlight = {
+  workoutId: string;
+  workoutName: string;
+  performedOn: string;
+  sessionType: string | null;
+  authorId: string;
+  authorUsername: string | null;
+  authorDisplayName: string | null;
+  authorAvatarUrl: string | null;
+  totalPBs: number;
+  exercises: FeedPBExercise[];
+};
+
+export async function getFeedPBHighlights(
+  currentUserId: string,
+  workoutLimit = 50
+): Promise<FeedPBHighlight[]> {
+  // Candidate workouts: yours + followees, newest first.
+  const workoutRows = await powersync.getAll<{
+    id: string;
+    name: string | null;
+    performed_on: string;
+    session_type: string | null;
+    user_id: string;
+    author_username: string | null;
+    author_display_name: string | null;
+    author_avatar_url: string | null;
+  }>(
+    `SELECT
+       w.id, w.name, w.performed_on, w.session_type, w.user_id,
+       p.username AS author_username,
+       p.display_name AS author_display_name,
+       p.avatar_url AS author_avatar_url
+     FROM workouts w
+     LEFT JOIN profiles p ON p.id = w.user_id
+     WHERE w.user_id = ?
+        OR EXISTS (
+          SELECT 1 FROM follows f
+          WHERE f.follower_id = ? AND f.followee_id = w.user_id
+        )
+     ORDER BY w.performed_on DESC, w.created_at DESC
+     LIMIT ?`,
+    [currentUserId, currentUserId, workoutLimit]
+  );
+  if (workoutRows.length === 0) return [];
+
+  const workoutIds = workoutRows.map((w) => w.id);
+  const placeholders = workoutIds.map(() => "?").join(",");
+
+  // Sets within those workouts. user_id is denormalized on `sets`, so we can
+  // group by (user_id, exercise_id) without joining workouts.
+  const candidateSetRows = await powersync.getAll<WorkoutSetRow>(
+    `SELECT * FROM sets WHERE workout_id IN (${placeholders})`,
+    workoutIds
+  );
+
+  // Resolve every distinct exercise referenced.
+  const exerciseIds = [
+    ...new Set(candidateSetRows.map((r) => r.exercise_id).filter((v): v is string => !!v)),
+  ];
+  const exerciseMap = new Map<string, Exercise>();
+  if (exerciseIds.length > 0) {
+    const exRows = await powersync.getAll<ExerciseRow>(
+      `SELECT * FROM exercises WHERE id IN (${exerciseIds.map(() => "?").join(",")})`,
+      exerciseIds
+    );
+    for (const r of exRows) exerciseMap.set(r.id, decodeExercise(r));
+  }
+
+  // Compute historical PBs per distinct (user_id, exercise_id) pair using
+  // each owner's FULL history — not just the candidate window — so a PB
+  // judgement reflects all of that user's prior work for the exercise.
+  const pairs = new Set<string>();
+  for (const r of candidateSetRows) {
+    if (r.user_id && r.exercise_id) pairs.add(`${r.user_id}::${r.exercise_id}`);
+  }
+  const pbBySetId = new Map<string, PBType[]>();
+  await Promise.all(
+    [...pairs].map(async (key) => {
+      const sep = key.indexOf("::");
+      const userId = key.slice(0, sep);
+      const exerciseId = key.slice(sep + 2);
+      const exercise = exerciseMap.get(exerciseId);
+      if (!exercise) return;
+      const history = await getExerciseSetsForUser(exerciseId, userId);
+      const pbs = computeHistoricalPBs(history, exercise);
+      history.forEach((s, i) => {
+        if (pbs[i].length > 0) pbBySetId.set(s.id, pbs[i]);
+      });
+    })
+  );
+
+  // Group flagged sets by workout → by exercise, preserving position order.
+  const flaggedByWorkout = new Map<string, WorkoutSetRow[]>();
+  for (const r of candidateSetRows) {
+    if (!pbBySetId.has(r.id)) continue;
+    const wid = r.workout_id ?? "";
+    const arr = flaggedByWorkout.get(wid) ?? [];
+    arr.push(r);
+    flaggedByWorkout.set(wid, arr);
+  }
+
+  const result: FeedPBHighlight[] = [];
+  for (const w of workoutRows) {
+    const flagged = flaggedByWorkout.get(w.id);
+    if (!flagged || flagged.length === 0) continue;
+
+    const byExercise = new Map<string, { exercise: Exercise; rows: WorkoutSetRow[] }>();
+    for (const r of flagged) {
+      if (!r.exercise_id) continue;
+      const ex = exerciseMap.get(r.exercise_id);
+      if (!ex) continue;
+      const entry = byExercise.get(r.exercise_id) ?? { exercise: ex, rows: [] };
+      entry.rows.push(r);
+      byExercise.set(r.exercise_id, entry);
+    }
+
+    // Render exercises in the order they were logged. We sort the per-exercise
+    // groups by their earliest set position within this workout — matching how
+    // a user reads down their session top-to-bottom.
+    const exercises: FeedPBExercise[] = [];
+    let totalPBs = 0;
+    const orderedExercises = [...byExercise.entries()].sort((a, b) => {
+      const aPos = Math.min(...a[1].rows.map((r) => r.position ?? 0));
+      const bPos = Math.min(...b[1].rows.map((r) => r.position ?? 0));
+      return aPos - bPos;
+    });
+    for (const [exId, { exercise, rows }] of orderedExercises) {
+      rows.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+      // Within one workout, only the LAST set per PB type keeps the badge.
+      // Walking newest → oldest, each type is claimed once; earlier sets in
+      // the same session that established the record but were superseded
+      // get stripped — there's only one PB-of-the-day per (exercise, type).
+      const keptByRow = new Map<string, PBType[]>();
+      const claimed = new Set<PBType>();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const all = pbBySetId.get(rows[i].id) ?? [];
+        const kept = all.filter((t) => {
+          if (claimed.has(t)) return false;
+          claimed.add(t);
+          return true;
+        });
+        if (kept.length > 0) keptByRow.set(rows[i].id, kept);
+      }
+
+      const sets: FeedPBSet[] = [];
+      for (const r of rows) {
+        const kept = keptByRow.get(r.id);
+        if (!kept) continue;
+        const s = decodeSet(r);
+        totalPBs += kept.length;
+        sets.push({
+          setId: s.id,
+          setLabel: formatSetSummary(
+            s,
+            exercise,
+            (exercise.distanceUnit ?? "km") as DistanceUnit
+          ),
+          types: kept,
+        });
+      }
+      if (sets.length > 0) {
+        exercises.push({ exerciseId: exId, exerciseName: exercise.name, sets });
+      }
+    }
+
+    result.push({
+      workoutId: w.id,
+      workoutName: w.name ?? "",
+      performedOn: w.performed_on,
+      sessionType: w.session_type,
+      authorId: w.user_id,
+      authorUsername: w.author_username,
+      authorDisplayName: w.author_display_name,
+      authorAvatarUrl: w.author_avatar_url,
+      totalPBs,
+      exercises,
+    });
+  }
+
+  return result;
+}
 
 // Fetches a single feed session detail (workout + sets) regardless of owner,
 // alongside the author's profile snapshot for display.

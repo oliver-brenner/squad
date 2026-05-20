@@ -1,27 +1,18 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Link } from "react-router-dom";
-import { format, parseISO } from "date-fns";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { FollowRow } from "@/lib/db/schema";
+import { getFeedPBHighlights, type FeedPBHighlight } from "@/lib/db/queries";
 import { fetchDiscoverableProfiles, type PublicProfile } from "@/lib/supabase/profiles";
 import { followUser, unfollowUser } from "@/lib/mutations/follows";
-
-type FeedRow = {
-  workout_id: string;
-  workout_name: string;
-  performed_on: string;
-  author_id: string;
-  author_username: string | null;
-  author_display_name: string | null;
-  author_avatar_url: string | null;
-};
+import { FeedPBCard } from "./feed-pb-card";
 
 type Tab = "feed" | "following";
 
@@ -48,95 +39,65 @@ function FeedView() {
   const { user } = useAuth();
   const myId = user?.id ?? "";
 
-  // Reactive: any new followee workout that streams in via PowerSync's
-  // followee_workouts bucket appears here without us doing anything. The
-  // EXISTS subquery against `follows` keeps the feed scoped to current
-  // followees (so unfollowing instantly removes their sessions).
-  const { data: rows = [] } = useQuery<FeedRow>(
+  // Reactive signature: when PowerSync streams in any new workout/set/follow
+  // row within scope, this re-renders and the effect below re-fetches the
+  // highlights. Without a signature, the one-shot fetch wouldn't see updates.
+  const { data: sigRows = [] } = useQuery<{ sig: string }>(
     `SELECT
-       w.id AS workout_id,
-       w.name AS workout_name,
-       w.performed_on AS performed_on,
-       w.user_id AS author_id,
-       p.username AS author_username,
-       p.display_name AS author_display_name,
-       p.avatar_url AS author_avatar_url
-     FROM workouts w
-     LEFT JOIN profiles p ON p.id = w.user_id
-     WHERE w.user_id = ?
-        OR EXISTS (
-          SELECT 1 FROM follows f
-          WHERE f.follower_id = ? AND f.followee_id = w.user_id
-        )
-     ORDER BY w.performed_on DESC, w.created_at DESC
-     LIMIT 100`,
-    [myId, myId]
+       COALESCE((SELECT COUNT(*) FROM workouts), 0)
+       || '|' ||
+       COALESCE((SELECT COUNT(*) FROM sets), 0)
+       || '|' ||
+       COALESCE((SELECT MAX(updated_at) FROM workouts), '')
+       || '|' ||
+       COALESCE((SELECT COUNT(*) FROM follows WHERE follower_id = ?), 0)
+       AS sig`,
+    [myId]
   );
+  const dataSignature = sigRows[0]?.sig ?? "";
 
-  if (rows.length === 0) {
+  const [highlights, setHighlights] = useState<FeedPBHighlight[] | null>(null);
+
+  useEffect(() => {
+    if (!myId) return;
+    let cancelled = false;
+    getFeedPBHighlights(myId).then((h) => {
+      if (!cancelled) setHighlights(h);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [myId, dataSignature]);
+
+  if (highlights === null) {
+    return (
+      <div className="mt-8 flex justify-center">
+        <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (highlights.length === 0) {
     return (
       <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center">
-        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
-          <Users className="h-7 w-7 text-muted-foreground" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15">
+          <Trophy className="h-7 w-7 text-amber-600 dark:text-amber-400" />
         </div>
-        <p className="font-medium">Your feed is empty</p>
+        <p className="font-medium">No PBs yet</p>
         <p className="max-w-xs text-sm text-muted-foreground">
-          Follow some friends to see their sessions, drop emotes, and leave comments here.
+          Log a session — or follow some friends — and any new PBs will show up here.
         </p>
       </div>
     );
   }
 
   return (
-    <ul className="mt-4 flex flex-col gap-2">
-      {rows.map((r) => {
-        const author = r.author_username
-          ? `@${r.author_username}`
-          : r.author_display_name ?? "Unknown";
-        const initial = (r.author_username ?? r.author_display_name ?? "?")
-          .slice(0, 1)
-          .toUpperCase();
-        return (
-          <li
-            key={r.workout_id}
-            className="flex items-center rounded-2xl border border-border bg-card overflow-hidden"
-          >
-            <Link
-              to={`/users/${r.author_id}`}
-              className="p-4 pr-2 hover:bg-muted/30"
-              aria-label={`${author}'s profile`}
-            >
-              {r.author_avatar_url ? (
-                <img
-                  src={r.author_avatar_url}
-                  alt=""
-                  className="h-10 w-10 rounded-full shrink-0"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center font-medium shrink-0">
-                  {initial}
-                </div>
-              )}
-            </Link>
-            <Link
-              to={
-                r.author_id === myId
-                  ? `/log/${r.workout_id}?from=${encodeURIComponent("/friends")}`
-                  : `/friends/sessions/${r.workout_id}`
-              }
-              className="flex items-center gap-3 flex-1 p-4 pl-2 min-w-0 hover:bg-muted/30"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{r.workout_name}</div>
-                <div className="truncate text-xs text-muted-foreground">{author}</div>
-              </div>
-              <div className="text-sm text-muted-foreground shrink-0">
-                {format(parseISO(r.performed_on), "EEE d MMM")}
-              </div>
-            </Link>
-          </li>
-        );
-      })}
+    <ul className="mt-4 flex flex-col gap-3">
+      {highlights.map((h) => (
+        <li key={h.workoutId}>
+          <FeedPBCard highlight={h} isMine={h.authorId === myId} />
+        </li>
+      ))}
     </ul>
   );
 }
