@@ -8,7 +8,7 @@ const items = [
   { href: "/log", label: "Log", icon: List },
   { href: "/exercises", label: "Exercises", icon: BarbellIcon },
   { href: "/friends", label: "Squad", icon: Users },
-  { href: "/settings", label: "You", icon: User },
+  { href: "/you", label: "You", icon: User },
 ] as const;
 
 export function BottomNav() {

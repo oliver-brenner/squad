@@ -30,7 +30,7 @@ export function Settings() {
 
   return (
     <>
-      <PageHeader title="You" />
+      <PageHeader title="Settings" backHref="/you" />
 
       <Card>
         <CardContent className="pt-6 flex items-center gap-4">
