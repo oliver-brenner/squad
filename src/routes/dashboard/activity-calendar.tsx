@@ -16,7 +16,7 @@ import {
   isSameMonth,
   parseISO,
 } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { sessionTypeColor } from "@/lib/session-type-color";
 
 interface SessionEntry {
@@ -71,12 +71,7 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
   const [trayDate, setTrayDate] = useState<string | null>(null);
   const traySessions = trayDate ? (sessionMap.get(trayDate) ?? []) : [];
 
-  function handleDayClick(dateStr: string, daySessions: SessionEntry[]) {
-    if (daySessions.length === 0) return;
-    if (daySessions.length === 1) {
-      navigate(SESSION_HREF(daySessions[0].id));
-      return;
-    }
+  function handleDayClick(dateStr: string) {
     setTrayDate(dateStr);
   }
 
@@ -201,15 +196,17 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
 
                   const wrappedCell = inMonth ? cell : <div className="opacity-50">{cell}</div>;
 
-                  if (!hasSession) return <div key={di}>{wrappedCell}</div>;
+                  const ariaLabel = hasSession
+                    ? `${format(day, "EEEE d MMMM")} — ${daySessions.length} session${daySessions.length > 1 ? "s" : ""}`
+                    : `${format(day, "EEEE d MMMM")} — no sessions`;
 
                   return (
                     <button
                       key={di}
                       type="button"
-                      onClick={() => handleDayClick(dateStr, daySessions)}
+                      onClick={() => handleDayClick(dateStr)}
                       className="rounded-md hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      aria-label={`${format(day, "EEEE d MMMM")} — ${daySessions.length} session${daySessions.length > 1 ? "s" : ""}`}
+                      aria-label={ariaLabel}
                     >
                       {wrappedCell}
                     </button>
@@ -229,6 +226,11 @@ export function ActivityCalendar({ sessions }: { sessions: SessionEntry[] }) {
             setTrayDate(null);
             navigate(SESSION_HREF(id));
           }}
+          onNewSession={() => {
+            const date = trayDate;
+            setTrayDate(null);
+            navigate(`/log/new?date=${date}&from=${encodeURIComponent("/dashboard")}`);
+          }}
           onClose={() => setTrayDate(null)}
         />
       )}
@@ -240,10 +242,11 @@ interface TrayProps {
   dateLabel: string;
   sessions: SessionEntry[];
   onSelect: (id: string) => void;
+  onNewSession: () => void;
   onClose: () => void;
 }
 
-function SessionPickerTray({ dateLabel, sessions, onSelect, onClose }: TrayProps) {
+function SessionPickerTray({ dateLabel, sessions, onSelect, onNewSession, onClose }: TrayProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -276,6 +279,16 @@ function SessionPickerTray({ dateLabel, sessions, onSelect, onClose }: TrayProps
         </div>
 
         <ul className="flex flex-col px-2 pb-3">
+          <li>
+            <button
+              type="button"
+              onClick={onNewSession}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-muted/60"
+            >
+              <Plus className="h-2.5 w-2.5 shrink-0 text-white" strokeWidth={3} />
+              <span className="text-sm font-medium text-white">New session</span>
+            </button>
+          </li>
           {sessions.map((s) => (
             <li key={s.id}>
               <button

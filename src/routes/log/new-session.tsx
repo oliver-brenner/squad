@@ -29,6 +29,15 @@ export function NewSession() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const copyFrom = searchParams.get("copyFrom") ?? undefined;
+  const dateParam = searchParams.get("date");
+  const fromParam = searchParams.get("from");
+  const backTo = fromParam ?? "/log";
+  const initialDate = (() => {
+    if (!dateParam) return today;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateParam);
+    if (!m) return today;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  })();
 
   const [sessionType, setSessionType] = useState<SessionType>("workout");
   const [name, setName] = useState(() => (copyFrom ? "" : defaultNameFor("workout")));
@@ -36,9 +45,9 @@ export function NewSession() {
   const [userEditedName, setUserEditedName] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const [day, setDay] = useState(today.getDate());
-  const [month, setMonth] = useState(today.getMonth());
-  const [year, setYear] = useState(today.getFullYear());
+  const [day, setDay] = useState(initialDate.getDate());
+  const [month, setMonth] = useState(initialDate.getMonth());
+  const [year, setYear] = useState(initialDate.getFullYear());
 
   const daysInMonth = getDaysInMonth(new Date(year, month));
 
@@ -93,7 +102,7 @@ export function NewSession() {
     <div className="flex flex-col gap-6 pt-4">
       <header className="flex items-center gap-2 py-4">
         <Link
-          to="/log"
+          to={backTo}
           className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Back"
         >
