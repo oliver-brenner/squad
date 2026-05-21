@@ -239,7 +239,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   key={c.id}
                   type="button"
                   size="sm"
-                  variant={selectedCategories.has(c.key) ? "default" : "outline"}
+                  variant={selectedCategories.has(c.key) ? "default" : "secondary"}
                   onClick={() =>
                     setSelectedCategories((prev) => {
                       const next = new Set(prev);
@@ -393,7 +393,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   key={m}
                   type="button"
                   size="sm"
-                  variant={metrics.has(m) ? "default" : "outline"}
+                  variant={metrics.has(m) ? "default" : "secondary"}
                   onClick={() => toggleMetric(m)}
                   className="capitalize"
                 >
