@@ -46,7 +46,8 @@ export function setVolumeKg(s: PBInputSet, ex: Exercise): number | null {
 // because the user later topped it.
 export function computeHistoricalPBs<T extends PBInputSet>(
   sets: T[],
-  exercise: Exercise
+  exercise: Exercise,
+  { includeTies = false } = {}
 ): PBType[][] {
   // Use the actual tracking flags rather than user-defined `categories`, since
   // a "resistance" tag isn't required for an exercise to be weight + reps.
@@ -55,28 +56,33 @@ export function computeHistoricalPBs<T extends PBInputSet>(
   const tracksTime = exercise.trackTime;
   const tracksSpeed = exercise.trackSpeed;
 
-  let maxOneRm: number | null = null;
+  let maxWeightKg: number | null = null;
   let maxVolume: number | null = null;
   let maxDistance: number | null = null;
   let maxDurationSec: number | null = null;
   let maxSpeedMs: number | null = null;
   let maxReps: number | null = null;
 
+  const beats = (a: number, b: number | null) =>
+    b == null || (includeTies ? a >= b : a > b);
+
   // Record every set that established a new max at its point in time.
-  // Ties don't count, so subsequent equal-value sets won't steal the badge.
+  // When includeTies is false (feed), ties don't count — a matched record
+  // isn't a new achievement. When true (history view), ties move the badge
+  // to the most recent holder via the newest-wins pass in computePBsInOrder.
   return sets.map((s) => {
     const pbs: PBType[] = [];
 
     // Push order mirrors the metric display order on a set row (weight → reps
     // → time → distance) so badges read left-to-right in the same direction.
     if (isStrength) {
-      const orm = setOneRm(s, exercise);
-      if (orm != null && (maxOneRm == null || orm > maxOneRm)) {
+      const w = effectiveWeightKg(s, exercise);
+      if (w != null && beats(w, maxWeightKg)) {
         pbs.push("1RM");
-        maxOneRm = orm;
+        maxWeightKg = w;
       }
       const vol = setVolumeKg(s, exercise);
-      if (vol != null && (maxVolume == null || vol > maxVolume)) {
+      if (vol != null && beats(vol, maxVolume)) {
         pbs.push("Volume");
         maxVolume = vol;
       }
@@ -95,7 +101,7 @@ export function computeHistoricalPBs<T extends PBInputSet>(
         s.distanceKm == null &&
         s.durationSec == null &&
         s.speedMs == null;
-      if (setIsPureReps && (maxReps == null || r > maxReps)) {
+      if (setIsPureReps && beats(r, maxReps)) {
         pbs.push("Reps");
         maxReps = r;
       }
@@ -106,21 +112,21 @@ export function computeHistoricalPBs<T extends PBInputSet>(
     // — distance isn't required, so a slow long run can be a Time PB even
     // when distance was beaten on a different (faster) day.
     if (tracksTime && s.durationSec != null) {
-      if (maxDurationSec == null || s.durationSec > maxDurationSec) {
+      if (beats(s.durationSec, maxDurationSec)) {
         pbs.push("Time");
         maxDurationSec = s.durationSec;
       }
     }
 
     if (tracksSpeed && s.speedMs != null) {
-      if (maxSpeedMs == null || s.speedMs > maxSpeedMs) {
+      if (beats(s.speedMs, maxSpeedMs)) {
         pbs.push("Speed");
         maxSpeedMs = s.speedMs;
       }
     }
 
     if (tracksDistance && s.distanceKm != null) {
-      if (maxDistance == null || s.distanceKm > maxDistance) {
+      if (beats(s.distanceKm, maxDistance)) {
         pbs.push("Distance");
         maxDistance = s.distanceKm;
       }
