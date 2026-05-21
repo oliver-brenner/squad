@@ -16,7 +16,10 @@ function formatDate(iso: string): string {
 function formatSet(s: WorkoutSet, ex: Exercise): string {
   const parts: string[] = [];
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
-  if (!ex.isBodyweight && s.weightKg != null) parts.push(`${s.weightKg} kg`);
+  if (!ex.isBodyweight && s.weightKg != null) {
+    const dw = ex.defaultWeightKg ?? 0;
+    parts.push(dw > 0 ? `${s.weightKg}+${dw} kg` : `${s.weightKg} kg`);
+  }
   if (ex.trackReps && s.reps != null)
     parts.push(`${s.reps} reps${ex.doubleReps ? " x2" : ""}`);
   if (ex.trackTime && s.durationSec != null)

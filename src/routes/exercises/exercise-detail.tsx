@@ -54,7 +54,7 @@ function computeWeightStats(
 }
 
 function formatBestSet(rawReps: number, weightKg: number, doubleReps: boolean): string {
-  return `${rawReps} reps${doubleReps ? " x2" : ""}, ${weightKg} kg`;
+  return `${weightKg} kg · ${rawReps} reps${doubleReps ? " x2" : ""}`;
 }
 
 export function ExerciseDetail() {
@@ -103,9 +103,9 @@ export function ExerciseDetail() {
         <PageHeader
           title={exercise.name}
           backHref={from ?? "/exercises"}
-          className="pb-1"
+          className="pb-0"
         />
-        <div className="flex flex-wrap items-center gap-1 pl-10 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1 pl-10 -mt-1 text-xs text-muted-foreground">
           <ExerciseMetaTags e={exercise} />
         </div>
       </div>
