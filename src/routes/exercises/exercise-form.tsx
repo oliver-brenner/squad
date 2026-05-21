@@ -114,6 +114,9 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   const [hasDefaultWeight, setHasDefaultWeight] = useState((exercise?.defaultWeightKg ?? 0) > 0);
   const [defaultWeightKg, setDefaultWeightKg] = useState(exercise?.defaultWeightKg ?? 0);
   const [doubleReps, setDoubleReps] = useState(exercise?.doubleReps ?? false);
+  const [includeBodyweight, setIncludeBodyweight] = useState(
+    exercise?.includeBodyweight ?? false
+  );
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(
     (exercise?.distanceUnit as DistanceUnit | null) ?? "km"
   );
@@ -151,6 +154,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           equipment,
           trackReps: metrics.has("reps"),
           isBodyweight: !metrics.has("weight"),
+          includeBodyweight,
           defaultWeightKg:
             hasDefaultWeight && metrics.has("weight") ? Number(defaultWeightKg) || 0 : 0,
           doubleReps,
@@ -516,6 +520,20 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               <Switch id="ex-double" checked={doubleReps} onCheckedChange={setDoubleReps} />
             </div>
           )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="ex-include-bw">Include bodyweight</Label>
+              <span className="text-xs text-muted-foreground">
+                If bodyweight is included in stats calculations. Enter bodyweight in Settings.
+              </span>
+            </div>
+            <Switch
+              id="ex-include-bw"
+              checked={includeBodyweight}
+              onCheckedChange={setIncludeBodyweight}
+            />
+          </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
         </CardContent>

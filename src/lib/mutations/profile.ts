@@ -32,3 +32,13 @@ export async function updateUsername(input: string | null): Promise<void> {
     [value, userId]
   );
 }
+
+export async function updateBodyweightKg(input: number | null): Promise<void> {
+  const userId = await getCurrentUserId();
+  const value =
+    input === null || !Number.isFinite(input) || input <= 0 ? null : input;
+  await powersync.execute(
+    `UPDATE profiles SET bodyweight_kg = ? WHERE id = ?`,
+    [value, userId]
+  );
+}

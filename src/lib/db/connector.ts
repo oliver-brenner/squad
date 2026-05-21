@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase/client";
 const BOOLEAN_COLUMNS: Record<string, readonly string[]> = {
   exercises: [
     "is_bodyweight",
+    "include_bodyweight",
     "track_reps",
     "double_reps",
     "track_time",

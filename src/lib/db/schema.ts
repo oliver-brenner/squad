@@ -12,6 +12,7 @@ const profiles = new Table(
     username: column.text,
     display_name: column.text,
     avatar_url: column.text,
+    bodyweight_kg: column.real,
     created_at: column.text,
   },
   { viewName: "profiles" }
@@ -25,6 +26,7 @@ const exercises = new Table(
     categories: column.text,
     equipment: column.text,
     is_bodyweight: column.integer,
+    include_bodyweight: column.integer,
     track_reps: column.integer,
     default_weight_kg: column.real,
     double_reps: column.integer,

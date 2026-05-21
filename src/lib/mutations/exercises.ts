@@ -15,6 +15,7 @@ const exerciseSchema = z.object({
   categories: z.array(z.string().min(1).max(80)).nullable().optional(),
   equipment: z.string().nullable().optional(),
   isBodyweight: z.boolean(),
+  includeBodyweight: z.boolean(),
   trackReps: z.boolean(),
   defaultWeightKg: z.number().min(0).max(1000),
   doubleReps: z.boolean(),
@@ -41,12 +42,12 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
   await powersync.execute(
     `INSERT INTO exercises (
       id, user_id, name, categories, equipment,
-      is_bodyweight, track_reps, default_weight_kg, double_reps,
+      is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories,
       muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
     [
       id,
       userId,
@@ -54,6 +55,7 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       arrStr(data.categories ?? null),
       data.equipment ?? null,
       boolInt(data.isBodyweight),
+      boolInt(data.includeBodyweight),
       boolInt(data.trackReps),
       data.defaultWeightKg,
       boolInt(data.doubleReps),
@@ -85,7 +87,7 @@ export async function updateExercise(
   await powersync.execute(
     `UPDATE exercises SET
       name = ?, categories = ?, equipment = ?,
-      is_bodyweight = ?, track_reps = ?, default_weight_kg = ?, double_reps = ?,
+      is_bodyweight = ?, include_bodyweight = ?, track_reps = ?, default_weight_kg = ?, double_reps = ?,
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
       track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?,
@@ -96,6 +98,7 @@ export async function updateExercise(
       arrStr(data.categories ?? null),
       data.equipment ?? null,
       boolInt(data.isBodyweight),
+      boolInt(data.includeBodyweight),
       boolInt(data.trackReps),
       data.defaultWeightKg,
       boolInt(data.doubleReps),
@@ -263,12 +266,12 @@ export async function copyExerciseInTx(
   await tx.execute(
     `INSERT INTO exercises (
       id, user_id, name, categories, equipment,
-      is_bodyweight, track_reps, default_weight_kg, double_reps,
+      is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories,
       muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -276,6 +279,7 @@ export async function copyExerciseInTx(
       arrStr(source.categories ?? null),
       source.equipment ?? null,
       boolInt(source.isBodyweight),
+      boolInt(source.includeBodyweight),
       boolInt(source.trackReps),
       source.defaultWeightKg,
       boolInt(source.doubleReps),

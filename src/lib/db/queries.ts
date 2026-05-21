@@ -451,7 +451,17 @@ export type UserSessionAggregate = {
   totalVolumeKg: number;
 };
 
+async function getProfileBodyweightKg(userId: string): Promise<number> {
+  const row = await powersync.getOptional<{ bodyweight_kg: number | null }>(
+    `SELECT bodyweight_kg FROM profiles WHERE id = ? LIMIT 1`,
+    [userId]
+  );
+  const v = row?.bodyweight_kg;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
+}
+
 export async function getUserSessionAggregates(userId: string): Promise<UserSessionAggregate[]> {
+  const bodyweightKg = await getProfileBodyweightKg(userId);
   const rows = await powersync.getAll<{
     performed_on: string;
     session_type: string | null;
@@ -473,9 +483,11 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
        SUM(
          CASE
            WHEN s.reps IS NOT NULL AND s.reps > 0
-                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)) > 0
+                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                     + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END) > 0
            THEN s.reps
-                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0))
+                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                   + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END)
                 * COALESCE(s.circuit_rounds, 1)
                 * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
            ELSE 0
@@ -487,7 +499,7 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
      WHERE w.user_id = ? AND w.session_type = 'workout'
      GROUP BY w.id, w.performed_on, w.session_type
      ORDER BY w.performed_on ASC`,
-    [userId]
+    [bodyweightKg, bodyweightKg, userId]
   );
   return rows.map((r) => ({
     performedOn: r.performed_on,
@@ -516,6 +528,7 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
     `SELECT COUNT(*) AS count FROM workouts WHERE user_id = ?`,
     [userId]
   );
+  const bodyweightKg = await getProfileBodyweightKg(userId);
   const aggRow = await powersync.get<{
     total_sets: number | null;
     total_reps: number | null;
@@ -531,9 +544,11 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
        SUM(
          CASE
            WHEN s.reps IS NOT NULL AND s.reps > 0
-                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)) > 0
+                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                     + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END) > 0
            THEN s.reps
-                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0))
+                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                   + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END)
                 * COALESCE(s.circuit_rounds, 1)
                 * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
            ELSE 0
@@ -542,7 +557,7 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
      FROM sets s
      INNER JOIN exercises e ON s.exercise_id = e.id
      WHERE s.user_id = ?`,
-    [userId]
+    [bodyweightKg, bodyweightKg, userId]
   );
   return {
     totalSessions: sessionsRow.count,

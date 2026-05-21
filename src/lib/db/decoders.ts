@@ -26,6 +26,7 @@ export function decodeProfile(r: ProfileRow): Profile {
     username: r.username,
     displayName: r.display_name,
     avatarUrl: r.avatar_url,
+    bodyweightKg: r.bodyweight_kg,
     createdAt: r.created_at ?? "",
   };
 }
@@ -38,6 +39,7 @@ export function decodeExercise(r: ExerciseRow): Exercise {
     categories: arr(r.categories),
     equipment: unwrapPgArrayLiteral(r.equipment),
     isBodyweight: bool(r.is_bodyweight),
+    includeBodyweight: bool(r.include_bodyweight),
     trackReps: bool(r.track_reps),
     defaultWeightKg: r.default_weight_kg ?? 0,
     doubleReps: bool(r.double_reps),

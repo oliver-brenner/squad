@@ -9,6 +9,7 @@ export type Profile = {
   username: string | null;
   displayName: string | null;
   avatarUrl: string | null;
+  bodyweightKg: number | null;
   createdAt: string;
 };
 
@@ -19,6 +20,7 @@ export type Exercise = {
   categories: string[] | null;
   equipment: string | null;
   isBodyweight: boolean;
+  includeBodyweight: boolean;
   trackReps: boolean;
   defaultWeightKg: number;
   doubleReps: boolean;
