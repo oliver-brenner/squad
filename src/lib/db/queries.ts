@@ -664,6 +664,11 @@ export async function getFeedPBHighlights(
       const exercise = exerciseMap.get(exerciseId);
       if (!exercise) return;
       const history = await getExerciseSetsForUser(exerciseId, userId);
+      // Suppress PBs on a user's first-ever log of an exercise — the very
+      // first session trivially sets every record, which isn't a meaningful
+      // achievement worth posting. Require ≥2 distinct workouts.
+      const distinctWorkouts = new Set(history.map((s) => s.workoutId)).size;
+      if (distinctWorkouts < 2) return;
       const pbs = computeHistoricalPBs(history, exercise);
       history.forEach((s, i) => {
         if (pbs[i].length > 0) pbBySetId.set(s.id, pbs[i]);
