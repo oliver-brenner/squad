@@ -1,5 +1,5 @@
 import { useEffect, useState, useTransition } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
@@ -17,7 +17,9 @@ import { FeedPBCard } from "./feed-pb-card";
 type Tab = "feed" | "following";
 
 export function Friends() {
-  const [tab, setTab] = useState<Tab>("feed");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get("tab") as Tab) ?? "feed";
+  function setTab(t: Tab) { setSearchParams({ tab: t }, { replace: true }); }
 
   return (
     <>
@@ -191,6 +193,7 @@ function SuggestedRow({
   isFollowing: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const location = useLocation();
   const label =
     profile.username ?? profile.displayName ?? "Unnamed user";
   const initial = (profile.username ?? profile.displayName ?? "?")
@@ -214,7 +217,7 @@ function SuggestedRow({
   return (
     <div className="flex items-center gap-3 p-3">
       <Link
-        to={`/users/${profile.id}`}
+        to={`/users/${profile.id}?from=${encodeURIComponent(location.pathname + location.search)}`}
         className="flex items-center gap-3 min-w-0 flex-1 hover:opacity-80"
       >
         {profile.avatarUrl ? (
