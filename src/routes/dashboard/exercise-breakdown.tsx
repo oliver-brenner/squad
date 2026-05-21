@@ -43,6 +43,7 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     categories: r.ex_categories,
     equipment: r.ex_equipment,
     is_bodyweight: r.ex_is_bodyweight,
+    include_bodyweight: null,
     track_reps: r.ex_track_reps,
     default_weight_kg: r.ex_default_weight_kg,
     double_reps: r.ex_double_reps,
