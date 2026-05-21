@@ -116,11 +116,11 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
 
   return (
     <div className="flex flex-col gap-6 pb-4">
-      <section className="flex items-center gap-3 pt-4">
+      <section className="flex items-center gap-0 pt-4">
         {backHref && (
           <Link
             to={backHref}
-            className="-ml-2 -mr-2 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground flex-shrink-0"
+            className="-ml-4 flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground flex-shrink-0"
             aria-label="Back"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -137,7 +137,7 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
             {initial}
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 ml-3">
           <div className="text-lg font-semibold tracking-tight break-words">{handle}</div>
           {profile?.username && profile?.displayName && (
             <div className="truncate text-sm text-muted-foreground">{profile.displayName}</div>
@@ -258,7 +258,7 @@ function FollowButton({
 function formatJoinedDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return format(parseISO(iso), "MMM yyyy");
+    return format(parseISO(iso), "MMM yy");
   } catch {
     return "—";
   }
