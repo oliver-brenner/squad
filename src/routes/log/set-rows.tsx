@@ -68,7 +68,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
 
   useEffect(() => {
     let cancelled = false;
-    getLastSetsForExercise(group.exerciseId, 10)
+    getLastSetsForExercise(group.exerciseId, 10, workoutId)
       .then((last) => {
         if (cancelled || last.length === 0) return;
         const lastSets = last.map((l) => ({
@@ -119,7 +119,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.exerciseId]);
+  }, [group.exerciseId, workoutId]);
 
   // Pull prior sets for this exercise (excluding the current workout) so we
   // can detect PBs hit by sets being logged right now.

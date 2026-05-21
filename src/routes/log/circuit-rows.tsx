@@ -11,6 +11,7 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import type { Exercise } from "@/lib/db/types";
 import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
 import { SetTray } from "./set-rows";
+import { getLastSetsForExercise } from "@/lib/db/queries";
 
 interface Props {
   circuit: CircuitGroup;
@@ -29,10 +30,125 @@ export function CircuitRows({
   onAddExercise,
   onEditExercise,
 }: Props) {
-  const [activeTray, setActiveTray] = useState<{ exIdx: number; draft: DraftSet } | null>(null);
+  const [activeTray, setActiveTray] = useState<
+    { exIdx: number; draft: DraftSet; suggestion: DraftSet | null } | null
+  >(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  // Cache of "last logged" values per exerciseId, populated as exercises are
+  // discovered. Used both to pre-fill the displayed first set on add and to
+  // surface a suggestion when the user opens the tray for an exercise that
+  // hasn't been logged in this circuit yet.
+  const lastByExerciseRef = useRef<Map<string, DraftSet>>(new Map());
+
+  // Keep refs to latest circuit / onUpdate so async prefill doesn't write back
+  // against stale state.
+  const circuitRef = useRef(circuit);
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => {
+    circuitRef.current = circuit;
+    onUpdateRef.current = onUpdate;
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    // Fetch last-logged set for any exercise in this circuit whose first set
+    // is still empty (or whose history we haven't cached yet).
+    const toFetch = circuit.exercises.filter(
+      (eg) => !lastByExerciseRef.current.has(eg.exerciseId)
+    );
+    if (toFetch.length === 0) return;
+
+    Promise.all(
+      toFetch.map((eg) =>
+        getLastSetsForExercise(eg.exerciseId, 1, workoutId)
+          .then((rows) => ({ exerciseId: eg.exerciseId, set: rows[0]?.set ?? null }))
+          .catch((err) => {
+            console.error("[circuit-rows] failed to load last set:", err);
+            return { exerciseId: eg.exerciseId, set: null };
+          })
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      for (const r of results) {
+        if (!r.set) {
+          lastByExerciseRef.current.set(r.exerciseId, makeEmptyDraft(r.exerciseId));
+          continue;
+        }
+        lastByExerciseRef.current.set(r.exerciseId, {
+          exerciseId: r.exerciseId,
+          reps: r.set.reps,
+          weightKg: r.set.weightKg,
+          distanceKm: r.set.distanceKm,
+          durationSec: r.set.durationSec,
+          resistance: r.set.resistance,
+          speedMs: r.set.speedMs,
+          inclinePct: r.set.inclinePct,
+          restSec: r.set.restSec,
+          calories: r.set.calories,
+        });
+      }
+
+      // Apply prefill to any first set that's still all-null.
+      const cur = circuitRef.current;
+      let changed = false;
+      const nextExercises = cur.exercises.map((eg) => {
+        const cached = lastByExerciseRef.current.get(eg.exerciseId);
+        if (!cached) return eg;
+        const s = eg.sets[0];
+        if (!s) return eg;
+        if (
+          s.reps != null ||
+          s.weightKg != null ||
+          s.distanceKm != null ||
+          s.durationSec != null ||
+          s.resistance != null ||
+          s.speedMs != null ||
+          s.inclinePct != null ||
+          s.restSec != null
+        )
+          return eg;
+        if (
+          cached.reps == null &&
+          cached.weightKg == null &&
+          cached.distanceKm == null &&
+          cached.durationSec == null &&
+          cached.resistance == null &&
+          cached.speedMs == null &&
+          cached.inclinePct == null &&
+          cached.restSec == null
+        )
+          return eg;
+        changed = true;
+        return {
+          ...eg,
+          sets: [
+            {
+              ...s,
+              reps: cached.reps,
+              weightKg: cached.weightKg,
+              distanceKm: cached.distanceKm,
+              durationSec: cached.durationSec,
+              resistance: cached.resistance,
+              speedMs: cached.speedMs,
+              inclinePct: cached.inclinePct,
+              restSec: cached.restSec,
+            },
+          ],
+        };
+      });
+      if (changed) {
+        onUpdateRef.current({ ...cur, exercises: nextExercises });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // Re-run when the list of exerciseIds changes (e.g., an exercise is added).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circuit.exercises.map((e) => e.exerciseId).join("|"), workoutId]);
 
   const {
     attributes,
@@ -56,21 +172,20 @@ export function CircuitRows({
   function openSetTray(exIdx: number) {
     const eg = circuit.exercises[exIdx];
     const existing = eg.sets[0];
-    const draft: DraftSet = existing
-      ? { ...existing }
-      : {
-          exerciseId: eg.exerciseId,
-          reps: null,
-          weightKg: null,
-          distanceKm: null,
-          durationSec: null,
-          resistance: null,
-          speedMs: null,
-          inclinePct: null,
-          restSec: null,
-          calories: null,
-        };
-    setActiveTray({ exIdx, draft });
+    const draft: DraftSet = existing ? { ...existing } : makeEmptyDraft(eg.exerciseId);
+    const cached = lastByExerciseRef.current.get(eg.exerciseId) ?? null;
+    const isEmptyDraft =
+      draft.reps == null &&
+      draft.weightKg == null &&
+      draft.distanceKm == null &&
+      draft.durationSec == null &&
+      draft.resistance == null &&
+      draft.speedMs == null &&
+      draft.inclinePct == null &&
+      draft.restSec == null;
+    // Only suggest when there's nothing in the draft yet — otherwise the tray
+    // is editing an in-progress set.
+    setActiveTray({ exIdx, draft, suggestion: isEmptyDraft ? cached : null });
   }
 
   function confirmSetTray(draft: DraftSet) {
@@ -218,6 +333,7 @@ export function CircuitRows({
         <SetTray
           exercise={circuit.exercises[activeTray.exIdx].exercise}
           draft={activeTray.draft}
+          suggestion={activeTray.suggestion}
           isNew={
             circuit.exercises[activeTray.exIdx].sets.length === 0 ||
             !circuit.exercises[activeTray.exIdx].sets[0]?.id
@@ -464,4 +580,19 @@ function CircuitMenu({
       </div>
     </>
   );
+}
+
+function makeEmptyDraft(exerciseId: string): DraftSet {
+  return {
+    exerciseId,
+    reps: null,
+    weightKg: null,
+    distanceKm: null,
+    durationSec: null,
+    resistance: null,
+    speedMs: null,
+    inclinePct: null,
+    restSec: null,
+    calories: null,
+  };
 }

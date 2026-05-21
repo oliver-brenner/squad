@@ -202,17 +202,25 @@ export async function getRecentWorkoutsWithExercises(
 
 export async function getLastSetsForExercise(
   exerciseId: string,
-  limit = 10
+  limit = 10,
+  excludeWorkoutId?: string
 ): Promise<Array<{ set: WorkoutSet; performedOn: string }>> {
   const userId = await getCurrentUserId();
+  const params: unknown[] = [exerciseId, userId];
+  let exclusion = "";
+  if (excludeWorkoutId) {
+    exclusion = " AND s.workout_id <> ?";
+    params.push(excludeWorkoutId);
+  }
+  params.push(limit);
   const rows = await powersync.getAll<WorkoutSetRow & { performed_on: string }>(
     `SELECT s.*, w.performed_on AS performed_on
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
-     WHERE s.exercise_id = ? AND w.user_id = ?
+     WHERE s.exercise_id = ? AND w.user_id = ?${exclusion}
      ORDER BY w.performed_on DESC, s.position DESC
      LIMIT ?`,
-    [exerciseId, userId, limit]
+    params
   );
   return rows.map((r) => ({ set: decodeSet(r), performedOn: r.performed_on }));
 }
