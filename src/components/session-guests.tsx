@@ -42,10 +42,11 @@ function Avatar({
 }: {
   name: string;
   avatarUrl: string | null;
-  size: "sm" | "md";
+  size: "xs" | "sm" | "md";
   ring?: boolean;
 }) {
-  const dim = size === "sm" ? "h-6 w-6 text-[10px]" : "h-7 w-7 text-xs";
+  const dim =
+    size === "xs" ? "h-4 w-4 text-[8px]" : size === "sm" ? "h-6 w-6 text-[10px]" : "h-7 w-7 text-xs";
   const ringCls = ring ? "ring-2 ring-card" : "";
   if (avatarUrl) {
     return (
@@ -136,11 +137,11 @@ export function SessionGuests({ workoutId, variant, backHref, editable = false }
   if (variant === "card") {
     if (guests.length === 0) return null;
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Plus className="h-3.5 w-3.5 flex-shrink-0" />
-        <div className="flex -space-x-1.5 flex-shrink-0">
+      <div className="flex min-w-0 items-center gap-1 py-1 text-[11px] text-muted-foreground">
+        <Plus className="h-3 w-3 flex-shrink-0" />
+        <div className="flex -space-x-1 flex-shrink-0">
           {guests.map((g) => (
-            <Avatar key={g.id} name={g.firstName} avatarUrl={g.avatarUrl} size="sm" ring />
+            <Avatar key={g.id} name={g.firstName} avatarUrl={g.avatarUrl} size="xs" ring />
           ))}
         </div>
         <span className="truncate">{guests.map((g) => g.firstName).join(", ")}</span>
