@@ -157,6 +157,36 @@ export async function createWorkout(input: z.infer<typeof createWorkoutSchema>):
   return id;
 }
 
+// Replace the full guest list for an existing workout (owner only). Same
+// delete-then-insert pattern as saveWorkout's set replacement.
+const updateSessionGuestsSchema = z.object({
+  workoutId: z.string().uuid(),
+  guests: z.array(guestInputSchema),
+});
+
+export async function updateSessionGuests(
+  input: z.infer<typeof updateSessionGuestsSchema>
+): Promise<void> {
+  const userId = await getCurrentUserId();
+  const parsed = updateSessionGuestsSchema.parse(input);
+
+  await powersync.writeTransaction(async (tx) => {
+    const owned = await tx.getOptional<{ id: string }>(
+      `SELECT id FROM workouts WHERE id = ? AND user_id = ?`,
+      [parsed.workoutId, userId]
+    );
+    if (!owned) throw new Error("Workout not found");
+
+    await tx.execute(
+      `DELETE FROM session_guests WHERE workout_id = ? AND user_id = ?`,
+      [parsed.workoutId, userId]
+    );
+    if (parsed.guests.length) {
+      await insertGuestsInTx(tx, userId, parsed.workoutId, parsed.guests);
+    }
+  });
+}
+
 const updateWorkoutDetailsSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),

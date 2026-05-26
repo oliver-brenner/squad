@@ -1,8 +1,11 @@
+import { useState, useTransition } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { fetchProfilesByIds } from "@/lib/supabase/profiles";
+import { updateSessionGuests } from "@/lib/mutations/workouts";
+import { GuestPickerSheet, type DraftGuest } from "@/components/guest-picker-sheet";
 
 // A guest tagged on a session. On-Squad guests (guestProfileId set) have their
 // name/avatar resolved live from the profiles table; off-Squad guests carry a
@@ -68,9 +71,14 @@ type Props = {
   variant: "card" | "page";
   // Where the profile link should return to (page variant only).
   backHref?: string;
+  // Owner-only: render the leading plus as a button that opens the guest tray
+  // to add/remove guests. Friends' sessions leave this off (no plus shown).
+  editable?: boolean;
 };
 
-export function SessionGuests({ workoutId, variant, backHref }: Props) {
+export function SessionGuests({ workoutId, variant, backHref, editable = false }: Props) {
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [, startTransition] = useTransition();
   const { data: rows = [] } = useQuery<GuestRow>(
     `SELECT g.id, g.guest_profile_id, g.guest_name,
             p.id AS p_id, p.username AS p_username,
@@ -124,9 +132,8 @@ export function SessionGuests({ workoutId, variant, backHref }: Props) {
     };
   });
 
-  if (guests.length === 0) return null;
-
   if (variant === "card") {
+    if (guests.length === 0) return null;
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Plus className="h-3.5 w-3.5 flex-shrink-0" />
@@ -140,35 +147,78 @@ export function SessionGuests({ workoutId, variant, backHref }: Props) {
     );
   }
 
+  // page variant
+  if (!editable && guests.length === 0) return null;
+
+  // Seed the tray from the current guests so toggles/removals start from the
+  // saved state; each change is persisted immediately (reactive query refreshes).
+  const draftGuests: DraftGuest[] = guests.map((g) =>
+    g.profileId
+      ? { kind: "user", profileId: g.profileId, name: g.fullName, avatarUrl: g.avatarUrl }
+      : { kind: "guest", tempId: g.id, name: g.fullName }
+  );
+
+  function persist(next: DraftGuest[]) {
+    const input = next.map((d) =>
+      d.kind === "user" ? { profileId: d.profileId } : { name: d.name }
+    );
+    startTransition(async () => {
+      try {
+        await updateSessionGuests({ workoutId, guests: input });
+      } catch (e) {
+        console.error("[session-guests] update failed:", e);
+      }
+    });
+  }
+
   return (
-    <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap text-sm text-muted-foreground">
-      <Plus className="h-4 w-4 flex-shrink-0" />
-      {guests.map((g) => {
-        const inner = (
-          <>
-            <Avatar name={g.firstName} avatarUrl={g.avatarUrl} size="md" />
-            <span className="font-medium text-foreground/80">{g.firstName}</span>
-          </>
-        );
-        if (g.profileId) {
-          return (
-            <Link
-              key={g.id}
-              to={`/users/${g.profileId}${
-                backHref ? `?from=${encodeURIComponent(backHref)}` : ""
-              }`}
-              className="flex items-center gap-1.5 hover:opacity-80"
-            >
-              {inner}
-            </Link>
+    <>
+      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap text-sm text-muted-foreground">
+        {editable && (
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            aria-label="Add or remove guests"
+            className="flex items-center gap-1.5 rounded-full hover:text-foreground"
+          >
+            <Plus className="h-4 w-4 flex-shrink-0" />
+            {guests.length === 0 && <span className="font-medium">Add guests</span>}
+          </button>
+        )}
+        {guests.map((g) => {
+          const inner = (
+            <>
+              <Avatar name={g.firstName} avatarUrl={g.avatarUrl} size="md" />
+              <span className="font-medium text-foreground/80">{g.firstName}</span>
+            </>
           );
-        }
-        return (
-          <span key={g.id} className="flex items-center gap-1.5">
-            {inner}
-          </span>
-        );
-      })}
-    </div>
+          if (g.profileId) {
+            return (
+              <Link
+                key={g.id}
+                to={`/users/${g.profileId}${
+                  backHref ? `?from=${encodeURIComponent(backHref)}` : ""
+                }`}
+                className="flex items-center gap-1.5 hover:opacity-80"
+              >
+                {inner}
+              </Link>
+            );
+          }
+          return (
+            <span key={g.id} className="flex items-center gap-1.5">
+              {inner}
+            </span>
+          );
+        })}
+      </div>
+      {sheetOpen && (
+        <GuestPickerSheet
+          selected={draftGuests}
+          onChange={persist}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
+    </>
   );
 }

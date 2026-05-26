@@ -579,7 +579,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         )}
       </header>
 
-      <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} />
+      <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} editable />
 
       {items.length > 0 && (
         <div className="flex items-center gap-1.5">
