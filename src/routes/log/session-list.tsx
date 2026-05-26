@@ -4,6 +4,7 @@ import { MoreHorizontal } from "lucide-react";
 import { deleteWorkout } from "@/lib/mutations/workouts";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
+import { SessionGuests } from "@/components/session-guests";
 
 interface SessionItem {
   id: string;
@@ -140,6 +141,7 @@ function SessionRow({
             {session.dateLabel}
           </div>
         </div>
+        <SessionGuests workoutId={session.id} variant="card" />
         <div className="text-xs text-muted-foreground">
           {session.exerciseNames.map((n) => n.toLowerCase()).join(" · ")}
         </div>

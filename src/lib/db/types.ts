@@ -89,6 +89,16 @@ export type Follow = {
   createdAt: string;
 };
 
+export type SessionGuest = {
+  id: string;
+  userId: string;
+  workoutId: string;
+  guestProfileId: string | null;
+  guestName: string | null;
+  position: number;
+  createdAt: string;
+};
+
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };
 
 export type ExerciseHistoryEntry = {

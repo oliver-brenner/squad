@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
+import { SessionGuests } from "@/components/session-guests";
 import { ExerciseForm } from "@/routes/exercises/exercise-form";
 import { getWorkoutWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
 import { ExercisePicker } from "./exercise-picker";
@@ -577,6 +578,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
           <SessionReceiptSheet workoutId={workout.id} onClose={() => setReceiptOpen(false)} />
         )}
       </header>
+
+      <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} />
 
       {items.length > 0 && (
         <div className="flex items-center gap-1.5">

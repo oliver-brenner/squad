@@ -1,12 +1,13 @@
 import { useEffect, useState, useTransition, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, UserPlus, X } from "lucide-react";
 import { getDaysInMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkout, copyWorkout } from "@/lib/mutations/workouts";
 import { getWorkoutWithSets } from "@/lib/db/queries";
 import type { SessionType } from "@/lib/db/schema";
+import { GuestPickerSheet, type DraftGuest } from "@/components/guest-picker-sheet";
 
 const SESSION_TYPES: { value: SessionType; label: string }[] = [
   { value: "workout", label: "Workout" },
@@ -49,6 +50,9 @@ export function NewSession() {
   const [month, setMonth] = useState(initialDate.getMonth());
   const [year, setYear] = useState(initialDate.getFullYear());
 
+  const [guests, setGuests] = useState<DraftGuest[]>([]);
+  const [guestSheetOpen, setGuestSheetOpen] = useState(false);
+
   const daysInMonth = getDaysInMonth(new Date(year, month));
 
   useEffect(() => {
@@ -83,6 +87,9 @@ export function NewSession() {
   function submit() {
     if (!name.trim()) return;
     const performedOn = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const guestInput = guests.map((g) =>
+      g.kind === "user" ? { profileId: g.profileId } : { name: g.name }
+    );
     startTransition(async () => {
       const id = copyFrom
         ? await copyWorkout({
@@ -90,10 +97,21 @@ export function NewSession() {
             name: name.trim(),
             performedOn,
             sessionType,
+            guests: guestInput,
           })
-        : await createWorkout({ name: name.trim(), performedOn, sessionType });
+        : await createWorkout({ name: name.trim(), performedOn, sessionType, guests: guestInput });
       navigate(`/log/${id}`);
     });
+  }
+
+  function removeGuest(g: DraftGuest) {
+    setGuests((prev) =>
+      prev.filter((x) =>
+        g.kind === "user"
+          ? !(x.kind === "user" && x.profileId === g.profileId)
+          : !(x.kind === "guest" && x.tempId === g.tempId)
+      )
+    );
   }
 
   const days = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
@@ -176,6 +194,48 @@ export function NewSession() {
         ))}
       </div>
 
+      <div className="flex flex-col gap-3">
+        {guests.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {guests.map((g) => {
+              const key = g.kind === "user" ? g.profileId : g.tempId;
+              const avatarUrl = g.kind === "user" ? g.avatarUrl : null;
+              return (
+                <span
+                  key={key}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-1 pl-1 pr-2 text-sm"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[10px] font-medium">
+                      {(g.name.slice(0, 1) || "?").toUpperCase()}
+                    </span>
+                  )}
+                  <span className="font-medium">{g.name.split(/\s+/)[0]}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeGuest(g)}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label={`Remove ${g.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setGuestSheetOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted/50"
+        >
+          <UserPlus className="h-4 w-4" />
+          {guests.length > 0 ? "Edit guests" : "Add guests"}
+        </button>
+      </div>
+
       <Button
         size="lg"
         disabled={!name.trim() || isPending}
@@ -184,6 +244,14 @@ export function NewSession() {
       >
         {isPending ? (copyFrom ? "Copying..." : "Creating...") : "Go"}
       </Button>
+
+      {guestSheetOpen && (
+        <GuestPickerSheet
+          selected={guests}
+          onChange={setGuests}
+          onClose={() => setGuestSheetOpen(false)}
+        />
+      )}
     </div>
   );
 }

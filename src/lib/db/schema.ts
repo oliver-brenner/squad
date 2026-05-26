@@ -137,6 +137,28 @@ const follows = new Table(
   }
 );
 
+const session_guests = new Table(
+  {
+    // The session owner (denormalised, mirrors workouts.user_id) — lets the
+    // sync buckets filter without joining workouts.
+    user_id: column.text,
+    workout_id: column.text,
+    // Set for an on-Squad guest; their name/avatar are resolved live from
+    // profiles. Null for an off-Squad guest, who is identified by guest_name.
+    guest_profile_id: column.text,
+    guest_name: column.text,
+    position: column.integer,
+    created_at: column.text,
+  },
+  {
+    viewName: "session_guests",
+    indexes: {
+      workout: ["workout_id"],
+      user: ["user_id"],
+    },
+  }
+);
+
 export const AppSchema = new Schema({
   profiles,
   exercises,
@@ -144,6 +166,7 @@ export const AppSchema = new Schema({
   sets,
   user_field_options,
   follows,
+  session_guests,
 });
 
 // Raw row shapes as PowerSync stores them in local SQLite: snake_case,
@@ -157,5 +180,6 @@ export type WorkoutRow = Database["workouts"];
 export type WorkoutSetRow = Database["sets"];
 export type UserFieldOptionRow = Database["user_field_options"];
 export type FollowRow = Database["follows"];
+export type SessionGuestRow = Database["session_guests"];
 export type SessionType = "workout" | "stretch" | "sport" | "lifestyle";
 export type UserFieldKind = "category" | "equipment" | "muscle_group" | "muscle_child";

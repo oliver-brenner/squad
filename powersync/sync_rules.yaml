@@ -40,6 +40,14 @@ bucket_definitions:
     data:
       - SELECT * FROM user_field_options WHERE user_id = bucket.user_id
 
+  # Guests tagged on the user's own sessions. user_id is the session owner
+  # (denormalised on session_guests), so we bucket by it directly.
+  user_session_guests:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM session_guests WHERE user_id = bucket.user_id
+
   # Both ends of a follow edge receive the row, so the user can see who
   # follows them AND who they follow.
   user_follows:
@@ -100,3 +108,12 @@ bucket_definitions:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
       - SELECT * FROM sets WHERE user_id = bucket.user_id
+
+  # Followees' session guests — so a friend's session shows who they trained
+  # with. (The guest's own profile is resolved live; if the viewer doesn't
+  # follow that guest the app falls back to a remote profile fetch.)
+  followee_session_guests:
+    parameters:
+      - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
+    data:
+      - SELECT * FROM session_guests WHERE user_id = bucket.user_id

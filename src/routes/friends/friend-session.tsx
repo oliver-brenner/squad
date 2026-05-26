@@ -1,5 +1,5 @@
 import { useEffect, useState, useTransition } from "react";
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ import {
   type PBMap,
   type ReadOnlyItem,
 } from "@/components/session-readonly";
+import { SessionGuests } from "@/components/session-guests";
 import { computePBsInOrder } from "@/lib/stats/set-pbs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -103,6 +104,7 @@ type LoadState =
 
 export function FriendSession() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   // `?from=...` lets the caller pick the back target. The profile page passes
   // its own URL so back returns there; the feed omits it, which falls through
@@ -193,6 +195,11 @@ export function FriendSession() {
           <h1 className="truncate text-2xl font-semibold tracking-tight">
             {workout.name || "Workout"}
           </h1>
+          <SessionGuests
+            workoutId={workout.id}
+            variant="page"
+            backHref={location.pathname + location.search}
+          />
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>{authorLabel}</span>
             <span>·</span>

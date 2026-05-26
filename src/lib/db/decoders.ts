@@ -9,6 +9,7 @@ import type {
   WorkoutRow,
   WorkoutSetRow,
   FollowRow,
+  SessionGuestRow,
   SessionType,
 } from "./schema";
 import type {
@@ -18,6 +19,7 @@ import type {
   Workout,
   WorkoutSet,
   Follow,
+  SessionGuest,
 } from "./types";
 
 export function decodeProfile(r: ProfileRow): Profile {
@@ -103,6 +105,18 @@ export function decodeUserFieldOption(r: UserFieldOptionRow): UserFieldOption {
     parentId: r.parent_id,
     key: r.key ?? "",
     label: r.label ?? "",
+    position: r.position ?? 0,
+    createdAt: r.created_at ?? "",
+  };
+}
+
+export function decodeSessionGuest(r: SessionGuestRow): SessionGuest {
+  return {
+    id: r.id,
+    userId: r.user_id ?? "",
+    workoutId: r.workout_id ?? "",
+    guestProfileId: r.guest_profile_id,
+    guestName: r.guest_name,
     position: r.position ?? 0,
     createdAt: r.created_at ?? "",
   };

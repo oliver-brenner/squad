@@ -44,6 +44,19 @@ export async function fetchProfileById(id: string): Promise<PublicProfile | null
   return data ? rowToPublicProfile(data) : null;
 }
 
+// Batch lookup for a set of ids. Used to resolve on-Squad session guests whose
+// profiles haven't synced locally (e.g. a friend's guest you don't follow).
+// Same RLS requirements as fetchDiscoverableProfiles.
+export async function fetchProfilesByIds(ids: string[]): Promise<PublicProfile[]> {
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url, created_at")
+    .in("id", ids);
+  if (error) throw error;
+  return (data ?? []).map(rowToPublicProfile);
+}
+
 function rowToPublicProfile(r: Record<string, unknown>): PublicProfile {
   return {
     id: r.id as string,

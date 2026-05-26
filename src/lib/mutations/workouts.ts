@@ -91,10 +91,51 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
   return workoutId;
 }
 
+// A guest is either an on-Squad user (profileId set) or an off-Squad person
+// (name set). Exactly one of the two identifies them.
+const guestInputSchema = z
+  .object({
+    profileId: z.string().uuid().optional(),
+    name: z.string().trim().max(80).optional(),
+  })
+  .refine((g) => !!g.profileId || !!g.name?.trim(), {
+    message: "A guest needs either a profileId or a name",
+  });
+
+export type GuestInput = z.infer<typeof guestInputSchema>;
+
+// Inserts the guest rows for a workout inside an existing transaction. user_id
+// is the session owner (the signed-in user) — denormalised so sync buckets can
+// filter without joining workouts.
+async function insertGuestsInTx(
+  tx: { execute: (sql: string, params: unknown[]) => Promise<unknown> },
+  ownerId: string,
+  workoutId: string,
+  guests: GuestInput[]
+): Promise<void> {
+  for (let i = 0; i < guests.length; i++) {
+    const g = guests[i];
+    await tx.execute(
+      `INSERT INTO session_guests (id, user_id, workout_id, guest_profile_id, guest_name, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuid(),
+        ownerId,
+        workoutId,
+        g.profileId ?? null,
+        g.profileId ? null : g.name?.trim() ?? null,
+        i,
+        nowISO(),
+      ]
+    );
+  }
+}
+
 const createWorkoutSchema = z.object({
   name: z.string().trim().min(1).max(80),
   performedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   sessionType: z.enum(["workout", "stretch", "sport", "lifestyle"]).optional().default("workout"),
+  guests: z.array(guestInputSchema).optional(),
 });
 
 export async function createWorkout(input: z.infer<typeof createWorkoutSchema>): Promise<string> {
@@ -103,11 +144,16 @@ export async function createWorkout(input: z.infer<typeof createWorkoutSchema>):
   const id = uuid();
   const now = nowISO();
 
-  await powersync.execute(
-    `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, userId, parsed.name, parsed.performedOn, parsed.sessionType, null, now, now]
-  );
+  await powersync.writeTransaction(async (tx) => {
+    await tx.execute(
+      `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, userId, parsed.name, parsed.performedOn, parsed.sessionType, null, now, now]
+    );
+    if (parsed.guests?.length) {
+      await insertGuestsInTx(tx, userId, id, parsed.guests);
+    }
+  });
   return id;
 }
 
@@ -153,6 +199,7 @@ const copyWorkoutSchema = z.object({
   name: z.string().trim().min(1).max(80),
   performedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   sessionType: z.enum(["workout", "stretch", "sport", "lifestyle"]).optional().default("workout"),
+  guests: z.array(guestInputSchema).optional(),
 });
 
 export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Promise<string> {
@@ -220,6 +267,10 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
           s.circuit_name,
         ]
       );
+    }
+
+    if (parsed.guests?.length) {
+      await insertGuestsInTx(tx, userId, newId, parsed.guests);
     }
   });
 
