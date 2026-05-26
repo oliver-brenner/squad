@@ -4,9 +4,11 @@ import { ChevronLeft } from "lucide-react";
 import { getDaysInMonth, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateWorkoutDetails } from "@/lib/mutations/workouts";
-import { getWorkoutWithSets } from "@/lib/db/queries";
+import { updateWorkoutDetails, updateSessionGuests } from "@/lib/mutations/workouts";
+import { getWorkoutWithSets, getSessionGuests } from "@/lib/db/queries";
 import type { SessionType } from "@/lib/db/schema";
+import type { DraftGuest } from "@/components/guest-picker-sheet";
+import { GuestEditor, draftGuestsToInput } from "@/components/guest-editor";
 
 const SESSION_TYPES: { value: SessionType; label: string }[] = [
   { value: "workout", label: "Workout" },
@@ -35,6 +37,7 @@ export function EditSession() {
   const [day, setDay] = useState(1);
   const [month, setMonth] = useState(0);
   const [year, setYear] = useState(thisYear);
+  const [guests, setGuests] = useState<DraftGuest[]>([]);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -54,6 +57,15 @@ export function EditSession() {
         setDay(date.getDate());
         setMonth(date.getMonth());
         setYear(date.getFullYear());
+        const resolved = await getSessionGuests(id);
+        if (cancelled) return;
+        setGuests(
+          resolved.map((g) =>
+            g.guestProfileId
+              ? { kind: "user", profileId: g.guestProfileId, name: g.name, avatarUrl: g.avatarUrl }
+              : { kind: "guest", tempId: g.id, name: g.name }
+          )
+        );
         setLoaded({ initial: true, notFound: false });
       } catch (err) {
         if (cancelled) return;
@@ -88,6 +100,7 @@ export function EditSession() {
     const performedOn = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     startTransition(async () => {
       await updateWorkoutDetails({ id, name: name.trim(), performedOn, sessionType });
+      await updateSessionGuests({ workoutId: id, guests: draftGuestsToInput(guests) });
       navigate(returnTo);
     });
   }
@@ -165,6 +178,8 @@ export function EditSession() {
           </button>
         ))}
       </div>
+
+      <GuestEditor guests={guests} onChange={setGuests} />
 
       <Button
         size="lg"

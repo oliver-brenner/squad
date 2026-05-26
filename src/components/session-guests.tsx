@@ -6,6 +6,7 @@ import { useQuery as useReactQuery } from "@tanstack/react-query";
 import { fetchProfilesByIds } from "@/lib/supabase/profiles";
 import { updateSessionGuests } from "@/lib/mutations/workouts";
 import { GuestPickerSheet, type DraftGuest } from "@/components/guest-picker-sheet";
+import { draftGuestsToInput } from "@/components/guest-editor";
 
 // A guest tagged on a session. On-Squad guests (guestProfileId set) have their
 // name/avatar resolved live from the profiles table; off-Squad guests carry a
@@ -159,12 +160,9 @@ export function SessionGuests({ workoutId, variant, backHref, editable = false }
   );
 
   function persist(next: DraftGuest[]) {
-    const input = next.map((d) =>
-      d.kind === "user" ? { profileId: d.profileId } : { name: d.name }
-    );
     startTransition(async () => {
       try {
-        await updateSessionGuests({ workoutId, guests: input });
+        await updateSessionGuests({ workoutId, guests: draftGuestsToInput(next) });
       } catch (e) {
         console.error("[session-guests] update failed:", e);
       }

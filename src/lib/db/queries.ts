@@ -106,6 +106,45 @@ export async function getWorkoutWithSets(workoutId: string): Promise<WorkoutWith
   return { workout: decodeWorkout(workoutRow), sets: setRows.map(decodeSet) };
 }
 
+// Resolved guests for a session, ordered. On-Squad guests (guestProfileId set)
+// have their name/avatar read from the locally-synced profile; off-Squad guests
+// carry their stored name. Used to seed the guest editor when editing a session.
+export type ResolvedSessionGuest = {
+  id: string;
+  guestProfileId: string | null;
+  name: string;
+  avatarUrl: string | null;
+};
+
+export async function getSessionGuests(workoutId: string): Promise<ResolvedSessionGuest[]> {
+  const rows = await powersync.getAll<{
+    id: string;
+    guest_profile_id: string | null;
+    guest_name: string | null;
+    p_display_name: string | null;
+    p_username: string | null;
+    p_avatar_url: string | null;
+  }>(
+    `SELECT g.id, g.guest_profile_id, g.guest_name,
+            p.display_name AS p_display_name, p.username AS p_username, p.avatar_url AS p_avatar_url
+     FROM session_guests g
+     LEFT JOIN profiles p ON p.id = g.guest_profile_id
+     WHERE g.workout_id = ?
+     ORDER BY g.position ASC`,
+    [workoutId]
+  );
+  return rows.map((r) =>
+    r.guest_profile_id
+      ? {
+          id: r.id,
+          guestProfileId: r.guest_profile_id,
+          name: r.p_display_name ?? r.p_username ?? "Squad member",
+          avatarUrl: r.p_avatar_url,
+        }
+      : { id: r.id, guestProfileId: null, name: r.guest_name ?? "Guest", avatarUrl: null }
+  );
+}
+
 export async function getRecentWorkouts(limit = 30): Promise<Workout[]> {
   const userId = await getCurrentUserId();
   const rows = await powersync.getAll<WorkoutRow>(
