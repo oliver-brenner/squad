@@ -13,7 +13,6 @@ import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { useKeyboardOffset } from "@/lib/use-keyboard-offset";
 
 interface Props {
   group: ExerciseGroup;
@@ -446,7 +445,6 @@ export function SetTray({
 }) {
   const [draft, setDraft] = useState<DraftSet>(initialDraft);
   const [visible, setVisible] = useState(false);
-  const kbOffset = useKeyboardOffset();
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true));
@@ -496,10 +494,9 @@ export function SetTray({
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
       <div
-        className={`fixed left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out max-h-[85vh] overflow-y-auto ${
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out max-h-[85vh] overflow-y-auto ${
           visible ? "translate-y-0" : "translate-y-full"
         }`}
-        style={{ bottom: kbOffset }}
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
