@@ -1,13 +1,13 @@
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, MoreHorizontal } from "lucide-react";
+import { ChevronDown, ChevronLeft, MoreHorizontal } from "lucide-react";
 import {
   getExerciseById,
   getExerciseSetsForUser,
   getFriendSessionDetail,
 } from "@/lib/db/queries";
-import type { Exercise, Profile, Workout, WorkoutSet } from "@/lib/db/types";
+import type { Exercise, Profile, SetWithExerciseRow, Workout, WorkoutSet } from "@/lib/db/types";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { copyExerciseFromFriend } from "@/lib/mutations/exercises";
 import { copyFriendSession } from "@/lib/mutations/workouts";
@@ -19,6 +19,10 @@ import {
 } from "@/components/session-readonly";
 import { SessionGuests } from "@/components/session-guests";
 import { computePBsInOrder } from "@/lib/stats/set-pbs";
+import { computeSessionStats, type StatItem } from "@/lib/session-stats";
+import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
+import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
+import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -112,6 +116,69 @@ export function FriendSession() {
   const backHref = sanitizeBackHref(searchParams.get("from")) ?? "/friends";
   const [data, setData] = useState<LoadState>({ state: "loading" });
   const [menuOpen, setMenuOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+
+  // Session header stats — mirror the own-session editor, computed from the
+  // read-only items (single exercises + circuits).
+  const stats = useMemo(() => {
+    if (data.state !== "ready") return { exercises: 0, totalSets: 0, totalReps: 0 };
+    const statItems: StatItem[] = data.items.map((item) =>
+      item.kind === "circuit"
+        ? {
+            type: "circuit",
+            rounds: item.rounds,
+            exercises: item.exercises.map((eg) => ({
+              sets: eg.sets.map((s) => ({ reps: s.reps })),
+              doubleReps: eg.exercise?.doubleReps ?? false,
+            })),
+          }
+        : {
+            type: "single",
+            exercise: {
+              sets: item.sets.map((s) => ({ reps: s.reps })),
+              doubleReps: item.exercise?.doubleReps ?? false,
+            },
+          }
+    );
+    return computeSessionStats(statItems);
+  }, [data]);
+
+  // Resolve muscle groups against the SESSION OWNER's field options so a
+  // friend's custom groups/keys map correctly (same as the meta tags do).
+  const ownerId = data.state === "ready" ? data.workout.userId : null;
+  const { muscleGroups } = useUserFieldOptionsForUser(ownerId);
+
+  const breakdown = useMemo(() => {
+    if (data.state !== "ready") return null;
+    const rows: SetWithExerciseRow[] = [];
+    const { workout } = data;
+    for (const item of data.items) {
+      if (item.kind === "circuit") {
+        for (const eg of item.exercises) {
+          if (!eg.exercise) continue;
+          for (const s of eg.sets) {
+            rows.push({
+              set: s,
+              exercise: eg.exercise,
+              performedOn: workout.performedOn,
+              workoutId: workout.id,
+            });
+          }
+        }
+      } else {
+        if (!item.exercise) continue;
+        for (const s of item.sets) {
+          rows.push({
+            set: s,
+            exercise: item.exercise,
+            performedOn: workout.performedOn,
+            workoutId: workout.id,
+          });
+        }
+      }
+    }
+    return computeExerciseBreakdown(rows, muscleGroups);
+  }, [data, muscleGroups]);
 
   useEffect(() => {
     if (!id || !UUID_RE.test(id)) {
@@ -221,6 +288,60 @@ export function FriendSession() {
           sessionId={workout.id}
           onClose={() => setMenuOpen(false)}
         />
+      )}
+
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { value: stats.exercises, label: "exercises" },
+            { value: stats.totalSets, label: "sets" },
+            ...(stats.totalReps > 0 ? [{ value: stats.totalReps, label: "reps" }] : []),
+          ].map(({ value, label }) => (
+            <span
+              key={label}
+              className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
+            >
+              <span className="font-semibold tabular-nums text-foreground/60">{value}</span>
+              {label}
+            </span>
+          ))}
+          {workout.calories != null && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70">
+              <span className="font-semibold tabular-nums text-foreground/60">
+                {workout.calories}
+              </span>
+              cals
+            </span>
+          )}
+        </div>
+      )}
+
+      {items.length > 0 && breakdown && breakdown.totalExercises > 0 && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setBreakdownOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30"
+            aria-expanded={breakdownOpen}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Muscle groups
+            </span>
+            <div className="flex items-center gap-3">
+              {breakdownOpen && <MuscleLegend size="sm" />}
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform ${
+                  breakdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+          {breakdownOpen && (
+            <div className="px-4 pb-4">
+              <MuscleGroupsBody data={breakdown} />
+            </div>
+          )}
+        </div>
       )}
 
       <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
