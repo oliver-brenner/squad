@@ -182,13 +182,7 @@ export function ProfileStatsCharts({ sessions, workoutDates, calorieTrackingEnab
 
   return (
     <Card className="pl-2 pr-4 pt-4 pb-2 flex flex-col gap-3">
-      <div
-        className={
-          calorieTrackingEnabled
-            ? "grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
-            : "flex items-center justify-between rounded-lg bg-muted p-1"
-        }
-      >
+      <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
         {metrics.map((m) => (
           <button
             key={m.key}
