@@ -264,6 +264,42 @@ export async function getLastSetsForExercise(
   return rows.map((r) => ({ set: decodeSet(r), performedOn: r.performed_on }));
 }
 
+// Returns every set from the single most recent session that logged this
+// exercise, in performed order (position ascending). Unlike
+// getLastSetsForExercise — which returns the last N sets newest-first and may
+// span sessions — this gives a clean "what I did last time" snapshot, so the
+// caller can map set i to the i-th set of the previous session (set 0 = the
+// first set of that session). Empty if the exercise has no prior history.
+export async function getLastSessionSetsForExercise(
+  exerciseId: string,
+  excludeWorkoutId?: string
+): Promise<WorkoutSet[]> {
+  const userId = await getCurrentUserId();
+  const exclusion = excludeWorkoutId ? " AND s.workout_id <> ?" : "";
+  const subExclusion = excludeWorkoutId ? " AND s2.workout_id <> ?" : "";
+  const params: unknown[] = [exerciseId, userId];
+  if (excludeWorkoutId) params.push(excludeWorkoutId);
+  params.push(exerciseId, userId);
+  if (excludeWorkoutId) params.push(excludeWorkoutId);
+  const rows = await powersync.getAll<WorkoutSetRow>(
+    `SELECT s.*
+     FROM sets s
+     INNER JOIN workouts w ON s.workout_id = w.id
+     WHERE s.exercise_id = ? AND w.user_id = ?${exclusion}
+       AND s.workout_id = (
+         SELECT s2.workout_id
+         FROM sets s2
+         INNER JOIN workouts w2 ON s2.workout_id = w2.id
+         WHERE s2.exercise_id = ? AND w2.user_id = ?${subExclusion}
+         ORDER BY w2.performed_on DESC, w2.created_at DESC
+         LIMIT 1
+       )
+     ORDER BY s.position ASC`,
+    params
+  );
+  return rows.map((r) => decodeSet(r));
+}
+
 export async function getSetsWithExerciseSince(sinceIso: string): Promise<SetWithExerciseRow[]> {
   const userId = await getCurrentUserId();
   const rows = await powersync.getAll<

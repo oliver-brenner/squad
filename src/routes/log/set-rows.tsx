@@ -11,7 +11,7 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
-import { getExerciseHistory, getLastSetsForExercise } from "@/lib/db/queries";
+import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 
 interface Props {
@@ -56,7 +56,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
 
   // Keep refs of the latest `group` and `onUpdate` so the async effect below
   // doesn't write back stale state. Without this, an edit made by the parent
-  // while getLastSetsForExercise is in flight gets overwritten when the
+  // while getLastSessionSetsForExercise is in flight gets overwritten when the
   // closure-captured `group` resolves.
   const groupRef = useRef(group);
   const onUpdateRef = useRef(onUpdate);
@@ -67,18 +67,18 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
 
   useEffect(() => {
     let cancelled = false;
-    getLastSetsForExercise(group.exerciseId, 10, workoutId)
+    getLastSessionSetsForExercise(group.exerciseId, workoutId)
       .then((last) => {
         if (cancelled || last.length === 0) return;
-        const lastSets = last.map((l) => ({
-          reps: l.set.reps,
-          weightKg: l.set.weightKg,
-          distanceKm: l.set.distanceKm,
-          durationSec: l.set.durationSec,
-          resistance: l.set.resistance,
-          speedMs: l.set.speedMs,
-          inclinePct: l.set.inclinePct,
-          restSec: l.set.restSec,
+        const lastSets = last.map((s) => ({
+          reps: s.reps,
+          weightKg: s.weightKg,
+          distanceKm: s.distanceKm,
+          durationSec: s.durationSec,
+          resistance: s.resistance,
+          speedMs: s.speedMs,
+          inclinePct: s.inclinePct,
+          restSec: s.restSec,
         }));
         lastLoggedRef.current = lastSets;
         const currentGroup = groupRef.current;

@@ -11,7 +11,7 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import type { Exercise } from "@/lib/db/types";
 import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
 import { SetTray } from "./set-rows";
-import { getLastSetsForExercise } from "@/lib/db/queries";
+import { getLastSessionSetsForExercise } from "@/lib/db/queries";
 
 interface Props {
   circuit: CircuitGroup;
@@ -53,8 +53,9 @@ export function CircuitRows({
 
   useEffect(() => {
     let cancelled = false;
-    // Fetch last-logged set for any exercise in this circuit whose first set
-    // is still empty (or whose history we haven't cached yet).
+    // Fetch the first set of the last session that logged each exercise (even
+    // if that session wasn't a circuit) for any exercise whose first set is
+    // still empty (or whose history we haven't cached yet).
     const toFetch = circuit.exercises.filter(
       (eg) => !lastByExerciseRef.current.has(eg.exerciseId)
     );
@@ -62,8 +63,8 @@ export function CircuitRows({
 
     Promise.all(
       toFetch.map((eg) =>
-        getLastSetsForExercise(eg.exerciseId, 1, workoutId)
-          .then((rows) => ({ exerciseId: eg.exerciseId, set: rows[0]?.set ?? null }))
+        getLastSessionSetsForExercise(eg.exerciseId, workoutId)
+          .then((rows) => ({ exerciseId: eg.exerciseId, set: rows[0] ?? null }))
           .catch((err) => {
             console.error("[circuit-rows] failed to load last set:", err);
             return { exerciseId: eg.exerciseId, set: null };
