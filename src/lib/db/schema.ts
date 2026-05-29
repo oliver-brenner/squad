@@ -13,6 +13,7 @@ const profiles = new Table(
     display_name: column.text,
     avatar_url: column.text,
     bodyweight_kg: column.real,
+    calorie_tracking_enabled: column.integer,
     created_at: column.text,
   },
   { viewName: "profiles" }
@@ -60,6 +61,7 @@ const workouts = new Table(
     performed_on: column.text,
     session_type: column.text,
     notes: column.text,
+    calories: column.integer,
     created_at: column.text,
     updated_at: column.text,
   },

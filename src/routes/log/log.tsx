@@ -48,6 +48,7 @@ export function Log() {
             totalExercises: w.totalExercises,
             totalSets: w.totalSets,
             totalReps: w.totalReps,
+            calories: w.calories,
           }))}
         />
       )}

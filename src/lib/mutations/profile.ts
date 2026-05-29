@@ -42,3 +42,11 @@ export async function updateBodyweightKg(input: number | null): Promise<void> {
     [value, userId]
   );
 }
+
+export async function updateCalorieTrackingEnabled(enabled: boolean): Promise<void> {
+  const userId = await getCurrentUserId();
+  await powersync.execute(
+    `UPDATE profiles SET calorie_tracking_enabled = ? WHERE id = ?`,
+    [enabled ? 1 : 0, userId]
+  );
+}

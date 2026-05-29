@@ -15,6 +15,7 @@ interface SessionItem {
   totalExercises: number;
   totalSets: number;
   totalReps: number;
+  calories: number | null;
 }
 
 function SessionMenu({
@@ -126,6 +127,9 @@ function SessionRow({
   const [open, setOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
+  const showPills =
+    session.sessionType === "workout" || session.sessionType === "stretch";
+
   return (
     <li className="relative flex items-center rounded-2xl border border-border bg-card overflow-hidden">
       <Link
@@ -145,8 +149,8 @@ function SessionRow({
         <div className="text-xs text-muted-foreground">
           {session.exerciseNames.map((n) => n.toLowerCase()).join(" · ")}
         </div>
-        {(session.sessionType === "workout" || session.sessionType === "stretch") && (
-          <div className="flex items-center gap-1.5 mt-1.5">
+        {showPills && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {[
               { value: session.totalExercises, label: "exercises" },
               { value: session.totalSets, label: "sets" },
@@ -160,6 +164,14 @@ function SessionRow({
                 {label}
               </span>
             ))}
+            {session.calories != null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70">
+                <span className="font-semibold tabular-nums text-foreground/60">
+                  {session.calories}
+                </span>
+                cals
+              </span>
+            )}
           </div>
         )}
       </Link>

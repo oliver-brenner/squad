@@ -29,6 +29,7 @@ export function decodeProfile(r: ProfileRow): Profile {
     displayName: r.display_name,
     avatarUrl: r.avatar_url,
     bodyweightKg: r.bodyweight_kg,
+    calorieTrackingEnabled: bool(r.calorie_tracking_enabled),
     createdAt: r.created_at ?? "",
   };
 }
@@ -69,6 +70,7 @@ export function decodeWorkout(r: WorkoutRow): Workout {
     performedOn: r.performed_on ?? "",
     sessionType: (r.session_type ?? "workout") as SessionType,
     notes: r.notes,
+    calories: r.calories,
     createdAt: r.created_at ?? "",
     updatedAt: r.updated_at ?? "",
   };

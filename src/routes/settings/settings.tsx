@@ -5,6 +5,7 @@ import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth/auth-context";
 import { supabase } from "@/lib/supabase/client";
 import { powersync } from "@/lib/db/client";
@@ -12,6 +13,7 @@ import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
 import {
   updateBodyweightKg,
+  updateCalorieTrackingEnabled,
   updateUsername,
   validateUsername,
 } from "@/lib/mutations/profile";
@@ -59,6 +61,8 @@ export function Settings() {
       <UsernameSection currentUsername={profile?.username ?? null} />
 
       <BodyweightSection currentBodyweightKg={profile?.bodyweightKg ?? null} />
+
+      <CalorieTrackingSection enabled={profile?.calorieTrackingEnabled ?? false} />
 
       <Card className="mt-4 p-0">
         <Link
@@ -194,6 +198,34 @@ function UsernameSection({ currentUsername }: { currentUsername: string | null }
           />
         </label>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    </Card>
+  );
+}
+
+function CalorieTrackingSection({ enabled }: { enabled: boolean }) {
+  const [pending, startTransition] = useTransition();
+
+  function toggle(next: boolean) {
+    startTransition(async () => {
+      try {
+        await updateCalorieTrackingEnabled(next);
+      } catch (err) {
+        console.error("[settings] updateCalorieTrackingEnabled failed:", err);
+      }
+    });
+  }
+
+  return (
+    <Card className="mt-4 p-0">
+      <div className="flex items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Enable calorie tracking</div>
+          <div className="text-sm text-muted-foreground">
+            Log calories burned on each session
+          </div>
+        </div>
+        <Switch checked={enabled} onCheckedChange={toggle} disabled={pending} />
       </div>
     </Card>
   );

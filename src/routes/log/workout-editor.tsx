@@ -1,5 +1,6 @@
 import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
+import { useQuery } from "@powersync/react";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
 import {
@@ -30,9 +31,13 @@ import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
 import { SessionGuests } from "@/components/session-guests";
 import { ExerciseForm } from "@/routes/exercises/exercise-form";
 import { getWorkoutWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
+import { useAuth } from "@/lib/auth/auth-context";
+import { decodeProfile } from "@/lib/db/decoders";
+import type { ProfileRow } from "@/lib/db/schema";
 import { ExercisePicker } from "./exercise-picker";
 import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
+import { CalorieTray } from "./calorie-tray";
 import {
   CIRCUIT_BODY_PREFIX,
   isCircuitGroup,
@@ -205,6 +210,19 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   const [menuOpen, setMenuOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+
+  // Session-level calories. Gated on the user's "Enable calorie tracking"
+  // setting. Saved independently of the debounced set autosave, so we keep a
+  // local copy of the value to drive the pill without a refetch.
+  const { user } = useAuth();
+  const { data: profileRows } = useQuery<ProfileRow>(
+    `SELECT * FROM profiles WHERE id = ? LIMIT 1`,
+    [user?.id ?? ""]
+  );
+  const calorieTrackingEnabled =
+    profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
+  const [calories, setCalories] = useState(workout.calories);
+  const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
 
   const { muscleGroups } = useUserFieldOptions();
   const breakdown = useMemo(() => {
@@ -582,7 +600,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} editable />
 
       {items.length > 0 && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           {[
             { value: stats.exercises, label: "exercises" },
             { value: stats.totalSets, label: "sets" },
@@ -596,6 +614,25 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
               {label}
             </span>
           ))}
+          {calorieTrackingEnabled &&
+            (calories != null ? (
+              <button
+                type="button"
+                onClick={() => setCalorieTrayOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
+              >
+                <span className="font-semibold tabular-nums text-foreground/60">{calories}</span>
+                cals
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCalorieTrayOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground/70 hover:bg-muted/60"
+              >
+                + add cals
+              </button>
+            ))}
         </div>
       )}
 
@@ -697,6 +734,18 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {isPending && null}
+
+      {calorieTrayOpen && (
+        <CalorieTray
+          workoutId={workout.id}
+          current={calories}
+          onClose={() => setCalorieTrayOpen(false)}
+          onSaved={(value) => {
+            setCalories(value);
+            setCalorieTrayOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ export type Profile = {
   displayName: string | null;
   avatarUrl: string | null;
   bodyweightKg: number | null;
+  calorieTrackingEnabled: boolean;
   createdAt: string;
 };
 
@@ -46,6 +47,7 @@ export type Workout = {
   performedOn: string;
   sessionType: SessionType;
   notes: string | null;
+  calories: number | null;
   createdAt: string;
   updatedAt: string;
 };

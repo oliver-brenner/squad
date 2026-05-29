@@ -202,6 +202,7 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
                 totalExercises: w.totalExercises,
                 totalSets: w.totalSets,
                 totalReps: w.totalReps,
+                calories: w.calories,
               }))}
             />
           )}

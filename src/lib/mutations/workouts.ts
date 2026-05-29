@@ -224,6 +224,25 @@ export async function updateWorkoutDetails(
   });
 }
 
+// Session-level calories, entered from the log card. Independent of the
+// per-set `calories` field — this is a single total for the whole session.
+const updateWorkoutCaloriesSchema = z.object({
+  id: z.string().uuid(),
+  calories: z.number().int().min(0).max(100_000).nullable(),
+});
+
+export async function updateWorkoutCalories(
+  input: z.infer<typeof updateWorkoutCaloriesSchema>
+): Promise<void> {
+  const userId = await getCurrentUserId();
+  const parsed = updateWorkoutCaloriesSchema.parse(input);
+  const now = nowISO();
+  await powersync.execute(
+    `UPDATE workouts SET calories = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    [parsed.calories, now, parsed.id, userId]
+  );
+}
+
 const copyWorkoutSchema = z.object({
   sourceId: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
