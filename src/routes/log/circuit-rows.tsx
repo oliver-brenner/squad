@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
-import type { Exercise } from "@/lib/db/types";
+import { PBBadges } from "@/components/pb-badge";
+import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
 import { SetTray } from "./set-rows";
-import { getLastSessionSetsForExercise } from "@/lib/db/queries";
+import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
+import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 
 interface Props {
   circuit: CircuitGroup;
@@ -374,6 +376,30 @@ function CircuitExerciseRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  // Prior sets for this exercise (excluding the current workout) so we can flag
+  // PBs hit by the set being logged here — same logic as the non-circuit rows.
+  const [priorSetsAsc, setPriorSetsAsc] = useState<WorkoutSet[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getExerciseHistory(exGroup.exerciseId, workoutId)
+      .then((entries) => {
+        if (cancelled) return;
+        // Entries are newest-first; flatten chronologically (oldest → newest).
+        const flat: WorkoutSet[] = [];
+        for (let i = entries.length - 1; i >= 0; i--) {
+          for (const s of entries[i].sets) flat.push(s);
+        }
+        setPriorSetsAsc(flat);
+      })
+      .catch((err) => {
+        console.error("[circuit-rows] failed to load PB history:", err);
+        setPriorSetsAsc([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [exGroup.exerciseId, workoutId]);
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: exGroup.groupKey,
   });
@@ -384,6 +410,13 @@ function CircuitExerciseRow({
   };
 
   const set = exGroup.sets[0];
+
+  const pbs = useMemo<PBType[]>(() => {
+    if (priorSetsAsc === null || !set) return [];
+    const combined = [...priorSetsAsc, set];
+    const all = computePBsInOrder(combined, exGroup.exercise);
+    return all[all.length - 1] ?? [];
+  }, [priorSetsAsc, set, exGroup.exercise]);
   const hasData =
     set &&
     (set.reps != null ||
@@ -411,8 +444,9 @@ function CircuitExerciseRow({
               <ExerciseMetaTags e={exGroup.exercise} />
             </span>
             {hasData && (
-              <p className="text-sm mt-3 pl-3 before:content-['•'] before:mr-2 before:text-muted-foreground">
-                {formatCircuitSetSummary(set, exGroup)}
+              <p className="text-sm mt-3 pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground">
+                <span>{formatCircuitSetSummary(set, exGroup)}</span>
+                <PBBadges types={pbs} />
               </p>
             )}
           </div>
