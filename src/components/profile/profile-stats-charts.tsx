@@ -5,7 +5,7 @@ import { LineChart, type LineChartPoint } from "@/components/charts/line-chart";
 import type { UserSessionAggregate } from "@/lib/db/queries";
 
 
-type MetricKey = "exercises" | "sets" | "reps" | "volume" | "workouts";
+type MetricKey = "exercises" | "sets" | "reps" | "volume" | "workouts" | "calories";
 
 type WindowKey = "7d" | "30d" | "all";
 
@@ -67,11 +67,16 @@ function compactAxis(v: number): string {
   return `${Math.round(v)}`;
 }
 
-function buildMetrics(sessions: UserSessionAggregate[], workoutDates: string[]): Metric[] {
+function buildMetrics(
+  sessions: UserSessionAggregate[],
+  workoutDates: string[],
+  calorieTrackingEnabled: boolean
+): Metric[] {
   const exercises: LineChartPoint[] = [];
   const sets: LineChartPoint[] = [];
   const reps: LineChartPoint[] = [];
   const volume: LineChartPoint[] = [];
+  const calories: LineChartPoint[] = [];
 
   for (const s of sessions) {
     if (s.totalExercises > 0) exercises.push({ date: s.performedOn, value: s.totalExercises });
@@ -79,6 +84,8 @@ function buildMetrics(sessions: UserSessionAggregate[], workoutDates: string[]):
     if (s.totalReps > 0) reps.push({ date: s.performedOn, value: s.totalReps });
     if (s.totalVolumeKg > 0)
       volume.push({ date: s.performedOn, value: Math.round(s.totalVolumeKg) });
+    if (s.calories != null && s.calories > 0)
+      calories.push({ date: s.performedOn, value: s.calories });
   }
 
   return [
@@ -119,16 +126,34 @@ function buildMetrics(sessions: UserSessionAggregate[], workoutDates: string[]):
       formatYAxis: withCommas,
       yUnit: "per week",
     },
+    // Only surfaced when the viewed user has calorie tracking on. Omitted
+    // entirely otherwise so the header layout is unchanged for everyone else.
+    ...(calorieTrackingEnabled
+      ? [
+          {
+            key: "calories" as const,
+            label: "Calories",
+            points: calories,
+            formatY: withCommas,
+            formatYAxis: withCommas,
+            yUnit: "kcal",
+          },
+        ]
+      : []),
   ];
 }
 
 interface Props {
   sessions: UserSessionAggregate[];
   workoutDates: string[];
+  calorieTrackingEnabled?: boolean;
 }
 
-export function ProfileStatsCharts({ sessions, workoutDates }: Props) {
-  const metrics = useMemo(() => buildMetrics(sessions, workoutDates), [sessions, workoutDates]);
+export function ProfileStatsCharts({ sessions, workoutDates, calorieTrackingEnabled = false }: Props) {
+  const metrics = useMemo(
+    () => buildMetrics(sessions, workoutDates, calorieTrackingEnabled),
+    [sessions, workoutDates, calorieTrackingEnabled]
+  );
 
   const [activeKey, setActiveKey] = useState<MetricKey>(() => {
     const preferred: MetricKey[] = ["exercises", "sets", "reps", "volume", "workouts"];
@@ -157,7 +182,13 @@ export function ProfileStatsCharts({ sessions, workoutDates }: Props) {
 
   return (
     <Card className="pl-2 pr-4 pt-4 pb-2 flex flex-col gap-3">
-      <div className="flex items-center justify-between rounded-lg bg-muted p-1">
+      <div
+        className={
+          calorieTrackingEnabled
+            ? "grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
+            : "flex items-center justify-between rounded-lg bg-muted p-1"
+        }
+      >
         {metrics.map((m) => (
           <button
             key={m.key}

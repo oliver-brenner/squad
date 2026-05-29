@@ -488,6 +488,9 @@ export type UserSessionAggregate = {
   totalSets: number;
   totalReps: number;
   totalVolumeKg: number;
+  // Session-level calories logged on the workout (not summed from sets). Null
+  // when none was entered.
+  calories: number | null;
 };
 
 async function getProfileBodyweightKg(userId: string): Promise<number> {
@@ -508,10 +511,12 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
     total_sets: number | null;
     total_reps: number | null;
     total_volume_kg: number | null;
+    calories: number | null;
   }>(
     `SELECT
        w.performed_on,
        w.session_type,
+       w.calories,
        COUNT(DISTINCT s.exercise_id || '|' || COALESCE(s.circuit_id, '')) AS total_exercises,
        SUM(COALESCE(s.circuit_rounds, 1)) AS total_sets,
        SUM(
@@ -536,7 +541,7 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
      INNER JOIN sets s ON s.workout_id = w.id
      INNER JOIN exercises e ON s.exercise_id = e.id
      WHERE w.user_id = ? AND w.session_type = 'workout'
-     GROUP BY w.id, w.performed_on, w.session_type
+     GROUP BY w.id, w.performed_on, w.session_type, w.calories
      ORDER BY w.performed_on ASC`,
     [bodyweightKg, bodyweightKg, userId]
   );
@@ -547,6 +552,7 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
     totalSets: Number(r.total_sets ?? 0),
     totalReps: Number(r.total_reps ?? 0),
     totalVolumeKg: Number(r.total_volume_kg ?? 0),
+    calories: r.calories,
   }));
 }
 

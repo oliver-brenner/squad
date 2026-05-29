@@ -216,7 +216,11 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
             <StatCard compact label="Volume" value={hasLocalData ? formatVolume(stats?.totalVolumeKg) : "—"} />
           </div>
           {hasLocalData && sessionAggregates && workoutDates && (
-            <ProfileStatsCharts sessions={sessionAggregates} workoutDates={workoutDates} />
+            <ProfileStatsCharts
+              sessions={sessionAggregates}
+              workoutDates={workoutDates}
+              calorieTrackingEnabled={localProfile?.calorieTrackingEnabled ?? false}
+            />
           )}
         </section>
       )}
