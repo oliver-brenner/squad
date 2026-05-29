@@ -210,6 +210,9 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   const [menuOpen, setMenuOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // Set when an exercise is added to the session so the editor scrolls down to
+  // the freshly-appended entry once it has rendered (rather than to the top).
+  const scrollToBottomRef = useRef(false);
 
   // Session-level calories. Gated on the user's "Enable calorie tracking"
   // setting. Saved independently of the debounced set autosave, so we keep a
@@ -223,6 +226,15 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
   const [calories, setCalories] = useState(workout.calories);
   const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
+
+  // After adding an exercise, the picker view unmounts and the editor re-renders
+  // with the new entry appended. Scroll to it here, once it's in the DOM.
+  useEffect(() => {
+    if (!picking && !pickingForCircuit && scrollToBottomRef.current) {
+      scrollToBottomRef.current = false;
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+    }
+  }, [items, picking, pickingForCircuit]);
 
   const { muscleGroups } = useUserFieldOptions();
   const breakdown = useMemo(() => {
@@ -411,6 +423,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   }
 
   function addExercise(ex: Exercise) {
+    scrollToBottomRef.current = true;
     setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
     setItems((prev) => [
       ...prev,
@@ -497,10 +510,12 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         onPick={(ex) => {
           if (isPickingForCircuit) {
             addExerciseToCircuit(pickingForCircuit!, ex);
+            window.scrollTo({ top: 0, behavior: "instant" });
           } else {
+            // addExercise appends to the bottom; the scroll-to-bottom effect
+            // takes us there once the editor re-renders with the new entry.
             addExercise(ex);
           }
-          window.scrollTo({ top: 0, behavior: "instant" });
         }}
         onCancel={() => {
           setPicking(false);
