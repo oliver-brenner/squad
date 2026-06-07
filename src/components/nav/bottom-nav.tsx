@@ -6,7 +6,9 @@ import { BarbellIcon } from "@/components/exercise-meta";
 const items = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/log", label: "Log", icon: List },
-  { href: "/exercises", label: "Exercises", icon: BarbellIcon },
+  // Templates live under the Exercises tab (reached from it), so keep Exercises
+  // highlighted while on any /templates route.
+  { href: "/exercises", label: "Exercises", icon: BarbellIcon, also: ["/templates"] },
   { href: "/friends", label: "Squad", icon: Users },
   { href: "/you", label: "You", icon: User },
 ] as const;
@@ -20,8 +22,10 @@ export function BottomNav() {
       aria-label="Primary"
     >
       <ul className="mx-auto flex max-w-2xl items-stretch justify-around">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+        {items.map((item) => {
+          const { href, label, icon: Icon } = item;
+          const matches = [href, ...(("also" in item && item.also) || [])];
+          const active = matches.some((p) => pathname === p || pathname.startsWith(`${p}/`));
           return (
             <li key={href} className="flex-1">
               <Link

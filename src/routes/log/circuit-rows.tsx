@@ -22,6 +22,8 @@ interface Props {
   onRemove: () => void;
   onAddExercise: () => void;
   onEditExercise: (exercise: Exercise) => void;
+  // See SetRows: "template" mode drops history-driven prefill/PBs/history list.
+  mode?: "workout" | "template";
 }
 
 export function CircuitRows({
@@ -31,7 +33,9 @@ export function CircuitRows({
   onRemove,
   onAddExercise,
   onEditExercise,
+  mode = "workout",
 }: Props) {
+  const isTemplate = mode === "template";
   const [activeTray, setActiveTray] = useState<
     { exIdx: number; draft: DraftSet; suggestion: DraftSet | null } | null
   >(null);
@@ -54,6 +58,7 @@ export function CircuitRows({
   });
 
   useEffect(() => {
+    if (isTemplate) return;
     let cancelled = false;
     // Fetch the first set of the last session that logged each exercise (even
     // if that session wasn't a circuit) for any exercise whose first set is
@@ -311,6 +316,7 @@ export function CircuitRows({
                   key={eg.groupKey}
                   exGroup={eg}
                   workoutId={workoutId}
+                  mode={mode}
                   onClick={() => openSetTray(i)}
                   onRemove={() => removeExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
@@ -362,17 +368,20 @@ export function CircuitRows({
 function CircuitExerciseRow({
   exGroup,
   workoutId,
+  mode = "workout",
   onClick,
   onRemove,
   onEdit,
 }: {
   exGroup: ExerciseGroup;
   workoutId: string;
+  mode?: "workout" | "template";
   onClick: () => void;
   onRemove: () => void;
   onEdit: () => void;
 }) {
   const navigate = useNavigate();
+  const isTemplate = mode === "template";
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -380,6 +389,7 @@ function CircuitExerciseRow({
   // PBs hit by the set being logged here — same logic as the non-circuit rows.
   const [priorSetsAsc, setPriorSetsAsc] = useState<WorkoutSet[] | null>(null);
   useEffect(() => {
+    if (isTemplate) return;
     let cancelled = false;
     getExerciseHistory(exGroup.exerciseId, workoutId)
       .then((entries) => {
@@ -460,18 +470,24 @@ function CircuitExerciseRow({
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((o) => !o)}
-            aria-label={historyOpen ? "Hide history" : "Show history"}
-            className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {historyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          {!isTemplate && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((o) => !o)}
+              aria-label={historyOpen ? "Hide history" : "Show history"}
+              className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {historyOpen ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </div>
       </div>
 
-      {historyOpen && (
+      {!isTemplate && historyOpen && (
         <div className="border-t border-border mx-1">
           <ExerciseHistoryList
             exerciseId={exGroup.exerciseId}
@@ -486,7 +502,9 @@ function CircuitExerciseRow({
         <CircuitExerciseMenu
           onViewStats={() => {
             setMenuOpen(false);
-            navigate(`/exercises/${exGroup.exerciseId}?from=/log/${workoutId}`);
+            navigate(
+              `/exercises/${exGroup.exerciseId}?from=${isTemplate ? "/templates" : "/log"}/${workoutId}`
+            );
           }}
           onEdit={() => {
             setMenuOpen(false);

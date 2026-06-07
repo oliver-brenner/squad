@@ -10,6 +10,8 @@ import type {
   WorkoutSetRow,
   FollowRow,
   SessionGuestRow,
+  TemplateRow,
+  TemplateSetRow,
   SessionType,
 } from "./schema";
 import type {
@@ -20,6 +22,8 @@ import type {
   WorkoutSet,
   Follow,
   SessionGuest,
+  Template,
+  TemplateSet,
 } from "./types";
 
 export function decodeProfile(r: ProfileRow): Profile {
@@ -121,6 +125,39 @@ export function decodeSessionGuest(r: SessionGuestRow): SessionGuest {
     guestName: r.guest_name,
     position: r.position ?? 0,
     createdAt: r.created_at ?? "",
+  };
+}
+
+export function decodeTemplate(r: TemplateRow): Template {
+  return {
+    id: r.id,
+    userId: r.user_id ?? "",
+    name: r.name ?? "",
+    sessionType: (r.session_type ?? "workout") as SessionType,
+    createdAt: r.created_at ?? "",
+    updatedAt: r.updated_at ?? "",
+  };
+}
+
+export function decodeTemplateSet(r: TemplateSetRow): TemplateSet {
+  return {
+    id: r.id,
+    userId: r.user_id ?? "",
+    templateId: r.template_id ?? "",
+    exerciseId: r.exercise_id ?? "",
+    position: r.position ?? 0,
+    reps: r.reps,
+    weightKg: r.weight_kg,
+    distanceKm: r.distance_km,
+    durationSec: r.duration_sec,
+    resistance: r.resistance,
+    speedMs: r.speed_ms,
+    inclinePct: r.incline_pct,
+    restSec: r.rest_sec,
+    calories: r.calories,
+    circuitId: r.circuit_id,
+    circuitRounds: r.circuit_rounds,
+    circuitName: r.circuit_name,
   };
 }
 

@@ -107,7 +107,7 @@ export type GuestInput = z.infer<typeof guestInputSchema>;
 // Inserts the guest rows for a workout inside an existing transaction. user_id
 // is the session owner (the signed-in user) — denormalised so sync buckets can
 // filter without joining workouts.
-async function insertGuestsInTx(
+export async function insertGuestsInTx(
   tx: { execute: (sql: string, params: unknown[]) => Promise<unknown> },
   ownerId: string,
   workoutId: string,

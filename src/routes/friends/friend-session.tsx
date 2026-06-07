@@ -11,6 +11,7 @@ import type { Exercise, Profile, SetWithExerciseRow, Workout, WorkoutSet } from 
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { copyExerciseFromFriend } from "@/lib/mutations/exercises";
 import { copyFriendSession } from "@/lib/mutations/workouts";
+import { createTemplateFromFriendWorkout } from "@/lib/mutations/templates";
 import {
   buildReadOnlyItems,
   SessionReadOnlyItems,
@@ -43,7 +44,8 @@ function SessionActionsSheet({
 }) {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
-  const [pending, startTransition] = useTransition();
+  const [busy, setBusy] = useState<null | "copy" | "template">(null);
+  const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,6 +55,7 @@ function SessionActionsSheet({
 
   function handleCopy() {
     setError(null);
+    setBusy("copy");
     startTransition(async () => {
       try {
         const newWorkoutId = await copyFriendSession({ sourceWorkoutId: sessionId });
@@ -62,7 +65,25 @@ function SessionActionsSheet({
         // immediately. Tangible success feedback.
         navigate(`/log/${newWorkoutId}`);
       } catch (e) {
+        setBusy(null);
         setError(e instanceof Error ? e.message : "Couldn't copy session");
+      }
+    });
+  }
+
+  function handleSaveTemplate() {
+    setError(null);
+    setBusy("template");
+    startTransition(async () => {
+      try {
+        const templateId = await createTemplateFromFriendWorkout({ sourceWorkoutId: sessionId });
+        onClose();
+        // Land in the template editor on the freshly-saved skeleton, same as
+        // "Save as Template" does from your own session.
+        navigate(`/templates/${templateId}`);
+      } catch (e) {
+        setBusy(null);
+        setError(e instanceof Error ? e.message : "Couldn't save template");
       }
     });
   }
@@ -80,10 +101,18 @@ function SessionActionsSheet({
           <button
             type="button"
             onClick={handleCopy}
-            disabled={pending}
+            disabled={busy !== null}
             className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50 disabled:opacity-60"
           >
-            {pending ? "Copying…" : "Copy session"}
+            {busy === "copy" ? "Copying…" : "Copy session"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveTemplate}
+            disabled={busy !== null}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50 disabled:opacity-60"
+          >
+            {busy === "template" ? "Saving…" : "Save session as template"}
           </button>
           {error && (
             <p className="text-center text-sm text-red-600 px-2">{error}</p>

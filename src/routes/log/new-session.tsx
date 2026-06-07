@@ -1,14 +1,18 @@
 import { useEffect, useState, useTransition, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, LayoutTemplate, X } from "lucide-react";
 import { getDaysInMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createWorkout, copyWorkout } from "@/lib/mutations/workouts";
-import { getWorkoutWithSets } from "@/lib/db/queries";
+import { applyTemplate } from "@/lib/mutations/templates";
+import { getWorkoutWithSets, getTemplateWithSets } from "@/lib/db/queries";
 import type { SessionType } from "@/lib/db/schema";
+import type { Template } from "@/lib/db/types";
 import type { DraftGuest } from "@/components/guest-picker-sheet";
 import { GuestEditor, draftGuestsToInput } from "@/components/guest-editor";
+import { TemplatePickerSheet } from "@/components/template-picker-sheet";
+import { sessionTypeColor } from "@/lib/session-type-color";
 
 const SESSION_TYPES: { value: SessionType; label: string }[] = [
   { value: "workout", label: "Workout" },
@@ -31,6 +35,7 @@ export function NewSession() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const copyFrom = searchParams.get("copyFrom") ?? undefined;
+  const templateParam = searchParams.get("template") ?? undefined;
   const dateParam = searchParams.get("date");
   const fromParam = searchParams.get("from");
   const backTo = fromParam ?? "/log";
@@ -52,6 +57,39 @@ export function NewSession() {
   const [year, setYear] = useState(initialDate.getFullYear());
 
   const [guests, setGuests] = useState<DraftGuest[]>([]);
+
+  // Template selection. Picking a template seeds the session name + type (the
+  // user can still edit both before creating) and switches submit to
+  // applyTemplate, which materialises the skeleton into a real session.
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+
+  function selectTemplate(t: Template) {
+    setSelectedTemplate(t);
+    setName(t.name);
+    setSessionType(t.sessionType);
+    // Suppress the auto-name-from-type effect so the template name sticks.
+    setUserEditedName(true);
+    setTemplatePickerOpen(false);
+  }
+
+  // Preselect when arriving via "Create session from Template".
+  useEffect(() => {
+    if (!templateParam) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const loaded = await getTemplateWithSets(templateParam);
+        if (!cancelled && loaded) selectTemplate(loaded.template);
+      } catch (err) {
+        console.error("[new-session] failed to load template:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateParam]);
 
   const daysInMonth = getDaysInMonth(new Date(year, month));
 
@@ -89,15 +127,26 @@ export function NewSession() {
     const performedOn = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const guestInput = draftGuestsToInput(guests);
     startTransition(async () => {
-      const id = copyFrom
-        ? await copyWorkout({
-            sourceId: copyFrom,
-            name: name.trim(),
-            performedOn,
-            sessionType,
-            guests: guestInput,
-          })
-        : await createWorkout({ name: name.trim(), performedOn, sessionType, guests: guestInput });
+      let id: string;
+      if (selectedTemplate) {
+        id = await applyTemplate({
+          templateId: selectedTemplate.id,
+          name: name.trim(),
+          performedOn,
+          sessionType,
+          guests: guestInput,
+        });
+      } else if (copyFrom) {
+        id = await copyWorkout({
+          sourceId: copyFrom,
+          name: name.trim(),
+          performedOn,
+          sessionType,
+          guests: guestInput,
+        });
+      } else {
+        id = await createWorkout({ name: name.trim(), performedOn, sessionType, guests: guestInput });
+      }
       navigate(`/log/${id}`);
     });
   }
@@ -184,14 +233,60 @@ export function NewSession() {
 
       <GuestEditor guests={guests} onChange={setGuests} />
 
+      {!copyFrom && (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Use Template</span>
+          {selectedTemplate ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <div
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${sessionTypeColor(selectedTemplate.sessionType)}`}
+                />
+                <span className="truncate font-medium">{selectedTemplate.name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedTemplate(null)}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+                aria-label="Clear template"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => setTemplatePickerOpen(true)}
+              className="w-full justify-start"
+            >
+              <LayoutTemplate className="h-4 w-4" /> Use Template
+            </Button>
+          )}
+        </div>
+      )}
+
       <Button
         size="lg"
         disabled={!name.trim() || isPending}
         onClick={submit}
         className="w-full"
       >
-        {isPending ? (copyFrom ? "Copying..." : "Creating...") : "Go"}
+        {isPending
+          ? selectedTemplate
+            ? "Starting..."
+            : copyFrom
+              ? "Copying..."
+              : "Creating..."
+          : "Go"}
       </Button>
+
+      {templatePickerOpen && (
+        <TemplatePickerSheet
+          onSelect={selectTemplate}
+          onClose={() => setTemplatePickerOpen(false)}
+        />
+      )}
     </div>
   );
 }
