@@ -1,8 +1,6 @@
 import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from "react";
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
-import { useQuery } from "@powersync/react";
-import { format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, Plus, MoreHorizontal } from "lucide-react";
 import {
   DndContext,
   closestCorners,
@@ -12,38 +10,24 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import type { DragEndEvent, DragOverEvent } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
-import type { Exercise, Workout, WorkoutSet, SetWithExerciseRow } from "@/lib/db/types";
-import { computeSessionStats, type StatItem } from "@/lib/session-stats";
-import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
-import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
-import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import type { Exercise, Template, TemplateSet } from "@/lib/db/types";
+import type { SessionType } from "@/lib/db/schema";
 import { sessionTypeColor } from "@/lib/session-type-color";
-import { sanitizeReturnHref } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
-import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
-import { SessionGuests } from "@/components/session-guests";
-import { ExerciseForm } from "@/routes/exercises/exercise-form";
-import { getWorkoutWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
-import { useAuth } from "@/lib/auth/auth-context";
-import { decodeProfile } from "@/lib/db/decoders";
-import type { ProfileRow } from "@/lib/db/schema";
-import { ExercisePicker } from "./exercise-picker";
-import { SetRows } from "./set-rows";
-import { CircuitRows } from "./circuit-rows";
-import { CalorieTray } from "./calorie-tray";
 import {
-  isCircuitGroup,
-  type DraftSet,
-  type ExerciseGroup,
-  type WorkoutItem,
-} from "./workout-editor-types";
+  createTemplate,
+  createTemplateFromWorkout,
+  saveTemplate,
+  deleteTemplate,
+} from "@/lib/mutations/templates";
+import { getTemplateWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
+import { ExerciseForm } from "@/routes/exercises/exercise-form";
+import { ExercisePicker } from "@/routes/log/exercise-picker";
+import { SetRows } from "@/routes/log/set-rows";
+import { CircuitRows } from "@/routes/log/circuit-rows";
+import { isCircuitGroup, type ExerciseGroup, type WorkoutItem } from "@/routes/log/workout-editor-types";
 import {
   ROOT,
   buildItemsFromSets,
@@ -53,16 +37,55 @@ import {
   flattenItems,
   insertExerciseIntoContainer,
   removeExerciseFromContainer,
-} from "./exercise-items";
+} from "@/routes/log/exercise-items";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function WorkoutEditorRoute() {
+const SESSION_TYPES: { value: SessionType; label: string }[] = [
+  { value: "workout", label: "Workout" },
+  { value: "stretch", label: "Stretch" },
+  { value: "sport", label: "Sport" },
+  { value: "lifestyle", label: "Other" },
+];
+
+// `/templates/new` — mints a template (blank, or a skeleton copied from a
+// session via ?fromWorkout=) then redirects to its editor. Mirrors how
+// `/log/new` creates a workout and forwards to `/log/:id`.
+export function NewTemplate() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const fromWorkout = searchParams.get("fromWorkout") ?? undefined;
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      try {
+        const id = fromWorkout
+          ? await createTemplateFromWorkout({ workoutId: fromWorkout })
+          : await createTemplate({ name: "Template", sessionType: "workout" });
+        navigate(`/templates/${id}`, { replace: true });
+      } catch (err) {
+        console.error("[new-template] failed to create template:", err);
+        navigate("/templates", { replace: true });
+      }
+    })();
+  }, [fromWorkout, navigate]);
+
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+    </div>
+  );
+}
+
+export function TemplateEditorRoute() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<
     | { state: "loading" }
     | { state: "not-found" }
-    | { state: "ready"; workout: Workout; sets: WorkoutSet[]; exercises: Exercise[] }
+    | { state: "ready"; template: Template; sets: TemplateSet[]; exercises: Exercise[] }
   >({ state: "loading" });
 
   useEffect(() => {
@@ -71,22 +94,22 @@ export function WorkoutEditorRoute() {
       return;
     }
     (async () => {
-      const workout = await getWorkoutWithSets(id);
-      if (!workout) {
+      const loaded = await getTemplateWithSets(id);
+      if (!loaded) {
         setData({ state: "not-found" });
         return;
       }
       const exercises = await getUserExercisesOrderedByLastLogged();
       setData({
         state: "ready",
-        workout: workout.workout,
-        sets: workout.sets,
+        template: loaded.template,
+        sets: loaded.sets,
         exercises,
       });
     })();
   }, [id]);
 
-  if (data.state === "not-found") return <Navigate to="/log" replace />;
+  if (data.state === "not-found") return <Navigate to="/templates" replace />;
   if (data.state === "loading") {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -96,85 +119,52 @@ export function WorkoutEditorRoute() {
   }
 
   return (
-    <WorkoutEditor
-      workout={data.workout}
-      formattedDate={format(parseISO(data.workout.performedOn), "EEE d MMM")}
-      initialSets={data.sets}
-      exercises={data.exercises}
-    />
+    <TemplateEditor template={data.template} initialSets={data.sets} exercises={data.exercises} />
   );
 }
 
 interface Props {
-  workout: Workout;
-  formattedDate: string;
-  initialSets: WorkoutSet[];
+  template: Template;
+  initialSets: TemplateSet[];
   exercises: Exercise[];
 }
 
-function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initialExercises }: Props) {
+function TemplateEditor({ template, initialSets, exercises: initialExercises }: Props) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  // `?from=…` lets the caller decide where Back returns. Friends feed passes
-  // `/friends` for own sessions opened there; Log-tab links omit it and
-  // fall through to the default `/log`.
-  const backHref = sanitizeReturnHref(searchParams.get("from")) ?? "/log";
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState(workout.name);
+  const [name, setName] = useState(template.name);
   const [isRenaming, setIsRenaming] = useState(false);
-  // Local copy of the exercises list so we can reflect inline edits (e.g.
-  // renaming or changing tracked metrics via the embedded ExerciseForm)
-  // without remounting the route.
+  const [sessionType, setSessionType] = useState<SessionType>(template.sessionType);
   const [exercises, setExercises] = useState(initialExercises);
   const [items, setItems] = useState<WorkoutItem[]>(() =>
     buildItemsFromSets(initialSets, initialExercises)
   );
-  const stats = useMemo(() => {
-    const statItems: StatItem[] = items.map((item) =>
-      isCircuitGroup(item)
-        ? {
-            type: "circuit",
-            rounds: item.rounds,
-            exercises: item.exercises.map((eg) => ({
-              sets: eg.sets,
-              doubleReps: eg.exercise.doubleReps,
-            })),
-          }
-        : {
-            type: "single",
-            exercise: { sets: item.sets, doubleReps: item.exercise.doubleReps },
-          }
-    );
-    return computeSessionStats(statItems);
-  }, [items]);
 
   const [picking, setPicking] = useState(false);
   const [pickingForCircuit, setPickingForCircuit] = useState<string | null>(null);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [receiptOpen, setReceiptOpen] = useState(false);
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
-  // Set when an exercise is added to the session so the editor scrolls down to
-  // the freshly-appended entry once it has rendered (rather than to the top).
   const scrollToBottomRef = useRef(false);
 
-  // Session-level calories. Gated on the user's "Enable calorie tracking"
-  // setting. Saved independently of the debounced set autosave, so we keep a
-  // local copy of the value to drive the pill without a refetch.
-  const { user } = useAuth();
-  const { data: profileRows } = useQuery<ProfileRow>(
-    `SELECT * FROM profiles WHERE id = ? LIMIT 1`,
-    [user?.id ?? ""]
-  );
-  const calorieTrackingEnabled =
-    profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
-  const [calories, setCalories] = useState(workout.calories);
-  const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
+  const stats = useMemo(() => {
+    let exerciseCount = 0;
+    let setCount = 0;
+    for (const item of items) {
+      if (isCircuitGroup(item)) {
+        for (const eg of item.exercises) {
+          exerciseCount++;
+          setCount += eg.sets.length;
+        }
+      } else {
+        exerciseCount++;
+        setCount += item.sets.length;
+      }
+    }
+    return { exerciseCount, setCount };
+  }, [items]);
 
-  // After adding an exercise, the picker view unmounts and the editor re-renders
-  // with the new entry appended. Scroll to it here, once it's in the DOM.
   useEffect(() => {
     if (!picking && !pickingForCircuit && scrollToBottomRef.current) {
       scrollToBottomRef.current = false;
@@ -182,82 +172,29 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     }
   }, [items, picking, pickingForCircuit]);
 
-  const { muscleGroups } = useUserFieldOptions();
-  const breakdown = useMemo(() => {
-    const rows: SetWithExerciseRow[] = [];
-    for (const item of items) {
-      if (isCircuitGroup(item)) {
-        for (const eg of item.exercises) {
-          for (const s of eg.sets) {
-            rows.push({
-              set: toWorkoutSet(s, eg.exerciseId, workout.id, workout.userId, workout.performedOn),
-              exercise: eg.exercise,
-              performedOn: workout.performedOn,
-              workoutId: workout.id,
-            });
-          }
-        }
-      } else {
-        for (const s of item.sets) {
-          rows.push({
-            set: toWorkoutSet(s, item.exerciseId, workout.id, workout.userId, workout.performedOn),
-            exercise: item.exercise,
-            performedOn: workout.performedOn,
-            workoutId: workout.id,
-          });
-        }
-      }
-    }
-    return computeExerciseBreakdown(rows, muscleGroups);
-  }, [items, muscleGroups, workout.id, workout.performedOn]);
-
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const titleRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const el = titleRef.current;
-    if (!el || isRenaming) return;
-
-    const fit = () => {
-      el.style.fontSize = "1.875rem";
-      const min = 14;
-      let size = 30;
-      while (el.scrollWidth > el.clientWidth && size > min) {
-        size--;
-        el.style.fontSize = `${size}px`;
-      }
-    };
-
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [name, isRenaming]);
-
+  // Debounced autosave — same 1s-after-last-change pattern as the workout editor.
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestStateRef = useRef({ name, items });
-
+  const latestStateRef = useRef({ name, sessionType, items });
   useEffect(() => {
-    latestStateRef.current = { name, items };
-  }, [name, items]);
+    latestStateRef.current = { name, sessionType, items };
+  }, [name, sessionType, items]);
 
   const buildSavePayload = useCallback(() => {
-    const { name: n, items: it } = latestStateRef.current;
+    const { name: n, sessionType: st, items: it } = latestStateRef.current;
     return {
-      id: workout.id,
-      name: n.trim() || "Workout",
-      performedOn: workout.performedOn,
-      notes: null,
+      id: template.id,
+      name: n.trim() || "Template",
+      sessionType: st,
       sets: flattenItems(it),
     };
-  }, [workout.id, workout.performedOn]);
+  }, [template.id]);
 
   const doSave = useCallback(() => {
     setError(null);
     const payload = buildSavePayload();
     startTransition(async () => {
       try {
-        await saveWorkout(payload);
+        await saveTemplate(payload);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save");
       }
@@ -270,7 +207,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [name, items, doSave]);
+  }, [name, sessionType, items, doSave]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
@@ -332,12 +269,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
     setItems((prev) => [
       ...prev,
-      {
-        groupKey: crypto.randomUUID(),
-        exerciseId: ex.id,
-        exercise: ex,
-        sets: [emptySet(ex)],
-      },
+      { groupKey: crypto.randomUUID(), exerciseId: ex.id, exercise: ex, sets: [emptySet(ex)] },
     ]);
     setPicking(false);
   }
@@ -345,12 +277,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   function addCircuit() {
     setItems((prev) => [
       ...prev,
-      {
-        groupKey: crypto.randomUUID(),
-        name: "Circuit",
-        rounds: 0,
-        exercises: [],
-      },
+      { groupKey: crypto.randomUUID(), name: "Circuit", rounds: 0, exercises: [] },
     ]);
   }
 
@@ -392,9 +319,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             ),
           };
         }
-        if (item.exerciseId === updated.id) {
-          return { ...item, exercise: updated };
-        }
+        if (item.exerciseId === updated.id) return { ...item, exercise: updated };
         return item;
       })
     );
@@ -402,7 +327,15 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
   function confirmRename() {
     setIsRenaming(false);
-    if (!name.trim()) setName(workout.name);
+    if (!name.trim()) setName(template.name);
+  }
+
+  function saveNow() {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveTemplate(buildSavePayload()).catch(() => {});
   }
 
   const isPickingForCircuit = pickingForCircuit !== null;
@@ -417,8 +350,6 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             addExerciseToCircuit(pickingForCircuit!, ex);
             window.scrollTo({ top: 0, behavior: "instant" });
           } else {
-            // addExercise appends to the bottom; the scroll-to-bottom effect
-            // takes us there once the editor re-renders with the new entry.
             addExercise(ex);
           }
         }}
@@ -448,14 +379,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     <div className="flex flex-col gap-4 pb-4">
       <header className="flex items-center gap-1 pt-4 pb-0">
         <Link
-          to={backHref}
-          onClick={() => {
-            if (saveTimerRef.current) {
-              clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = null;
-              saveWorkout(buildSavePayload()).catch(() => {});
-            }
-          }}
+          to="/templates"
+          onClick={saveNow}
           className="-ml-1 flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Back"
         >
@@ -465,7 +390,6 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         <div className="flex flex-1 min-w-0 items-center">
           {isRenaming ? (
             <Input
-              ref={renameInputRef}
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -477,54 +401,72 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             />
           ) : (
             <button
-              ref={titleRef}
               type="button"
               onClick={() => setIsRenaming(true)}
-              className="whitespace-nowrap overflow-hidden text-3xl font-semibold tracking-tight text-left w-full"
+              className="whitespace-nowrap overflow-hidden text-2xl font-semibold tracking-tight text-left w-full"
             >
-              {name || "Workout"}
+              {name || "Template"}
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0 ml-3">
-          <span className="text-base text-muted-foreground">{formattedDate}</span>
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
-            aria-label="Session options"
-          >
-            <MoreHorizontal className="h-5 w-5" />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setMenuOpen(true)}
+          className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:bg-muted flex-shrink-0 ml-3"
+          aria-label="Template options"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </button>
 
         {menuOpen && (
-          <WorkoutMenu
-            workoutId={workout.id}
+          <TemplateMenu
             onClose={() => setMenuOpen(false)}
-            onExport={() => setReceiptOpen(true)}
+            onCreateSession={() => {
+              saveNow();
+              navigate(`/log/new?template=${template.id}`);
+            }}
             onDelete={() => {
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
               startTransition(async () => {
-                await deleteWorkout(workout.id);
-                navigate("/log");
+                await deleteTemplate(template.id);
+                navigate("/templates");
               });
             }}
           />
         )}
-        {receiptOpen && (
-          <SessionReceiptSheet workoutId={workout.id} onClose={() => setReceiptOpen(false)} />
-        )}
       </header>
 
-      <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} editable />
+      <p className="text-sm text-muted-foreground">
+        A reusable template.
+        <br />
+        Add exercises and optionally pre-fill sets.
+      </p>
+
+      <div className="grid grid-cols-4 rounded-2xl border border-border overflow-hidden">
+        {SESSION_TYPES.map(({ value, label }, i) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setSessionType(value)}
+            className={`py-3 text-sm font-medium transition-colors ${
+              i > 0 ? "border-l border-border" : ""
+            } ${
+              sessionType === value
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted/50"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {items.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { value: stats.exercises, label: "exercises" },
-            { value: stats.totalSets, label: "sets" },
-            ...(stats.totalReps > 0 ? [{ value: stats.totalReps, label: "reps" }] : []),
+            { value: stats.exerciseCount, label: "exercises" },
+            { value: stats.setCount, label: "sets" },
           ].map(({ value, label }) => (
             <span
               key={label}
@@ -534,57 +476,10 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
               {label}
             </span>
           ))}
-          {calorieTrackingEnabled &&
-            (calories != null ? (
-              <button
-                type="button"
-                onClick={() => setCalorieTrayOpen(true)}
-                className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
-              >
-                <span className="font-semibold tabular-nums text-foreground/60">{calories}</span>
-                cals
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setCalorieTrayOpen(true)}
-                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground/70 hover:bg-muted/60"
-              >
-                + add cals
-              </button>
-            ))}
         </div>
       )}
 
-      {items.length > 0 && breakdown.totalExercises > 0 && (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setBreakdownOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30"
-            aria-expanded={breakdownOpen}
-          >
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Muscle groups
-            </span>
-            <div className="flex items-center gap-3">
-              {breakdownOpen && <MuscleLegend size="sm" />}
-              <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform ${
-                  breakdownOpen ? "rotate-180" : ""
-                }`}
-              />
-            </div>
-          </button>
-          {breakdownOpen && (
-            <div className="px-4 pb-4">
-              <MuscleGroupsBody data={breakdown} />
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(workout.sessionType)}`} />
+      <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(sessionType)}`} />
 
       <DndContext
         sensors={sensors}
@@ -592,17 +487,15 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext
-          items={items.map((g) => g.groupKey)}
-          strategy={verticalListSortingStrategy}
-        >
+        <SortableContext items={items.map((g) => g.groupKey)} strategy={verticalListSortingStrategy}>
           {items.map((item) => {
             if (isCircuitGroup(item)) {
               return (
                 <CircuitRows
                   key={item.groupKey}
                   circuit={item}
-                  workoutId={workout.id}
+                  workoutId={template.id}
+                  mode="template"
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
                   onAddExercise={() => {
@@ -620,7 +513,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
               <SetRows
                 key={item.groupKey}
                 group={item as ExerciseGroup}
-                workoutId={workout.id}
+                workoutId={template.id}
+                mode="template"
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
                 onEdit={() => {
@@ -654,65 +548,20 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {isPending && null}
-
-      {calorieTrayOpen && (
-        <CalorieTray
-          workoutId={workout.id}
-          current={calories}
-          onClose={() => setCalorieTrayOpen(false)}
-          onSaved={(value) => {
-            setCalories(value);
-            setCalorieTrayOpen(false);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function toWorkoutSet(
-  s: DraftSet,
-  exerciseId: string,
-  workoutId: string,
-  userId: string,
-  performedOn: string
-): WorkoutSet {
-  return {
-    id: s.id ?? "",
-    userId,
-    performedOn,
-    workoutId,
-    exerciseId,
-    position: 0,
-    reps: s.reps,
-    weightKg: s.weightKg,
-    distanceKm: s.distanceKm,
-    durationSec: s.durationSec,
-    resistance: s.resistance,
-    speedMs: s.speedMs,
-    inclinePct: s.inclinePct,
-    restSec: s.restSec,
-    calories: s.calories,
-    circuitId: null,
-    circuitRounds: null,
-    circuitName: null,
-  };
-}
-
-function WorkoutMenu({
-  workoutId,
+function TemplateMenu({
   onClose,
-  onExport,
+  onCreateSession,
   onDelete,
 }: {
-  workoutId: string;
   onClose: () => void;
-  onExport: () => void;
+  onCreateSession: () => void;
   onDelete: () => void;
 }) {
-  const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
-
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true));
     return () => cancelAnimationFrame(frame);
@@ -732,31 +581,11 @@ function WorkoutMenu({
             type="button"
             onClick={() => {
               onClose();
-              navigate(`/log/${workoutId}/edit?returnTo=/log/${workoutId}`);
+              onCreateSession();
             }}
             className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
           >
-            Edit details
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onExport();
-            }}
-            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
-          >
-            Export receipt
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              navigate(`/templates/new?fromWorkout=${workoutId}`);
-            }}
-            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
-          >
-            Save as Template
+            Create session from template
           </button>
           <button
             type="button"
@@ -766,11 +595,10 @@ function WorkoutMenu({
             }}
             className="w-full py-4 text-center text-base font-medium rounded-xl text-red-500 hover:bg-muted/50"
           >
-            Delete session
+            Delete template
           </button>
         </div>
       </div>
     </>
   );
 }
-

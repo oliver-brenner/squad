@@ -101,7 +101,40 @@ export type SessionGuest = {
   createdAt: string;
 };
 
+export type Template = {
+  id: string;
+  userId: string;
+  name: string;
+  sessionType: SessionType;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// A template's skeleton set. Mirrors WorkoutSet without the workout-bound
+// fields (workoutId, performedOn) — templates have no date.
+export type TemplateSet = {
+  id: string;
+  userId: string;
+  templateId: string;
+  exerciseId: string;
+  position: number;
+  reps: number | null;
+  weightKg: number | null;
+  distanceKm: number | null;
+  durationSec: number | null;
+  resistance: number | null;
+  speedMs: number | null;
+  inclinePct: number | null;
+  restSec: number | null;
+  calories: number | null;
+  circuitId: string | null;
+  circuitRounds: number | null;
+  circuitName: string | null;
+};
+
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };
+
+export type TemplateWithSets = { template: Template; sets: TemplateSet[] };
 
 export type ExerciseHistoryEntry = {
   workoutId: string;

@@ -20,6 +20,9 @@ interface Props {
   onUpdate: (next: ExerciseGroup) => void;
   onRemove: () => void;
   onEdit: () => void;
+  // "template" mode edits a template skeleton: no auto-prefill from history, no
+  // PB badges, no history list, and "See stats" returns to the template editor.
+  mode?: "workout" | "template";
 }
 
 type TrayState = {
@@ -28,7 +31,8 @@ type TrayState = {
   suggestion?: DraftSet | null;
 };
 
-export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props) {
+export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "workout" }: Props) {
+  const isTemplate = mode === "template";
   const navigate = useNavigate();
   const [tray, setTray] = useState<TrayState | null>(null);
   const lastLoggedRef = useRef<Array<{
@@ -66,6 +70,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
   });
 
   useEffect(() => {
+    if (isTemplate) return;
     let cancelled = false;
     getLastSessionSetsForExercise(group.exerciseId, workoutId)
       .then((last) => {
@@ -123,6 +128,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
   // Pull prior sets for this exercise (excluding the current workout) so we
   // can detect PBs hit by sets being logged right now.
   useEffect(() => {
+    if (isTemplate) return;
     let cancelled = false;
     getExerciseHistory(group.exerciseId, workoutId)
       .then((entries) => {
@@ -234,19 +240,25 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
               <Button variant="ghost" size="sm" onClick={openAddTray} className="flex-1">
                 <Plus className="h-4 w-4" /> Add set
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => setHistoryOpen((o) => !o)}
-                aria-label={historyOpen ? "Hide history" : "Show history"}
-                className="text-muted-foreground"
-              >
-                {historyOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </Button>
+              {!isTemplate && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setHistoryOpen((o) => !o)}
+                  aria-label={historyOpen ? "Hide history" : "Show history"}
+                  className="text-muted-foreground"
+                >
+                  {historyOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
 
-          {historyOpen && (
+          {!isTemplate && historyOpen && (
             <div className="border-t border-border">
               <ExerciseHistoryList
                 exerciseId={group.exerciseId}
@@ -274,7 +286,9 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit }: Props)
         <ExerciseMenu
           onViewStats={() => {
             setMenuOpen(false);
-            navigate(`/exercises/${group.exerciseId}?from=/log/${workoutId}`);
+            navigate(
+              `/exercises/${group.exerciseId}?from=${isTemplate ? "/templates" : "/log"}/${workoutId}`
+            );
           }}
           onEdit={() => {
             setMenuOpen(false);

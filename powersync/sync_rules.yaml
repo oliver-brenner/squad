@@ -40,6 +40,21 @@ bucket_definitions:
     data:
       - SELECT * FROM user_field_options WHERE user_id = bucket.user_id
 
+  # The user's session templates and their skeleton sets. Templates are
+  # private — there's no followee_* counterpart. user_id is denormalised onto
+  # template_sets so we bucket it directly (same as user_sets).
+  user_templates:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM templates WHERE user_id = bucket.user_id
+
+  user_template_sets:
+    parameters:
+      - SELECT request.user_id() as user_id
+    data:
+      - SELECT * FROM template_sets WHERE user_id = bucket.user_id
+
   # Guests tagged on the user's own sessions. user_id is the session owner
   # (denormalised on session_guests), so we bucket by it directly.
   user_session_guests:

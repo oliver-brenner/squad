@@ -17,6 +17,8 @@ import {
   decodeSet,
   decodeWorkout,
   decodeUserFieldOption,
+  decodeTemplate,
+  decodeTemplateSet,
 } from "./decoders";
 import type {
   ExerciseRow,
@@ -24,6 +26,8 @@ import type {
   WorkoutRow,
   WorkoutSetRow,
   UserFieldOptionRow,
+  TemplateRow,
+  TemplateSetRow,
 } from "./schema";
 import type {
   Exercise,
@@ -33,6 +37,7 @@ import type {
   WorkoutWithSets,
   ExerciseHistoryEntry,
   SetWithExerciseRow,
+  TemplateWithSets,
 } from "./types";
 import { computeHistoricalPBs, type PBType } from "@/lib/stats/set-pbs";
 import { formatSetSummary, type DistanceUnit } from "@/lib/set-format";
@@ -104,6 +109,22 @@ export async function getWorkoutWithSets(workoutId: string): Promise<WorkoutWith
     [workoutId]
   );
   return { workout: decodeWorkout(workoutRow), sets: setRows.map(decodeSet) };
+}
+
+// Loads a template (owner-only) and its ordered skeleton sets. Mirrors
+// getWorkoutWithSets; templates are private so callers pass their own id.
+export async function getTemplateWithSets(templateId: string): Promise<TemplateWithSets | null> {
+  const userId = await getCurrentUserId();
+  const row = await powersync.getOptional<TemplateRow>(
+    `SELECT * FROM templates WHERE id = ? AND user_id = ?`,
+    [templateId, userId]
+  );
+  if (!row) return null;
+  const setRows = await powersync.getAll<TemplateSetRow>(
+    `SELECT * FROM template_sets WHERE template_id = ? ORDER BY position ASC`,
+    [templateId]
+  );
+  return { template: decodeTemplate(row), sets: setRows.map(decodeTemplateSet) };
 }
 
 // Resolved guests for a session, ordered. On-Squad guests (guestProfileId set)

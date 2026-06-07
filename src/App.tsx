@@ -10,6 +10,8 @@ import { Settings } from "@/routes/settings/settings";
 import { FieldsEditor } from "@/routes/settings/fields-editor";
 import { Exercises } from "@/routes/exercises/exercises";
 import { ExerciseDetail } from "@/routes/exercises/exercise-detail";
+import { TemplatesList } from "@/routes/templates/templates-list";
+import { NewTemplate, TemplateEditorRoute } from "@/routes/templates/template-editor";
 import { Log } from "@/routes/log/log";
 import { NewSession } from "@/routes/log/new-session";
 import { EditSession } from "@/routes/log/edit-session";
@@ -35,6 +37,9 @@ const router = createBrowserRouter([
           { path: "/dashboard", element: <Dashboard /> },
           { path: "/exercises", element: <Exercises /> },
           { path: "/exercises/:id", element: <ExerciseDetail /> },
+          { path: "/templates", element: <TemplatesList /> },
+          { path: "/templates/new", element: <NewTemplate /> },
+          { path: "/templates/:id", element: <TemplateEditorRoute /> },
           { path: "/log", element: <Log /> },
           { path: "/log/new", element: <NewSession /> },
           { path: "/log/:id", element: <WorkoutEditorRoute /> },

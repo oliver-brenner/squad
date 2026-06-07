@@ -161,6 +161,54 @@ const session_guests = new Table(
   }
 );
 
+// Reusable session skeletons. A template owns a header (name, session_type)
+// and an ordered list of template_sets — the same shape as `sets` minus the
+// workout_id/performed_on a template can't have. Private to the owner.
+const templates = new Table(
+  {
+    user_id: column.text,
+    name: column.text,
+    session_type: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+  },
+  {
+    viewName: "templates",
+    indexes: {
+      user: ["user_id"],
+    },
+  }
+);
+
+const template_sets = new Table(
+  {
+    template_id: column.text,
+    // Denormalised owner id (mirrors templates.user_id) so the sync bucket can
+    // filter without joining templates — same pattern as `sets`.
+    user_id: column.text,
+    exercise_id: column.text,
+    position: column.integer,
+    reps: column.integer,
+    weight_kg: column.real,
+    distance_km: column.real,
+    duration_sec: column.integer,
+    resistance: column.integer,
+    speed_ms: column.real,
+    incline_pct: column.real,
+    rest_sec: column.integer,
+    calories: column.integer,
+    circuit_id: column.text,
+    circuit_rounds: column.integer,
+    circuit_name: column.text,
+  },
+  {
+    viewName: "template_sets",
+    indexes: {
+      template: ["template_id"],
+    },
+  }
+);
+
 export const AppSchema = new Schema({
   profiles,
   exercises,
@@ -169,6 +217,8 @@ export const AppSchema = new Schema({
   user_field_options,
   follows,
   session_guests,
+  templates,
+  template_sets,
 });
 
 // Raw row shapes as PowerSync stores them in local SQLite: snake_case,
@@ -183,5 +233,7 @@ export type WorkoutSetRow = Database["sets"];
 export type UserFieldOptionRow = Database["user_field_options"];
 export type FollowRow = Database["follows"];
 export type SessionGuestRow = Database["session_guests"];
+export type TemplateRow = Database["templates"];
+export type TemplateSetRow = Database["template_sets"];
 export type SessionType = "workout" | "stretch" | "sport" | "lifestyle";
 export type UserFieldKind = "category" | "equipment" | "muscle_group" | "muscle_child";
