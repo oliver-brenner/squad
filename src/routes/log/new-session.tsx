@@ -169,7 +169,6 @@ export function NewSession() {
       </header>
 
       <Input
-        autoFocus
         value={name}
         onChange={(e) => {
           setUserEditedName(true);

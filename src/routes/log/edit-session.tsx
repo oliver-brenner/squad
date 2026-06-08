@@ -121,7 +121,6 @@ export function EditSession() {
       </header>
 
       <Input
-        autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Name your session..."
