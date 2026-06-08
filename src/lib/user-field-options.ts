@@ -13,6 +13,7 @@ export type UserFieldOptions = {
   categories: FieldOption[];
   equipment: FieldOption[];
   muscleGroups: MuscleGroupNode[];
+  variations: FieldOption[];
 };
 
 export function expandMuscleFilter(

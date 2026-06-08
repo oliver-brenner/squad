@@ -20,6 +20,9 @@ export type ExerciseGroup = {
   exerciseId: string;
   exercise: Exercise;
   sets: DraftSet[];
+  // Variation key chosen for this exercise within the session (null = none).
+  // Group-level rather than per-set; flattened onto every set on save.
+  variation: string | null;
 };
 
 export type CircuitGroup = {

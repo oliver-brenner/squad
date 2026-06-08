@@ -24,7 +24,12 @@ type Ctx = {
 
 const FieldOptionsCtx = createContext<Ctx | null>(null);
 
-const EMPTY: UserFieldOptions = { categories: [], equipment: [], muscleGroups: [] };
+const EMPTY: UserFieldOptions = {
+  categories: [],
+  equipment: [],
+  muscleGroups: [],
+  variations: [],
+};
 
 // Reactive: re-renders whenever any synced user_field_options row changes
 // (own edits, remote updates streaming down from another device, or a new
@@ -111,6 +116,11 @@ function buildUserFieldOptions(
     .sort((a, b) => a.position - b.position)
     .map(toOption);
 
+  const variations = rows
+    .filter((r) => r.kind === "variation")
+    .sort((a, b) => a.position - b.position)
+    .map(toOption);
+
   const groupRows = rows
     .filter((r) => r.kind === "muscle_group")
     .sort((a, b) => a.position - b.position);
@@ -127,5 +137,5 @@ function buildUserFieldOptions(
     children: (childrenByParent.get(g.id) ?? []).sort((a, b) => a.position - b.position),
   }));
 
-  return { categories, equipment, muscleGroups };
+  return { categories, equipment, muscleGroups, variations };
 }

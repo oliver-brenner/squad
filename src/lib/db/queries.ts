@@ -500,6 +500,10 @@ export async function getUserFieldOptions() {
     .filter((r) => r.kind === "equipment")
     .sort((a, b) => a.position - b.position)
     .map((r) => ({ id: r.id, key: r.key, label: r.label, position: r.position }));
+  const variations = rows
+    .filter((r) => r.kind === "variation")
+    .sort((a, b) => a.position - b.position)
+    .map((r) => ({ id: r.id, key: r.key, label: r.label, position: r.position }));
 
   const groupRows = rows
     .filter((r) => r.kind === "muscle_group")
@@ -519,7 +523,7 @@ export async function getUserFieldOptions() {
     children: (childrenByParent.get(g.id) ?? []).sort((a, b) => a.position - b.position),
   }));
 
-  return { categories, equipment, muscleGroups };
+  return { categories, equipment, muscleGroups, variations };
 }
 
 // ----- Profile stats -----

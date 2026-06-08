@@ -22,6 +22,7 @@ const setInputSchema = z.object({
   circuitId: z.string().uuid().nullable().optional(),
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
+  variation: z.string().min(1).max(80).nullable().optional(),
 });
 
 const workoutInputSchema = z.object({
@@ -63,8 +64,8 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
@@ -85,6 +86,7 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           s.circuitId ?? null,
           s.circuitRounds ?? null,
           s.circuitName ?? null,
+          s.variation ?? null,
         ]
       );
     }
@@ -288,6 +290,7 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
       circuit_id: string | null;
       circuit_rounds: number | null;
       circuit_name: string | null;
+      variation: string | null;
     }>(`SELECT * FROM sets WHERE workout_id = ? ORDER BY position`, [parsed.sourceId]);
 
     for (const s of sourceSets) {
@@ -296,8 +299,8 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -318,6 +321,7 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
           s.circuit_id,
           s.circuit_rounds,
           s.circuit_name,
+          s.variation,
         ]
       );
     }
@@ -444,8 +448,8 @@ export async function copyFriendSession(
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           uuid(),
           myUserId,
@@ -466,6 +470,7 @@ export async function copyFriendSession(
           myCircuitId,
           s.circuit_rounds,
           s.circuit_name,
+          s.variation,
         ]
       );
     }

@@ -3,6 +3,7 @@ import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 import { PBBadges } from "@/components/pb-badge";
+import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -84,6 +85,13 @@ export function ExerciseHistoryList({
   futureSets,
 }: Props) {
   const [entries, setEntries] = useState<ExerciseHistoryEntry[] | null>(initialEntries ?? null);
+  // Resolve variation keys to labels against the exercise OWNER's options, so a
+  // friend's exercise detail shows their variation names as they named them.
+  const { variations } = useUserFieldOptionsForUser(exercise.userId);
+  const variationLabels = useMemo(
+    () => new Map(variations.map((v) => [v.key, v.label])),
+    [variations]
+  );
 
   useEffect(() => {
     if (initialEntries) return;
@@ -118,10 +126,18 @@ export function ExerciseHistoryList({
           <p className="text-sm text-muted-foreground text-center py-6">No history yet.</p>
         ) : (
           <div className="flex flex-col divide-y divide-border">
-            {entries.map((entry) => (
+            {entries.map((entry) => {
+              const variationKey = entry.sets.find((s) => s.variation)?.variation ?? null;
+              const variationLabel = variationKey
+                ? variationLabels.get(variationKey) ?? null
+                : null;
+              return (
               <div key={entry.workoutId} className="px-3 py-2.5 flex flex-col gap-1">
                 <span className="text-xs font-medium text-muted-foreground">
                   {formatDate(entry.performedOn)}
+                  {variationLabel && (
+                    <span className="text-primary">{" · "}{variationLabel}</span>
+                  )}
                 </span>
                 {entry.sets.map((s, i) => {
                   const pbs = pbsBySetId.get(s.id);
@@ -146,7 +162,8 @@ export function ExerciseHistoryList({
                   );
                 })}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

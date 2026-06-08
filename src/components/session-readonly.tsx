@@ -6,6 +6,7 @@ import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { PBType } from "@/lib/stats/set-pbs";
 import { formatSetSummary, type DistanceUnit } from "@/lib/set-format";
+import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 
 export type PBMap = Map<string, PBType[]>;
 
@@ -141,6 +142,28 @@ export function SessionReadOnlyItems({
   );
 }
 
+// Resolves the variation key carried on a session's sets to the exercise
+// OWNER's label, so a friend's variation shows up exactly as they named it.
+// Renders nothing when no variation was attached or the key is unknown.
+function VariationBadge({
+  exercise,
+  sets,
+}: {
+  exercise: Exercise;
+  sets: WorkoutSet[];
+}) {
+  const { variations } = useUserFieldOptionsForUser(exercise.userId);
+  const key = sets.find((s) => s.variation)?.variation ?? null;
+  if (!key) return null;
+  const label = variations.find((v) => v.key === key)?.label;
+  if (!label) return null;
+  return (
+    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+      {label}
+    </span>
+  );
+}
+
 function ExerciseCard({
   item,
   pbsBySetId,
@@ -155,7 +178,10 @@ function ExerciseCard({
     <Card>
       <div className="flex items-start gap-3 p-3">
         <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-          <span className="font-medium">{ex?.name ?? "Unknown exercise"}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{ex?.name ?? "Unknown exercise"}</span>
+            {ex && <VariationBadge exercise={ex} sets={item.sets} />}
+          </div>
           {ex && (
             <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
               <ExerciseMetaTags e={ex} />
@@ -255,9 +281,12 @@ function CircuitExerciseRow({
   return (
     <div className="flex items-start gap-2 rounded-md px-1 py-1.5">
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className="text-sm font-medium">
-          {eg.exercise?.name ?? "Unknown exercise"}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">
+            {eg.exercise?.name ?? "Unknown exercise"}
+          </span>
+          {eg.exercise && <VariationBadge exercise={eg.exercise} sets={eg.sets} />}
+        </div>
         {eg.exercise && (
           <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
             <ExerciseMetaTags e={eg.exercise} />

@@ -91,7 +91,12 @@ interface Props {
 }
 
 export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
-  const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
+  const {
+    categories,
+    equipment: equipmentOptions,
+    muscleGroups,
+    variations,
+  } = useUserFieldOptions();
   const location = useLocation();
   // The form is rendered inline (no dedicated URL), so to come back to it
   // after a Customise-fields trip we encode the editing target in `?open=`.
@@ -111,6 +116,9 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
     new Set(exercise?.categories ?? [])
   );
   const [equipment, setEquipment] = useState<string | null>(exercise?.equipment ?? null);
+  const [selectedVariations, setSelectedVariations] = useState<Set<string>>(
+    new Set(exercise?.variations ?? [])
+  );
   const [muscleMap, setMuscleMap] = useState<Map<string, "primary" | "secondary">>(() => {
     const map = new Map<string, "primary" | "secondary">();
     for (const m of exercise?.muscles ?? []) map.set(m, "primary");
@@ -190,6 +198,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               .map(([k]) => k);
             return s.length > 0 ? s : null;
           })(),
+          variations: selectedVariations.size > 0 ? Array.from(selectedVariations) : null,
         };
         if (exercise) {
           await updateExercise(exercise.id, input);
@@ -279,6 +288,35 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Exercise variations</Label>
+            {variations.length === 0 ? (
+              <p className="text-xs text-muted-foreground -mt-1">
+                No variations in your library. Add them using 'Customise fields'.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {variations.map((v) => (
+                  <Button
+                    key={v.id}
+                    type="button"
+                    size="sm"
+                    variant={selectedVariations.has(v.key) ? "default" : "secondary"}
+                    onClick={() =>
+                      setSelectedVariations((prev) => {
+                        const next = new Set(prev);
+                        next.has(v.key) ? next.delete(v.key) : next.add(v.key);
+                        return next;
+                      })
+                    }
+                  >
+                    {v.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

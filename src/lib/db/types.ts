@@ -38,6 +38,7 @@ export type Exercise = {
   trackRpe: boolean;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
+  variations: string[] | null;
   createdAt: string;
 };
 
@@ -73,12 +74,13 @@ export type WorkoutSet = {
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
+  variation: string | null;
 };
 
 export type UserFieldOption = {
   id: string;
   userId: string;
-  kind: "category" | "equipment" | "muscle_group" | "muscle_child";
+  kind: "category" | "equipment" | "muscle_group" | "muscle_child" | "variation";
   parentId: string | null;
   key: string;
   label: string;
@@ -133,6 +135,7 @@ export type TemplateSet = {
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
+  variation: string | null;
 };
 
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };

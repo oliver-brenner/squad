@@ -63,6 +63,7 @@ export function decodeExercise(r: ExerciseRow): Exercise {
     trackRpe: bool(r.track_rpe),
     muscles: arr(r.muscles),
     secondaryMuscles: arr(r.secondary_muscles),
+    variations: arr(r.variations),
     createdAt: r.created_at ?? "",
   };
 }
@@ -102,6 +103,7 @@ export function decodeSet(r: WorkoutSetRow): WorkoutSet {
     circuitId: r.circuit_id,
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
+    variation: r.variation,
   };
 }
 
@@ -161,6 +163,7 @@ export function decodeTemplateSet(r: TemplateSetRow): TemplateSet {
     circuitId: r.circuit_id,
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
+    variation: r.variation,
   };
 }
 

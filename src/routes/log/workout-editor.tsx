@@ -337,6 +337,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         exerciseId: ex.id,
         exercise: ex,
         sets: [emptySet(ex)],
+        variation: null,
       },
     ]);
     setPicking(false);
@@ -365,6 +366,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
           exerciseId: ex.id,
           exercise: ex,
           sets: [emptySet(ex)],
+          variation: null,
         };
         return { ...item, exercises: [...item.exercises, newEg] };
       })
@@ -697,6 +699,7 @@ function toWorkoutSet(
     circuitId: null,
     circuitRounds: null,
     circuitName: null,
+    variation: null,
   };
 }
 

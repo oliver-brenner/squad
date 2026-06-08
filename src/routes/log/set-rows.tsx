@@ -13,6 +13,7 @@ import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { VariationControl } from "./variation-control";
 
 interface Props {
   group: ExerciseGroup;
@@ -211,21 +212,31 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     <>
       <div ref={setNodeRef} style={dragStyle} {...attributes} {...listeners}>
         <Card>
-          <div className="flex items-center gap-3 p-3">
-            <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-              <span className="font-medium">{ex.name}</span>
+          <div className="flex items-start gap-3 p-3">
+            <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+              <div className="flex items-start gap-2">
+                <span className="font-medium break-words min-w-0 flex-1">{ex.name}</span>
+                {!isTemplate && (
+                  <VariationControl
+                    group={group}
+                    onChange={(variation) => onUpdate({ ...group, variation })}
+                  />
+                )}
+              </div>
               <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
                 <ExerciseMetaTags e={ex} />
               </span>
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setMenuOpen(true)}
-              aria-label="Exercise options"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+            <span className="inline-flex h-6 shrink-0 items-center">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setMenuOpen(true)}
+                aria-label="Exercise options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </span>
           </div>
 
           <div className="px-3 pb-3 flex flex-col gap-0.5">

@@ -44,6 +44,9 @@ const exercises = new Table(
     track_rpe: column.integer,
     muscles: column.text,
     secondary_muscles: column.text,
+    // JSON-encoded text[] of variation keys attached to this exercise; decode
+    // /encode in the data layer like categories/muscles.
+    variations: column.text,
     created_at: column.text,
   },
   {
@@ -99,6 +102,10 @@ const sets = new Table(
     circuit_id: column.text,
     circuit_rounds: column.integer,
     circuit_name: column.text,
+    // Single variation key (references a user_field_options row of kind
+    // 'variation') chosen for this exercise within the session. Denormalised
+    // across every set of the exercise group, mirroring circuit_name.
+    variation: column.text,
   },
   {
     viewName: "sets",
@@ -203,6 +210,8 @@ const template_sets = new Table(
     circuit_id: column.text,
     circuit_rounds: column.integer,
     circuit_name: column.text,
+    // Variation key carried by the template skeleton; mirrors sets.variation.
+    variation: column.text,
   },
   {
     viewName: "template_sets",
@@ -239,4 +248,9 @@ export type SessionGuestRow = Database["session_guests"];
 export type TemplateRow = Database["templates"];
 export type TemplateSetRow = Database["template_sets"];
 export type SessionType = "workout" | "stretch" | "sport" | "lifestyle";
-export type UserFieldKind = "category" | "equipment" | "muscle_group" | "muscle_child";
+export type UserFieldKind =
+  | "category"
+  | "equipment"
+  | "muscle_group"
+  | "muscle_child"
+  | "variation";

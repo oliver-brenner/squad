@@ -47,6 +47,7 @@ export function FieldsEditor() {
   const [categories, setCategories] = useState<FieldOption[]>(initial.categories);
   const [equipment, setEquipment] = useState<FieldOption[]>(initial.equipment);
   const [muscleGroups, setMuscleGroups] = useState<MuscleGroupNode[]>(initial.muscleGroups);
+  const [variations, setVariations] = useState<FieldOption[]>(initial.variations);
 
   // Router preserves scroll position across navigations, which lands the user
   // at the bottom of the page when they arrive from the in-form button. Pop
@@ -64,6 +65,9 @@ export function FieldsEditor() {
   useEffect(() => {
     setMuscleGroups(initial.muscleGroups);
   }, [initial.muscleGroups]);
+  useEffect(() => {
+    setVariations(initial.variations);
+  }, [initial.variations]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -86,6 +90,12 @@ export function FieldsEditor() {
       <FlatSection title="Categories" kind="category" items={categories} onChange={setCategories} />
       <FlatSection title="Equipment" kind="equipment" items={equipment} onChange={setEquipment} />
       <MuscleSection groups={muscleGroups} onChange={setMuscleGroups} />
+      <FlatSection
+        title="Exercise variations"
+        kind="variation"
+        items={variations}
+        onChange={setVariations}
+      />
     </div>
   );
 }
@@ -97,7 +107,7 @@ function FlatSection({
   onChange,
 }: {
   title: string;
-  kind: "category" | "equipment";
+  kind: "category" | "equipment" | "variation";
   items: FieldOption[];
   onChange: (next: FieldOption[]) => void;
 }) {
