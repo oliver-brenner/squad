@@ -23,8 +23,11 @@ const BOOLEAN_COLUMNS: Record<string, readonly string[]> = {
 };
 
 // Columns that PowerSync stores as JSON-encoded TEXT but Postgres expects as text[].
+// IMPORTANT: any new text[] column added to the schema MUST be listed here, or
+// its upload sends a raw JSON string to a text[] column, which Postgres rejects.
+// A rejected op throws below and blocks the whole FIFO upload queue behind it.
 const ARRAY_COLUMNS: Record<string, readonly string[]> = {
-  exercises: ["categories", "muscles", "secondary_muscles"],
+  exercises: ["categories", "muscles", "secondary_muscles", "variations"],
 };
 
 function encodeForPostgres(table: string, data: Record<string, unknown>): Record<string, unknown> {
