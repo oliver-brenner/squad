@@ -57,8 +57,10 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     incline_unit: r.ex_incline_unit,
     track_rest: r.ex_track_rest,
     track_calories: null,
+    track_rpe: null,
     muscles: r.ex_muscles,
     secondary_muscles: r.ex_secondary_muscles,
+    variations: null,
     created_at: r.ex_created_at,
   };
 }

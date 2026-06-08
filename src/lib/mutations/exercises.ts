@@ -29,8 +29,10 @@ const exerciseSchema = z.object({
   inclineUnit: z.enum(["pct", "setting"]).nullable().optional(),
   trackRest: z.boolean(),
   trackCalories: z.boolean(),
+  trackRpe: z.boolean(),
   muscles: z.array(z.string()).nullable().optional(),
   secondaryMuscles: z.array(z.string()).nullable().optional(),
+  variations: z.array(z.string().min(1).max(80)).nullable().optional(),
 });
 
 export async function createExercise(input: z.infer<typeof exerciseSchema>): Promise<string> {
@@ -45,9 +47,9 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
-      track_incline, incline_unit, track_rest, track_calories,
-      muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+      track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      muscles, secondary_muscles, variations, created_at
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
     [
       id,
       userId,
@@ -69,8 +71,10 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       data.inclineUnit ?? null,
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
+      boolInt(data.trackRpe),
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
+      arrStr(data.variations ?? null),
       now,
     ]
   );
@@ -90,8 +94,8 @@ export async function updateExercise(
       is_bodyweight = ?, include_bodyweight = ?, track_reps = ?, default_weight_kg = ?, double_reps = ?,
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
-      track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?,
-      muscles = ?, secondary_muscles = ?
+      track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?, track_rpe = ?,
+      muscles = ?, secondary_muscles = ?, variations = ?
      WHERE id = ? AND user_id = ?`,
     [
       data.name,
@@ -112,8 +116,10 @@ export async function updateExercise(
       data.inclineUnit ?? null,
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
+      boolInt(data.trackRpe),
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
+      arrStr(data.variations ?? null),
       id,
       userId,
     ]
@@ -260,6 +266,12 @@ export async function copyExerciseInTx(
     );
   }
 
+  // Variations — flat keys, just ensure each exists in my options too.
+  for (const k of source.variations ?? []) {
+    const f = pickFriendOption(friendByKey, k, "variation");
+    await ensureMineHasOption(tx, myUserId, "variation", k, f?.label ?? k, null);
+  }
+
   // Insert the exercise. Tag keys are preserved verbatim — the ensure calls
   // above guarantee each key now exists in my options too.
   const newId = uuid();
@@ -269,9 +281,9 @@ export async function copyExerciseInTx(
       is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
-      track_incline, incline_unit, track_rest, track_calories,
-      muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+      track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      muscles, secondary_muscles, variations, created_at
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -293,8 +305,10 @@ export async function copyExerciseInTx(
       source.inclineUnit ?? null,
       boolInt(source.trackRest),
       boolInt(source.trackCalories),
+      boolInt(source.trackRpe),
       arrStr(source.muscles ?? null),
       arrStr(source.secondaryMuscles ?? null),
+      arrStr(source.variations ?? null),
       nowISO(),
     ]
   );

@@ -14,6 +14,7 @@ import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } f
 import { SetTray } from "./set-rows";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { VariationControl } from "./variation-control";
 
 interface Props {
   circuit: CircuitGroup;
@@ -95,6 +96,7 @@ export function CircuitRows({
           inclinePct: r.set.inclinePct,
           restSec: r.set.restSec,
           calories: r.set.calories,
+          rpe: r.set.rpe,
         });
       }
 
@@ -114,7 +116,8 @@ export function CircuitRows({
           s.resistance != null ||
           s.speedMs != null ||
           s.inclinePct != null ||
-          s.restSec != null
+          s.restSec != null ||
+          s.rpe != null
         )
           return eg;
         if (
@@ -125,7 +128,8 @@ export function CircuitRows({
           cached.resistance == null &&
           cached.speedMs == null &&
           cached.inclinePct == null &&
-          cached.restSec == null
+          cached.restSec == null &&
+          cached.rpe == null
         )
           return eg;
         changed = true;
@@ -142,6 +146,7 @@ export function CircuitRows({
               speedMs: cached.speedMs,
               inclinePct: cached.inclinePct,
               restSec: cached.restSec,
+              rpe: cached.rpe,
             },
           ],
         };
@@ -190,7 +195,8 @@ export function CircuitRows({
       draft.resistance == null &&
       draft.speedMs == null &&
       draft.inclinePct == null &&
-      draft.restSec == null;
+      draft.restSec == null &&
+      draft.rpe == null;
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
     setActiveTray({ exIdx, draft, suggestion: isEmptyDraft ? cached : null });
@@ -212,6 +218,13 @@ export function CircuitRows({
       return;
     }
     onUpdate({ ...circuit, exercises: next });
+  }
+
+  function setExerciseVariation(exIdx: number, variation: string | null) {
+    const nextExercises = circuit.exercises.map((eg, i) =>
+      i === exIdx ? { ...eg, variation } : eg
+    );
+    onUpdate({ ...circuit, exercises: nextExercises });
   }
 
   return (
@@ -320,6 +333,7 @@ export function CircuitRows({
                   onClick={() => openSetTray(i)}
                   onRemove={() => removeExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
+                  onChangeVariation={(v) => setExerciseVariation(i, v)}
                 />
               ))}
             </SortableContext>
@@ -372,6 +386,7 @@ function CircuitExerciseRow({
   onClick,
   onRemove,
   onEdit,
+  onChangeVariation,
 }: {
   exGroup: ExerciseGroup;
   workoutId: string;
@@ -379,6 +394,7 @@ function CircuitExerciseRow({
   onClick: () => void;
   onRemove: () => void;
   onEdit: () => void;
+  onChangeVariation: (variation: string | null) => void;
 }) {
   const navigate = useNavigate();
   const isTemplate = mode === "template";
@@ -436,7 +452,8 @@ function CircuitExerciseRow({
       set.resistance != null ||
       set.speedMs != null ||
       set.inclinePct != null ||
-      set.restSec != null);
+      set.restSec != null ||
+      set.rpe != null);
 
   return (
     <>
@@ -447,9 +464,22 @@ function CircuitExerciseRow({
         {...listeners}
         className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/50"
       >
-        <button type="button" onClick={onClick} className="flex-1 text-left min-w-0">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium">{exGroup.exercise.name}</span>
+        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onClick}
+              className="text-left text-sm font-medium min-w-0"
+            >
+              {exGroup.exercise.name}
+            </button>
+            <VariationControl group={exGroup} onChange={onChangeVariation} />
+          </div>
+          <button
+            type="button"
+            onClick={onClick}
+            className="text-left min-w-0 flex flex-col gap-0.5"
+          >
             <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
               <ExerciseMetaTags e={exGroup.exercise} />
             </span>
@@ -459,8 +489,8 @@ function CircuitExerciseRow({
                 <PBBadges types={pbs} />
               </p>
             )}
-          </div>
-        </button>
+          </button>
+        </div>
         <div className="flex flex-col items-center shrink-0">
           <button
             type="button"
@@ -540,6 +570,7 @@ function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
       ex.inclineUnit === "setting" ? `${set.inclinePct} incline` : `${set.inclinePct}%`
     );
   }
+  if (ex.trackRpe && set.rpe != null) parts.push(`RPE ${set.rpe}`);
   return parts.join(" · ") || "—";
 }
 
@@ -647,5 +678,6 @@ function makeEmptyDraft(exerciseId: string): DraftSet {
     inclinePct: null,
     restSec: null,
     calories: null,
+    rpe: null,
   };
 }

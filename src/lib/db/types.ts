@@ -35,8 +35,10 @@ export type Exercise = {
   inclineUnit: string | null;
   trackRest: boolean;
   trackCalories: boolean;
+  trackRpe: boolean;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
+  variations: string[] | null;
   createdAt: string;
 };
 
@@ -68,15 +70,17 @@ export type WorkoutSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
+  variation: string | null;
 };
 
 export type UserFieldOption = {
   id: string;
   userId: string;
-  kind: "category" | "equipment" | "muscle_group" | "muscle_child";
+  kind: "category" | "equipment" | "muscle_group" | "muscle_child" | "variation";
   parentId: string | null;
   key: string;
   label: string;
@@ -127,9 +131,11 @@ export type TemplateSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
+  variation: string | null;
 };
 
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };

@@ -149,21 +149,22 @@ function SessionRow({
         <div className="text-xs text-muted-foreground">
           {session.exerciseNames.map((n) => n.toLowerCase()).join(" · ")}
         </div>
-        {showPills && (
+        {(showPills || session.calories != null) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-            {[
-              { value: session.totalExercises, label: "exercises" },
-              { value: session.totalSets, label: "sets" },
-              { value: session.totalReps, label: "reps" },
-            ].map(({ value, label }) => (
-              <span
-                key={label}
-                className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
-              >
-                <span className="font-semibold tabular-nums text-foreground/60">{value}</span>
-                {label}
-              </span>
-            ))}
+            {showPills &&
+              [
+                { value: session.totalExercises, label: "exercises" },
+                { value: session.totalSets, label: "sets" },
+                { value: session.totalReps, label: "reps" },
+              ].map(({ value, label }) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
+                >
+                  <span className="font-semibold tabular-nums text-foreground/60">{value}</span>
+                  {label}
+                </span>
+              ))}
             {session.calories != null && (
               <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70">
                 <span className="font-semibold tabular-nums text-foreground/60">

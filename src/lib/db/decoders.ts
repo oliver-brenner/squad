@@ -60,8 +60,10 @@ export function decodeExercise(r: ExerciseRow): Exercise {
     inclineUnit: r.incline_unit,
     trackRest: bool(r.track_rest),
     trackCalories: bool(r.track_calories),
+    trackRpe: bool(r.track_rpe),
     muscles: arr(r.muscles),
     secondaryMuscles: arr(r.secondary_muscles),
+    variations: arr(r.variations),
     createdAt: r.created_at ?? "",
   };
 }
@@ -97,9 +99,11 @@ export function decodeSet(r: WorkoutSetRow): WorkoutSet {
     inclinePct: r.incline_pct,
     restSec: r.rest_sec,
     calories: r.calories,
+    rpe: r.rpe,
     circuitId: r.circuit_id,
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
+    variation: r.variation,
   };
 }
 
@@ -155,9 +159,11 @@ export function decodeTemplateSet(r: TemplateSetRow): TemplateSet {
     inclinePct: r.incline_pct,
     restSec: r.rest_sec,
     calories: r.calories,
+    rpe: r.rpe,
     circuitId: r.circuit_id,
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
+    variation: r.variation,
   };
 }
 

@@ -20,7 +20,8 @@ type Metric =
   | "resistance"
   | "distance"
   | "rest"
-  | "calories";
+  | "calories"
+  | "rpe";
 type DistanceUnit = "m" | "km" | "yd";
 type TimeUnit = "h" | "min" | "sec";
 type InclineUnit = "pct" | "setting";
@@ -58,7 +59,14 @@ const METRICS: Metric[] = [
   "distance",
   "rest",
   "calories",
+  "rpe",
 ];
+
+// Most metric chips capitalize their key for display; a few need an explicit
+// label where simple capitalization reads wrong (e.g. "Rpe" → "RPE").
+const METRIC_LABELS: Partial<Record<Metric, string>> = {
+  rpe: "RPE",
+};
 
 function deriveMetrics(exercise: Exercise): Set<Metric> {
   const m = new Set<Metric>();
@@ -71,6 +79,7 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.distanceUnit) m.add("distance");
   if (exercise.trackRest) m.add("rest");
   if (exercise.trackCalories) m.add("calories");
+  if (exercise.trackRpe) m.add("rpe");
   return m;
 }
 
@@ -82,7 +91,12 @@ interface Props {
 }
 
 export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
-  const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
+  const {
+    categories,
+    equipment: equipmentOptions,
+    muscleGroups,
+    variations,
+  } = useUserFieldOptions();
   const location = useLocation();
   // The form is rendered inline (no dedicated URL), so to come back to it
   // after a Customise-fields trip we encode the editing target in `?open=`.
@@ -102,6 +116,9 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
     new Set(exercise?.categories ?? [])
   );
   const [equipment, setEquipment] = useState<string | null>(exercise?.equipment ?? null);
+  const [selectedVariations, setSelectedVariations] = useState<Set<string>>(
+    new Set(exercise?.variations ?? [])
+  );
   const [muscleMap, setMuscleMap] = useState<Map<string, "primary" | "secondary">>(() => {
     const map = new Map<string, "primary" | "secondary">();
     for (const m of exercise?.muscles ?? []) map.set(m, "primary");
@@ -168,6 +185,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           inclineUnit: metrics.has("incline") ? inclineUnit : null,
           trackRest: metrics.has("rest"),
           trackCalories: metrics.has("calories"),
+          trackRpe: metrics.has("rpe"),
           muscles: (() => {
             const p = [...muscleMap.entries()]
               .filter(([, v]) => v === "primary")
@@ -180,6 +198,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               .map(([k]) => k);
             return s.length > 0 ? s : null;
           })(),
+          variations: selectedVariations.size > 0 ? Array.from(selectedVariations) : null,
         };
         if (exercise) {
           await updateExercise(exercise.id, input);
@@ -269,6 +288,35 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Exercise variations</Label>
+            {variations.length === 0 ? (
+              <p className="text-xs text-muted-foreground -mt-1">
+                No variations in your library. Add them using 'Customise fields'.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {variations.map((v) => (
+                  <Button
+                    key={v.id}
+                    type="button"
+                    size="sm"
+                    variant={selectedVariations.has(v.key) ? "default" : "secondary"}
+                    onClick={() =>
+                      setSelectedVariations((prev) => {
+                        const next = new Set(prev);
+                        next.has(v.key) ? next.delete(v.key) : next.add(v.key);
+                        return next;
+                      })
+                    }
+                  >
+                    {v.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
@@ -397,7 +445,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   onClick={() => toggleMetric(m)}
                   className="capitalize"
                 >
-                  {m}
+                  {METRIC_LABELS[m] ?? m}
                 </Button>
               ))}
             </div>

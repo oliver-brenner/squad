@@ -269,7 +269,13 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
     setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
     setItems((prev) => [
       ...prev,
-      { groupKey: crypto.randomUUID(), exerciseId: ex.id, exercise: ex, sets: [emptySet(ex)] },
+      {
+        groupKey: crypto.randomUUID(),
+        exerciseId: ex.id,
+        exercise: ex,
+        sets: [emptySet(ex)],
+        variation: null,
+      },
     ]);
     setPicking(false);
   }
@@ -292,6 +298,7 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
           exerciseId: ex.id,
           exercise: ex,
           sets: [emptySet(ex)],
+          variation: null,
         };
         return { ...item, exercises: [...item.exercises, newEg] };
       })

@@ -22,6 +22,7 @@ export type SessionExportSet = {
   speedMs: number | null;
   inclinePct: number | null;
   restSec: number | null;
+  rpe: number | null;
 };
 
 export type SessionExportExercise = {
@@ -139,6 +140,7 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
       speedMs: s.speed_ms,
       inclinePct: s.incline_pct,
       restSec: s.rest_sec,
+      rpe: s.rpe,
     };
 
     if (s.circuit_id) {

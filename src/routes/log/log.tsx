@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
-import { Plus } from "lucide-react";
+import { Plus, LayoutTemplate, ChevronRight } from "lucide-react";
 import { getRecentWorkoutsWithExercises, type WorkoutWithExercises } from "@/lib/db/queries";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card } from "@/components/ui/card";
@@ -21,13 +21,22 @@ export function Log() {
     <>
       <PageHeader title="Log" description="Your training sessions." />
 
-      <div className="pt-2 pb-6">
+      <div className="pt-2 pb-4">
         <Link to="/log/new" className="block w-full">
           <Button className="w-full" size="lg">
             <Plus className="h-4 w-4 mr-1" /> New session
           </Button>
         </Link>
       </div>
+
+      <Link
+        to="/templates"
+        className="mb-6 flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
+      >
+        <LayoutTemplate className="h-4 w-4" />
+        <span className="flex-1">Templates</span>
+        <ChevronRight className="h-4 w-4" />
+      </Link>
 
       {sessions === null ? (
         <div className="py-8 flex justify-center">

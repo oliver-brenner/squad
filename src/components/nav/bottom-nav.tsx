@@ -5,10 +5,10 @@ import { BarbellIcon } from "@/components/exercise-meta";
 
 const items = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/log", label: "Log", icon: List },
-  // Templates live under the Exercises tab (reached from it), so keep Exercises
+  // Templates live under the Log tab (reached from it), so keep Log
   // highlighted while on any /templates route.
-  { href: "/exercises", label: "Exercises", icon: BarbellIcon, also: ["/templates"] },
+  { href: "/log", label: "Log", icon: List, also: ["/templates"] },
+  { href: "/exercises", label: "Exercises", icon: BarbellIcon },
   { href: "/friends", label: "Squad", icon: Users },
   { href: "/you", label: "You", icon: User },
 ] as const;

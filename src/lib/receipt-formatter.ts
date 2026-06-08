@@ -94,6 +94,7 @@ function buildSetTable(sets: SessionExportSet[], extraIndent = "", defaultWeight
   const hasSpeed = sets.some((s) => s.speedMs !== null);
   const hasIncline = sets.some((s) => s.inclinePct !== null);
   const hasRest = sets.some((s) => s.restSec !== null);
+  const hasRpe = sets.some((s) => s.rpe !== null);
 
   const table = new Table({
     chars: {
@@ -127,6 +128,7 @@ function buildSetTable(sets: SessionExportSet[], extraIndent = "", defaultWeight
     if (hasSpeed) row.push(s.speedMs !== null ? formatSpeed(s.speedMs) : "—");
     if (hasIncline) row.push(s.inclinePct !== null ? `${s.inclinePct}%` : "—");
     if (hasRest) row.push(s.restSec !== null ? formatDuration(s.restSec) + " rest" : "—");
+    if (hasRpe) row.push(s.rpe !== null ? `RPE ${s.rpe}` : "—");
     table.push(row);
   }
 
