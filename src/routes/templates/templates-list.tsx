@@ -52,7 +52,7 @@ export function TemplatesList() {
       <PageHeader
         title="Templates"
         description="Reusable session templates."
-        backHref="/exercises"
+        backHref="/log"
       />
       <Link to="/templates/new" className="block">
         <Button size="lg" className="-mt-2 w-full">

@@ -1,7 +1,7 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@powersync/react";
-import { Plus, MoreHorizontal, LayoutTemplate, ChevronRight } from "lucide-react";
+import { Plus, MoreHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { Exercise } from "@/lib/db/types";
 import type { ExerciseRow } from "@/lib/db/schema";
@@ -95,15 +95,6 @@ export function Exercises() {
       <Button onClick={() => setCreating(true)} size="lg" className="-mt-2 w-full">
         <Plus className="h-4 w-4" /> New exercise
       </Button>
-
-      <Link
-        to="/templates"
-        className="-mt-1 flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
-      >
-        <LayoutTemplate className="h-4 w-4" />
-        <span className="flex-1">Templates</span>
-        <ChevronRight className="h-4 w-4" />
-      </Link>
 
       <ExerciseFilteredList
         exercises={exercises}
