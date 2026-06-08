@@ -29,6 +29,7 @@ const exerciseSchema = z.object({
   inclineUnit: z.enum(["pct", "setting"]).nullable().optional(),
   trackRest: z.boolean(),
   trackCalories: z.boolean(),
+  trackRpe: z.boolean(),
   muscles: z.array(z.string()).nullable().optional(),
   secondaryMuscles: z.array(z.string()).nullable().optional(),
 });
@@ -45,9 +46,9 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
-      track_incline, incline_unit, track_rest, track_calories,
+      track_incline, incline_unit, track_rest, track_calories, track_rpe,
       muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
     [
       id,
       userId,
@@ -69,6 +70,7 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       data.inclineUnit ?? null,
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
+      boolInt(data.trackRpe),
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       now,
@@ -90,7 +92,7 @@ export async function updateExercise(
       is_bodyweight = ?, include_bodyweight = ?, track_reps = ?, default_weight_kg = ?, double_reps = ?,
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
-      track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?,
+      track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?, track_rpe = ?,
       muscles = ?, secondary_muscles = ?
      WHERE id = ? AND user_id = ?`,
     [
@@ -112,6 +114,7 @@ export async function updateExercise(
       data.inclineUnit ?? null,
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
+      boolInt(data.trackRpe),
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       id,
@@ -269,9 +272,9 @@ export async function copyExerciseInTx(
       is_bodyweight, include_bodyweight, track_reps, default_weight_kg, double_reps,
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
-      track_incline, incline_unit, track_rest, track_calories,
+      track_incline, incline_unit, track_rest, track_calories, track_rpe,
       muscles, secondary_muscles, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -293,6 +296,7 @@ export async function copyExerciseInTx(
       source.inclineUnit ?? null,
       boolInt(source.trackRest),
       boolInt(source.trackCalories),
+      boolInt(source.trackRpe),
       arrStr(source.muscles ?? null),
       arrStr(source.secondaryMuscles ?? null),
       nowISO(),

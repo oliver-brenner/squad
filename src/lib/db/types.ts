@@ -35,6 +35,7 @@ export type Exercise = {
   inclineUnit: string | null;
   trackRest: boolean;
   trackCalories: boolean;
+  trackRpe: boolean;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
   createdAt: string;
@@ -68,6 +69,7 @@ export type WorkoutSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
@@ -127,6 +129,7 @@ export type TemplateSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;

@@ -95,6 +95,7 @@ export function CircuitRows({
           inclinePct: r.set.inclinePct,
           restSec: r.set.restSec,
           calories: r.set.calories,
+          rpe: r.set.rpe,
         });
       }
 
@@ -114,7 +115,8 @@ export function CircuitRows({
           s.resistance != null ||
           s.speedMs != null ||
           s.inclinePct != null ||
-          s.restSec != null
+          s.restSec != null ||
+          s.rpe != null
         )
           return eg;
         if (
@@ -125,7 +127,8 @@ export function CircuitRows({
           cached.resistance == null &&
           cached.speedMs == null &&
           cached.inclinePct == null &&
-          cached.restSec == null
+          cached.restSec == null &&
+          cached.rpe == null
         )
           return eg;
         changed = true;
@@ -142,6 +145,7 @@ export function CircuitRows({
               speedMs: cached.speedMs,
               inclinePct: cached.inclinePct,
               restSec: cached.restSec,
+              rpe: cached.rpe,
             },
           ],
         };
@@ -190,7 +194,8 @@ export function CircuitRows({
       draft.resistance == null &&
       draft.speedMs == null &&
       draft.inclinePct == null &&
-      draft.restSec == null;
+      draft.restSec == null &&
+      draft.rpe == null;
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
     setActiveTray({ exIdx, draft, suggestion: isEmptyDraft ? cached : null });
@@ -436,7 +441,8 @@ function CircuitExerciseRow({
       set.resistance != null ||
       set.speedMs != null ||
       set.inclinePct != null ||
-      set.restSec != null);
+      set.restSec != null ||
+      set.rpe != null);
 
   return (
     <>
@@ -540,6 +546,7 @@ function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
       ex.inclineUnit === "setting" ? `${set.inclinePct} incline` : `${set.inclinePct}%`
     );
   }
+  if (ex.trackRpe && set.rpe != null) parts.push(`RPE ${set.rpe}`);
   return parts.join(" · ") || "—";
 }
 
@@ -647,5 +654,6 @@ function makeEmptyDraft(exerciseId: string): DraftSet {
     inclinePct: null,
     restSec: null,
     calories: null,
+    rpe: null,
   };
 }

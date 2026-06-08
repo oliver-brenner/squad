@@ -18,6 +18,7 @@ const BOOLEAN_COLUMNS: Record<string, readonly string[]> = {
     "track_speed",
     "track_incline",
     "track_rest",
+    "track_rpe",
   ],
 };
 

@@ -20,7 +20,8 @@ type Metric =
   | "resistance"
   | "distance"
   | "rest"
-  | "calories";
+  | "calories"
+  | "rpe";
 type DistanceUnit = "m" | "km" | "yd";
 type TimeUnit = "h" | "min" | "sec";
 type InclineUnit = "pct" | "setting";
@@ -58,7 +59,14 @@ const METRICS: Metric[] = [
   "distance",
   "rest",
   "calories",
+  "rpe",
 ];
+
+// Most metric chips capitalize their key for display; a few need an explicit
+// label where simple capitalization reads wrong (e.g. "Rpe" → "RPE").
+const METRIC_LABELS: Partial<Record<Metric, string>> = {
+  rpe: "RPE",
+};
 
 function deriveMetrics(exercise: Exercise): Set<Metric> {
   const m = new Set<Metric>();
@@ -71,6 +79,7 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.distanceUnit) m.add("distance");
   if (exercise.trackRest) m.add("rest");
   if (exercise.trackCalories) m.add("calories");
+  if (exercise.trackRpe) m.add("rpe");
   return m;
 }
 
@@ -168,6 +177,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           inclineUnit: metrics.has("incline") ? inclineUnit : null,
           trackRest: metrics.has("rest"),
           trackCalories: metrics.has("calories"),
+          trackRpe: metrics.has("rpe"),
           muscles: (() => {
             const p = [...muscleMap.entries()]
               .filter(([, v]) => v === "primary")
@@ -397,7 +407,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   onClick={() => toggleMetric(m)}
                   className="capitalize"
                 >
-                  {m}
+                  {METRIC_LABELS[m] ?? m}
                 </Button>
               ))}
             </div>

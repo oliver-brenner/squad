@@ -90,6 +90,7 @@ export function emptySet(ex: Exercise): DraftSet {
     inclinePct: null,
     restSec: null,
     calories: null,
+    rpe: null,
   };
 }
 
@@ -107,6 +108,7 @@ export type SkeletonSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
@@ -128,6 +130,7 @@ export type FlatSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
@@ -158,6 +161,7 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
       inclinePct: s.inclinePct,
       restSec: s.restSec,
       calories: s.calories,
+      rpe: s.rpe,
     };
 
     if (s.circuitId) {
@@ -218,6 +222,7 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
           inclinePct: s.inclinePct,
           restSec: s.restSec,
           calories: s.calories ?? null,
+          rpe: s.rpe ?? null,
           circuitId: item.groupKey,
           circuitRounds: item.rounds,
           circuitName: item.name,
@@ -237,6 +242,7 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
       inclinePct: s.inclinePct,
       restSec: s.restSec,
       calories: s.calories ?? null,
+      rpe: s.rpe ?? null,
       circuitId: null as string | null,
       circuitRounds: null as number | null,
       circuitName: null as string | null,

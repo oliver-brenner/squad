@@ -693,6 +693,7 @@ function toWorkoutSet(
     inclinePct: s.inclinePct,
     restSec: s.restSec,
     calories: s.calories,
+    rpe: s.rpe,
     circuitId: null,
     circuitRounds: null,
     circuitName: null,

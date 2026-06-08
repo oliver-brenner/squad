@@ -247,7 +247,8 @@ function CircuitExerciseRow({
       set.resistance != null ||
       set.speedMs != null ||
       set.inclinePct != null ||
-      set.restSec != null);
+      set.restSec != null ||
+      set.rpe != null);
   const distanceUnit = (eg.exercise?.distanceUnit ?? "km") as DistanceUnit;
   const pbs = set ? pbsBySetId?.get(set.id) : undefined;
 

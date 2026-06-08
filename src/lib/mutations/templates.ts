@@ -23,6 +23,7 @@ const templateSetInputSchema = z.object({
   inclinePct: z.number().min(-50).max(50).nullable(),
   restSec: z.number().int().min(0).max(3600).nullable(),
   calories: z.number().int().min(0).max(100_000).nullable(),
+  rpe: z.number().int().min(0).nullable(),
   circuitId: z.string().uuid().nullable().optional(),
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
@@ -39,9 +40,9 @@ async function insertTemplateSetsInTx(
       `INSERT INTO template_sets (
         id, template_id, user_id, exercise_id, position,
         reps, weight_kg, distance_km, duration_sec,
-        resistance, speed_ms, incline_pct, rest_sec, calories,
+        resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
         circuit_id, circuit_rounds, circuit_name
-      ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
       [
         s.id ?? uuid(),
         templateId,
@@ -57,6 +58,7 @@ async function insertTemplateSetsInTx(
         s.inclinePct,
         s.restSec,
         s.calories ?? null,
+        s.rpe ?? null,
         s.circuitId ?? null,
         s.circuitRounds ?? null,
         s.circuitName ?? null,
@@ -198,15 +200,16 @@ export async function createTemplateFromWorkout(
         `INSERT INTO template_sets (
           id, template_id, user_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
         [
           uuid(),
           templateId,
           userId,
           s.exercise_id,
           position++,
+          null,
           null,
           null,
           null,
@@ -309,15 +312,16 @@ export async function createTemplateFromFriendWorkout(
         `INSERT INTO template_sets (
           id, template_id, user_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
         [
           uuid(),
           templateId,
           myUserId,
           myExerciseId,
           position++,
+          null,
           null,
           null,
           null,
@@ -403,9 +407,9 @@ export async function applyTemplate(
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
           circuit_id, circuit_rounds, circuit_name
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -422,6 +426,7 @@ export async function applyTemplate(
           s.incline_pct,
           s.rest_sec,
           s.calories,
+          s.rpe,
           circuitId,
           s.circuit_rounds,
           s.circuit_name,

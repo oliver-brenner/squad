@@ -44,6 +44,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     speedMs: number | null;
     inclinePct: number | null;
     restSec: number | null;
+    rpe: number | null;
   }> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -84,6 +85,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
           speedMs: s.speedMs,
           inclinePct: s.inclinePct,
           restSec: s.restSec,
+          rpe: s.rpe,
         }));
         lastLoggedRef.current = lastSets;
         const currentGroup = groupRef.current;
@@ -96,7 +98,8 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             s.resistance != null ||
             s.speedMs != null ||
             s.inclinePct != null ||
-            s.restSec != null
+            s.restSec != null ||
+            s.rpe != null
           )
             return s;
           const src = lastSets[i] ?? lastSets[0];
@@ -110,6 +113,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             speedMs: src.speedMs,
             inclinePct: src.inclinePct,
             restSec: src.restSec,
+            rpe: src.rpe,
           };
         });
         if (nextSets.some((s, i) => s !== currentGroup.sets[i])) {
@@ -174,6 +178,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
         inclinePct: null,
         restSec: null,
         calories: null,
+        rpe: null,
       },
       suggestion: last ?? historySuggestion,
     });
@@ -334,6 +339,7 @@ function formatSetSummary(
     parts.push(`${dist} ${distanceUnit}`);
   }
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
+  if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
@@ -482,6 +488,7 @@ export function SetTray({
         inclinePct: draft.inclinePct ?? suggestion.inclinePct,
         restSec: draft.restSec ?? suggestion.restSec,
         calories: draft.calories ?? suggestion.calories,
+        rpe: draft.rpe ?? suggestion.rpe,
       });
     } else {
       onConfirm(draft);
@@ -498,6 +505,7 @@ export function SetTray({
   const showDistance = !!ex.distanceUnit;
   const showRest = ex.trackRest;
   const showCalories = ex.trackCalories;
+  const showRpe = ex.trackRpe;
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
   const timeUnit = (ex.timeUnit ?? "min") as "h" | "min" | "sec";
   const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
@@ -661,6 +669,17 @@ export function SetTray({
                 onChange={(v) => patch({ calories: v != null ? Math.round(v) : null })}
                 step={1}
                 placeholder={sg?.calories != null ? String(sg.calories) : "100"}
+                className="w-full"
+              />
+            </TrayField>
+          )}
+          {showRpe && (
+            <TrayField label="RPE" unit="">
+              <NumInput
+                value={draft.rpe}
+                onChange={(v) => patch({ rpe: v != null ? Math.round(v) : null })}
+                step={1}
+                placeholder={sg?.rpe != null ? String(sg.rpe) : "8"}
                 className="w-full"
               />
             </TrayField>

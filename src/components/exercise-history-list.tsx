@@ -39,6 +39,7 @@ function formatSet(s: WorkoutSet, ex: Exercise): string {
     parts.push(`${dist} ${distanceUnit}`);
   }
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
+  if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 

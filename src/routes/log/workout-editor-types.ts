@@ -12,6 +12,7 @@ export type DraftSet = {
   inclinePct: number | null;
   restSec: number | null;
   calories: number | null;
+  rpe: number | null;
 };
 
 export type ExerciseGroup = {
