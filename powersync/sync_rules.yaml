@@ -111,18 +111,33 @@ bucket_definitions:
   # `sets` — defensive and ready to use the moment PowerSync lifts one of
   # those restrictions, or if we route this through a Postgres view that
   # bakes in `CURRENT_DATE - 30`.
+  #
+  # Privacy: `notes_for_followers` is a Postgres STORED generated column —
+  # it pre-computes `CASE WHEN notes_public THEN notes ELSE NULL END` so we
+  # don't need a CASE expression here (PowerSync doesn't support them). The
+  # column is aliased as `notes` so the local SQLite schema sees the right name.
+  # `notes` and `notes_public` are excluded from this projection; followers
+  # never receive raw note text or the visibility flag.
   followee_workouts:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
-      - SELECT * FROM workouts WHERE user_id = bucket.user_id
+      - >-
+        SELECT id, user_id, name, performed_on, session_type, calories,
+        created_at, updated_at, notes_for_followers as notes
+        FROM workouts WHERE user_id = bucket.user_id
 
-  # Followee sets — same caveat as followee_workouts.
+  # Followee sets — same privacy pattern as followee_workouts.
   followee_sets:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
-      - SELECT * FROM sets WHERE user_id = bucket.user_id
+      - >-
+        SELECT id, user_id, performed_on, workout_id, exercise_id, position,
+        reps, weight_kg, distance_km, duration_sec, resistance, speed_ms,
+        incline_pct, rest_sec, rpe, circuit_id, circuit_rounds,
+        circuit_name, variation, notes_for_followers as notes
+        FROM sets WHERE user_id = bucket.user_id
 
   # Followees' session guests — so a friend's session shows who they trained
   # with. (The guest's own profile is resolved live; if the viewer doesn't

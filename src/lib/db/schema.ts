@@ -65,6 +65,8 @@ const workouts = new Table(
     performed_on: column.text,
     session_type: column.text,
     notes: column.text,
+    // Whether the session note is visible to followers (boolean as 0/1).
+    notes_public: column.integer,
     calories: column.integer,
     created_at: column.text,
     updated_at: column.text,
@@ -106,6 +108,11 @@ const sets = new Table(
     // 'variation') chosen for this exercise within the session. Denormalised
     // across every set of the exercise group, mirroring circuit_name.
     variation: column.text,
+    // Per-exercise note for this session, denormalised across every set of the
+    // exercise group (same pattern as variation/circuit_name).
+    notes: column.text,
+    // Whether the exercise note is visible to followers (boolean as 0/1).
+    notes_public: column.integer,
   },
   {
     viewName: "sets",
@@ -178,6 +185,9 @@ const templates = new Table(
     user_id: column.text,
     name: column.text,
     session_type: column.text,
+    // Default session note carried into workouts created from this template.
+    notes: column.text,
+    notes_public: column.integer,
     created_at: column.text,
     updated_at: column.text,
   },
@@ -212,6 +222,9 @@ const template_sets = new Table(
     circuit_name: column.text,
     // Variation key carried by the template skeleton; mirrors sets.variation.
     variation: column.text,
+    // Per-exercise note carried by the template skeleton; mirrors sets.notes.
+    notes: column.text,
+    notes_public: column.integer,
   },
   {
     viewName: "template_sets",

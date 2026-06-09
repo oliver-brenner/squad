@@ -23,6 +23,11 @@ export type ExerciseGroup = {
   // Variation key chosen for this exercise within the session (null = none).
   // Group-level rather than per-set; flattened onto every set on save.
   variation: string | null;
+  // Free-text note for this exercise within the session (null/empty = none).
+  // Group-level like `variation`; flattened onto every set on save.
+  notes: string | null;
+  // Whether the exercise note is visible to followers. Public by default.
+  notesPublic: boolean;
 };
 
 export type CircuitGroup = {
