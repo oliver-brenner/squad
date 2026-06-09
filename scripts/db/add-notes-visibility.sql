@@ -24,8 +24,28 @@ ALTER TABLE templates     ADD COLUMN IF NOT EXISTS notes_public boolean NOT NULL
 ALTER TABLE template_sets ADD COLUMN IF NOT EXISTS notes text;
 ALTER TABLE template_sets ADD COLUMN IF NOT EXISTS notes_public boolean NOT NULL DEFAULT true;
 
--- After applying: redeploy powersync/sync_rules.yaml. Note that the
--- followee_workouts / followee_sets buckets are NO LONGER `SELECT *` — they
--- project an explicit column list that nulls the note text when notes_public
--- is false, so a follower's device never receives private note text. Any
--- future column added to `workouts`/`sets` must be added to those buckets too.
+-- Stored generated columns for PowerSync sync-rule privacy.
+--
+-- PowerSync's sync-rule SQL parser does not support CASE expressions in data
+-- queries. To enforce note privacy for followers without CASE in the sync
+-- rules, we pre-compute the masked value in Postgres as a STORED generated
+-- column. The sync rule then uses a plain `notes_for_followers as notes`
+-- column reference — no CASE, no expression — and still queries `FROM workouts`
+-- / `FROM sets` so PowerSync maps rows to the correct local tables.
+--
+-- The column must be added AFTER notes_public and notes exist (order above is
+-- correct). `STORED` means Postgres persists the value on every write.
+ALTER TABLE workouts
+  ADD COLUMN IF NOT EXISTS notes_for_followers text
+  GENERATED ALWAYS AS (CASE WHEN notes_public THEN notes ELSE NULL END) STORED;
+
+ALTER TABLE sets
+  ADD COLUMN IF NOT EXISTS notes_for_followers text
+  GENERATED ALWAYS AS (CASE WHEN notes_public THEN notes ELSE NULL END) STORED;
+
+-- After applying this migration: redeploy powersync/sync_rules.yaml.
+-- The followee_workouts / followee_sets buckets now use
+-- `notes_for_followers as notes` instead of a CASE expression.
+-- Both buckets remain `FROM workouts` / `FROM sets` (no explicit column list
+-- required), so any future column added to those tables syncs automatically to
+-- followers (except notes_public and notes themselves, which are excluded).

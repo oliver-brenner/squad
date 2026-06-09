@@ -112,24 +112,22 @@ bucket_definitions:
   # those restrictions, or if we route this through a Postgres view that
   # bakes in `CURRENT_DATE - 30`.
   #
-  # NOT `SELECT *`: the session note (`notes`) is nulled out unless the owner
-  # marked it public (`notes_public`), so a follower's device never receives
-  # private note text. `notes_public` itself is intentionally omitted. Any new
-  # `workouts` column must be added to this explicit list.
+  # Privacy: `notes_for_followers` is a Postgres STORED generated column —
+  # it pre-computes `CASE WHEN notes_public THEN notes ELSE NULL END` so we
+  # don't need a CASE expression here (PowerSync doesn't support them). The
+  # column is aliased as `notes` so the local SQLite schema sees the right name.
+  # `notes` and `notes_public` are excluded from this projection; followers
+  # never receive raw note text or the visibility flag.
   followee_workouts:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
       - >-
         SELECT id, user_id, name, performed_on, session_type, calories,
-        created_at, updated_at,
-        CASE WHEN notes_public = 1 THEN notes ELSE NULL END as notes
+        created_at, updated_at, notes_for_followers as notes
         FROM workouts WHERE user_id = bucket.user_id
 
-  # Followee sets — same caveat as followee_workouts. Also NOT `SELECT *`: the
-  # per-exercise note (`notes`) is nulled out unless the owner marked it public
-  # (`notes_public`, omitted from the projection). Any new `sets` column must
-  # be added to this explicit list.
+  # Followee sets — same privacy pattern as followee_workouts.
   followee_sets:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
@@ -137,9 +135,8 @@ bucket_definitions:
       - >-
         SELECT id, user_id, performed_on, workout_id, exercise_id, position,
         reps, weight_kg, distance_km, duration_sec, resistance, speed_ms,
-        incline_pct, rest_sec, calories, rpe, circuit_id, circuit_rounds,
-        circuit_name, variation,
-        CASE WHEN notes_public = 1 THEN notes ELSE NULL END as notes
+        incline_pct, rest_sec, rpe, circuit_id, circuit_rounds,
+        circuit_name, variation, notes_for_followers as notes
         FROM sets WHERE user_id = bucket.user_id
 
   # Followees' session guests — so a friend's session shows who they trained

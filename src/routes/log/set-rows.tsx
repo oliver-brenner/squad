@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Globe, Lock, MoreHorizontal, Plus, X } from "lucide-react";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
-import { NoteField } from "@/components/note-field";
+import { NoteTray } from "@/components/note-field";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
@@ -49,6 +49,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     rpe: number | null;
   }> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [noteTrayOpen, setNoteTrayOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [priorSetsAsc, setPriorSetsAsc] = useState<WorkoutSet[] | null>(null);
 
@@ -118,8 +119,19 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             rpe: src.rpe,
           };
         });
-        if (nextSets.some((s, i) => s !== currentGroup.sets[i])) {
-          onUpdateRef.current({ ...currentGroup, sets: nextSets });
+        // Carry the last session's exercise note forward only when the current
+        // group has no note yet. If the last session had no note, nothing is
+        // brought through (matches the per-set prefill philosophy above).
+        const lastNote = last[0]?.notes ?? null;
+        const shouldPrefillNote =
+          !currentGroup.notes && !!lastNote && lastNote.trim().length > 0;
+        const setsChanged = nextSets.some((s, i) => s !== currentGroup.sets[i]);
+        if (setsChanged || shouldPrefillNote) {
+          onUpdateRef.current({
+            ...currentGroup,
+            sets: nextSets,
+            ...(shouldPrefillNote ? { notes: lastNote } : {}),
+          });
         }
       })
       .catch((err) => {
@@ -273,13 +285,30 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
                 </Button>
               )}
             </div>
-            <NoteField
-              value={group.notes}
-              isPublic={group.notesPublic}
-              onChange={(notes, notesPublic) => onUpdate({ ...group, notes, notesPublic })}
-              variant="inline"
-              placeholder="Add a note for this exercise…"
-            />
+            {group.notes && group.notes.trim().length > 0 && (
+              <div className="mt-1 rounded-xl bg-muted/50 px-3 py-2 text-sm flex items-center gap-2">
+                {group.notesPublic ? (
+                  <Globe className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                ) : (
+                  <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => setNoteTrayOpen(true)}
+                  className="flex-1 whitespace-pre-wrap text-left"
+                >
+                  {group.notes}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ ...group, notes: null })}
+                  aria-label="Delete note"
+                  className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {!isTemplate && historyOpen && (
@@ -306,8 +335,26 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
         />
       )}
 
+      {noteTrayOpen && (
+        <NoteTray
+          initialValue={group.notes}
+          initialPublic={group.notesPublic}
+          placeholder="Add a note for this exercise…"
+          onConfirm={(notes, notesPublic) => {
+            onUpdate({ ...group, notes, notesPublic });
+            setNoteTrayOpen(false);
+          }}
+          onClose={() => setNoteTrayOpen(false)}
+        />
+      )}
+
       {menuOpen && (
         <ExerciseMenu
+          hasNote={!!(group.notes && group.notes.trim().length > 0)}
+          onNote={() => {
+            setMenuOpen(false);
+            setNoteTrayOpen(true);
+          }}
           onViewStats={() => {
             setMenuOpen(false);
             navigate(
@@ -413,11 +460,15 @@ function SetSummaryRow({
 }
 
 function ExerciseMenu({
+  hasNote,
+  onNote,
   onViewStats,
   onEdit,
   onRemove,
   onClose,
 }: {
+  hasNote: boolean;
+  onNote: () => void;
   onViewStats: () => void;
   onEdit: () => void;
   onRemove: () => void;
@@ -440,6 +491,13 @@ function ExerciseMenu({
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
         <div className="flex flex-col py-4 gap-2 px-4">
+          <button
+            type="button"
+            onClick={onNote}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+          >
+            {hasNote ? "Edit note" : "Add note"}
+          </button>
           <button
             type="button"
             onClick={onViewStats}
