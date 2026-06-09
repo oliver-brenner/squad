@@ -113,9 +113,6 @@ export type SkeletonSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
-  // Optional: present on WorkoutSet, absent on TemplateSet.
-  notes?: string | null;
-  notesPublic?: boolean;
 };
 
 // A flattened set ready to persist (workout or template). Position encodes the
@@ -139,8 +136,6 @@ export type FlatSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
-  notes: string | null;
-  notesPublic: boolean;
 };
 
 // Reconstruct the editor's grouped item model from a flat, position-ordered set
@@ -190,8 +185,6 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
           exercise: ex,
           sets: [],
           variation: s.variation,
-          notes: s.notes ?? null,
-          notesPublic: s.notesPublic ?? true,
         };
         circuit.exercises.push(eg);
       }
@@ -205,8 +198,6 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
           exercise: ex,
           sets: [],
           variation: s.variation,
-          notes: s.notes ?? null,
-          notesPublic: s.notesPublic ?? true,
         });
       }
       (result[exerciseIndexes.get(ex.id)!] as ExerciseGroup).sets.push(draft);
@@ -240,8 +231,6 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
           circuitRounds: item.rounds,
           circuitName: item.name,
           variation: eg.variation,
-          notes: eg.notes,
-          notesPublic: eg.notesPublic,
         }))
       );
     }
@@ -263,8 +252,6 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
       circuitRounds: null as number | null,
       circuitName: null as string | null,
       variation: item.variation,
-      notes: item.notes,
-      notesPublic: item.notesPublic,
     }));
   });
 }

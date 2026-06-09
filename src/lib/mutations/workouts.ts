@@ -23,8 +23,6 @@ const setInputSchema = z.object({
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
   variation: z.string().min(1).max(80).nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
-  notesPublic: z.boolean().optional(),
 });
 
 const workoutInputSchema = z.object({
@@ -85,8 +83,8 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name, variation, notes, notes_public
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
@@ -108,8 +106,6 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           s.circuitRounds ?? null,
           s.circuitName ?? null,
           s.variation ?? null,
-          s.notes ?? null,
-          boolInt(s.notesPublic ?? true),
         ]
       );
     }

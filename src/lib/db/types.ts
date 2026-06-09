@@ -39,6 +39,7 @@ export type Exercise = {
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
   variations: string[] | null;
+  notes: string | null;
   createdAt: string;
 };
 
@@ -76,8 +77,6 @@ export type WorkoutSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
-  notes: string | null;
-  notesPublic: boolean;
 };
 
 export type UserFieldOption = {
@@ -141,8 +140,6 @@ export type TemplateSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
-  notes: string | null;
-  notesPublic: boolean;
 };
 
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };

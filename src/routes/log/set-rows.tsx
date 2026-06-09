@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, Globe, Lock, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
+import { updateExerciseNotes } from "@/lib/mutations/exercises";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 import { VariationControl } from "./variation-control";
 
@@ -51,7 +52,24 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteTrayOpen, setNoteTrayOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Note lives on the Exercise itself (per-exercise, owner-only). Local state
+  // mirrors `group.exercise.notes` so the tray edits show instantly; the
+  // async write to Postgres re-syncs through PowerSync and refreshes the prop.
+  const [exerciseNote, setExerciseNote] = useState<string | null>(group.exercise.notes ?? null);
+  useEffect(() => {
+    setExerciseNote(group.exercise.notes ?? null);
+  }, [group.exercise.notes]);
   const [priorSetsAsc, setPriorSetsAsc] = useState<WorkoutSet[] | null>(null);
+
+  async function saveExerciseNote(value: string | null) {
+    const trimmed = value && value.trim().length > 0 ? value : null;
+    setExerciseNote(trimmed);
+    try {
+      await updateExerciseNotes(group.exerciseId, trimmed);
+    } catch (err) {
+      console.error("[set-rows] failed to save exercise note:", err);
+    }
+  }
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: group.groupKey,
@@ -119,19 +137,11 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             rpe: src.rpe,
           };
         });
-        // Carry the last session's exercise note forward only when the current
-        // group has no note yet. If the last session had no note, nothing is
-        // brought through (matches the per-set prefill philosophy above).
-        const lastNote = last[0]?.notes ?? null;
-        const shouldPrefillNote =
-          !currentGroup.notes && !!lastNote && lastNote.trim().length > 0;
+        // Exercise notes are now persisted on the Exercise itself (not the
+        // session), so no per-session carry-forward is needed.
         const setsChanged = nextSets.some((s, i) => s !== currentGroup.sets[i]);
-        if (setsChanged || shouldPrefillNote) {
-          onUpdateRef.current({
-            ...currentGroup,
-            sets: nextSets,
-            ...(shouldPrefillNote ? { notes: lastNote } : {}),
-          });
+        if (setsChanged) {
+          onUpdateRef.current({ ...currentGroup, sets: nextSets });
         }
       })
       .catch((err) => {
@@ -285,34 +295,20 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
                 </Button>
               )}
             </div>
-            {group.notes && group.notes.trim().length > 0 && (
-              <div className="mt-1 rounded-xl bg-muted/50 px-3 py-2 text-sm flex items-center gap-2">
-                {group.notesPublic ? (
-                  <Globe className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                ) : (
-                  <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-                )}
-                <button
-                  type="button"
-                  onClick={() => setNoteTrayOpen(true)}
-                  className="flex-1 whitespace-pre-wrap text-left"
-                >
-                  {group.notes}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdate({ ...group, notes: null })}
-                  aria-label="Delete note"
-                  className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
           </div>
 
           {!isTemplate && historyOpen && (
-            <div className="border-t border-border">
+            <div className="border-t border-border flex flex-col">
+              {exerciseNote && exerciseNote.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setNoteTrayOpen(true)}
+                  className="mx-3 mt-3 mb-1 rounded-xl bg-muted/50 px-3 py-2 text-left text-sm whitespace-pre-wrap hover:bg-muted"
+                  aria-label="Edit note"
+                >
+                  {exerciseNote}
+                </button>
+              )}
               <ExerciseHistoryList
                 exerciseId={group.exerciseId}
                 exercise={ex}
@@ -337,11 +333,16 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
 
       {noteTrayOpen && (
         <NoteTray
-          initialValue={group.notes}
-          initialPublic={group.notesPublic}
+          initialValue={exerciseNote}
           placeholder="Add a note for this exercise…"
-          onConfirm={(notes, notesPublic) => {
-            onUpdate({ ...group, notes, notesPublic });
+          showVisibilityToggle={false}
+          showDelete
+          onConfirm={(notes) => {
+            void saveExerciseNote(notes);
+            setNoteTrayOpen(false);
+          }}
+          onDelete={() => {
+            void saveExerciseNote(null);
             setNoteTrayOpen(false);
           }}
           onClose={() => setNoteTrayOpen(false)}
@@ -350,10 +351,11 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
 
       {menuOpen && (
         <ExerciseMenu
-          hasNote={!!(group.notes && group.notes.trim().length > 0)}
+          hasNote={!!(exerciseNote && exerciseNote.trim().length > 0)}
           onNote={() => {
             setMenuOpen(false);
             setNoteTrayOpen(true);
+            setHistoryOpen(true);
           }}
           onViewStats={() => {
             setMenuOpen(false);

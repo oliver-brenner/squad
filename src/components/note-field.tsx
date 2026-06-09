@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Globe, Lock, Plus, X } from "lucide-react";
+import { Check, ChevronDown, Globe, Lock, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -114,22 +114,37 @@ export function NoteField({
 // Bottom-sheet editor for a single note. Mirrors the SetTray sheet styling
 // (slide-up, drag handle, overlay). Type the note, optionally flip visibility,
 // then tap the tick to confirm. Clearing the text confirms as null (removes it).
+//
+// Two usage modes:
+//  - Session-level notes: `showVisibilityToggle` defaults true, the toggle row
+//    is rendered, and `onConfirm` receives both the text and the isPublic flag.
+//  - Exercise-level notes (owner-only): pass `showVisibilityToggle={false}` to
+//    hide the toggle. `onConfirm` still receives an `isPublic` arg (always the
+//    initial value) — callers that don't care about visibility just ignore it.
+//    Pair with `showDelete` + `onDelete` to add an explicit Delete button.
 export function NoteTray({
   initialValue,
-  initialPublic,
+  initialPublic = true,
   placeholder,
+  showVisibilityToggle = true,
+  showDelete = false,
   onConfirm,
+  onDelete,
   onClose,
 }: {
   initialValue: string | null;
-  initialPublic: boolean;
+  initialPublic?: boolean;
   placeholder: string;
+  showVisibilityToggle?: boolean;
+  showDelete?: boolean;
   onConfirm: (value: string | null, isPublic: boolean) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState(initialValue ?? "");
   const [isPublic, setIsPublic] = useState(initialPublic);
   const [visible, setVisible] = useState(false);
+  const hadInitial = !!(initialValue && initialValue.trim().length > 0);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true));
@@ -169,26 +184,39 @@ export function NoteTray({
             onChange={(e) => setText(e.target.value)}
             className="min-h-[120px]"
           />
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              {isPublic ? (
-                <>
-                  <Globe className="h-4 w-4" /> Visible to friends
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4" /> Only you
-                </>
-              )}
-            </span>
-            <Switch checked={isPublic} onCheckedChange={setIsPublic} />
-          </div>
+          {showVisibilityToggle && (
+            <div className="flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                {isPublic ? (
+                  <>
+                    <Globe className="h-4 w-4" /> Visible to friends
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4" /> Only you
+                  </>
+                )}
+              </span>
+              <Switch checked={isPublic} onCheckedChange={setIsPublic} />
+            </div>
+          )}
         </div>
 
-        <div className="px-4 pb-8">
+        <div className="px-4 pb-8 flex flex-col gap-2">
           <Button onClick={handleConfirm} className="w-full" size="lg" aria-label="Save note">
             <Check className="h-5 w-5" /> Save note
           </Button>
+          {showDelete && hadInitial && onDelete && (
+            <Button
+              variant="ghost"
+              onClick={onDelete}
+              className="w-full text-red-500 hover:text-red-500"
+              size="lg"
+              aria-label="Delete note"
+            >
+              <Trash2 className="h-5 w-5" /> Delete note
+            </Button>
+          )}
         </div>
       </div>
     </>

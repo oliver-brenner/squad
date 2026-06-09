@@ -61,6 +61,7 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     muscles: r.ex_muscles,
     secondary_muscles: r.ex_secondary_muscles,
     variations: null,
+    notes: null,
     created_at: r.ex_created_at,
   };
 }

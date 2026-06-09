@@ -281,8 +281,6 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
         exercise: ex,
         sets: [emptySet(ex)],
         variation: null,
-        notes: null,
-        notesPublic: true,
       },
     ]);
     setPicking(false);
@@ -307,8 +305,6 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
           exercise: ex,
           sets: [emptySet(ex)],
           variation: null,
-          notes: null,
-          notesPublic: true,
         };
         return { ...item, exercises: [...item.exercises, newEg] };
       })
