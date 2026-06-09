@@ -33,6 +33,7 @@ const exerciseSchema = z.object({
   muscles: z.array(z.string()).nullable().optional(),
   secondaryMuscles: z.array(z.string()).nullable().optional(),
   variations: z.array(z.string().min(1).max(80)).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
 });
 
 export async function createExercise(input: z.infer<typeof exerciseSchema>): Promise<string> {
@@ -48,8 +49,8 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories, track_rpe,
-      muscles, secondary_muscles, variations, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+      muscles, secondary_muscles, variations, notes, created_at
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?)`,
     [
       id,
       userId,
@@ -75,6 +76,7 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       arrStr(data.variations ?? null),
+      data.notes ?? null,
       now,
     ]
   );
@@ -95,7 +97,7 @@ export async function updateExercise(
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
       track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?, track_rpe = ?,
-      muscles = ?, secondary_muscles = ?, variations = ?
+      muscles = ?, secondary_muscles = ?, variations = ?, notes = ?
      WHERE id = ? AND user_id = ?`,
     [
       data.name,
@@ -120,9 +122,22 @@ export async function updateExercise(
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       arrStr(data.variations ?? null),
+      data.notes ?? null,
       id,
       userId,
     ]
+  );
+}
+
+// Focused write for the inline edit-note UX in the workout editor (tapping
+// a note or "Edit note" in the 3-dots tray). Keeps autosave off the hot path
+// of the editor's bigger save flow.
+export async function updateExerciseNotes(id: string, notes: string | null): Promise<void> {
+  const userId = await getCurrentUserId();
+  const trimmed = notes && notes.trim().length > 0 ? notes : null;
+  await powersync.execute(
+    `UPDATE exercises SET notes = ? WHERE id = ? AND user_id = ?`,
+    [trimmed, id, userId]
   );
 }
 

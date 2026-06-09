@@ -47,6 +47,11 @@ const exercises = new Table(
     // JSON-encoded text[] of variation keys attached to this exercise; decode
     // /encode in the data layer like categories/muscles.
     variations: column.text,
+    // Private free-text note attached to the exercise (owner-only — excluded
+    // from the followee_exercises sync rule projection). Persists across every
+    // session that logs this exercise; rendered above the set history when the
+    // user expands an exercise card.
+    notes: column.text,
     created_at: column.text,
   },
   {
