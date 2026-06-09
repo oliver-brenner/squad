@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { useQuery } from "@powersync/react";
@@ -76,9 +76,11 @@ type Props = {
   // Owner-only: render the leading plus as a button that opens the guest tray
   // to add/remove guests. Friends' sessions leave this off (no plus shown).
   editable?: boolean;
+  // Called whenever the resolved guest count changes (useful for parent layout).
+  onGuestCountChange?: (count: number) => void;
 };
 
-export function SessionGuests({ workoutId, variant, backHref, editable = false }: Props) {
+export function SessionGuests({ workoutId, variant, backHref, editable = false, onGuestCountChange }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [, startTransition] = useTransition();
   const { data: rows = [] } = useQuery<GuestRow>(
@@ -134,6 +136,10 @@ export function SessionGuests({ workoutId, variant, backHref, editable = false }
     };
   });
 
+  useEffect(() => {
+    onGuestCountChange?.(guests.length);
+  }, [guests.length, onGuestCountChange]);
+
   if (variant === "card") {
     if (guests.length === 0) return null;
     return (
@@ -178,7 +184,7 @@ export function SessionGuests({ workoutId, variant, backHref, editable = false }
             type="button"
             onClick={() => setSheetOpen(true)}
             aria-label="Add or remove guests"
-            className="flex items-center gap-1.5 rounded-full hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-xl border border-border bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Plus className="h-4 w-4 flex-shrink-0" />
             {guests.length === 0 && <span className="font-medium">Add guests</span>}

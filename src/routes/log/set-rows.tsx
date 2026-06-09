@@ -8,6 +8,7 @@ import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
+import { NoteField } from "@/components/note-field";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
@@ -272,6 +273,13 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
                 </Button>
               )}
             </div>
+            <NoteField
+              value={group.notes}
+              isPublic={group.notesPublic}
+              onChange={(notes, notesPublic) => onUpdate({ ...group, notes, notesPublic })}
+              variant="inline"
+              placeholder="Add a note for this exercise…"
+            />
           </div>
 
           {!isTemplate && historyOpen && (

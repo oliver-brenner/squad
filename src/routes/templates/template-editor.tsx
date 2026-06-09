@@ -16,6 +16,7 @@ import type { SessionType } from "@/lib/db/schema";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NoteField } from "@/components/note-field";
 import {
   createTemplate,
   createTemplateFromWorkout,
@@ -135,6 +136,8 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(template.name);
+  const [notes, setNotes] = useState(template.notes);
+  const [notesPublic, setNotesPublic] = useState(template.notesPublic);
   const [isRenaming, setIsRenaming] = useState(false);
   const [sessionType, setSessionType] = useState<SessionType>(template.sessionType);
   const [exercises, setExercises] = useState(initialExercises);
@@ -174,17 +177,20 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
 
   // Debounced autosave — same 1s-after-last-change pattern as the workout editor.
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestStateRef = useRef({ name, sessionType, items });
+  const latestStateRef = useRef({ name, notes, notesPublic, sessionType, items });
   useEffect(() => {
-    latestStateRef.current = { name, sessionType, items };
-  }, [name, sessionType, items]);
+    latestStateRef.current = { name, notes, notesPublic, sessionType, items };
+  }, [name, notes, notesPublic, sessionType, items]);
 
   const buildSavePayload = useCallback(() => {
-    const { name: n, sessionType: st, items: it } = latestStateRef.current;
+    const { name: n, notes: nt, notesPublic: np, sessionType: st, items: it } =
+      latestStateRef.current;
     return {
       id: template.id,
       name: n.trim() || "Template",
       sessionType: st,
+      notes: nt,
+      notesPublic: np,
       sets: flattenItems(it),
     };
   }, [template.id]);
@@ -207,7 +213,7 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [name, sessionType, items, doSave]);
+  }, [name, notes, notesPublic, sessionType, items, doSave]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
@@ -275,6 +281,8 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
         exercise: ex,
         sets: [emptySet(ex)],
         variation: null,
+        notes: null,
+        notesPublic: true,
       },
     ]);
     setPicking(false);
@@ -299,6 +307,8 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
           exercise: ex,
           sets: [emptySet(ex)],
           variation: null,
+          notes: null,
+          notesPublic: true,
         };
         return { ...item, exercises: [...item.exercises, newEg] };
       })
@@ -485,6 +495,16 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
           ))}
         </div>
       )}
+
+      <NoteField
+        value={notes}
+        isPublic={notesPublic}
+        onChange={(v, p) => {
+          setNotes(v);
+          setNotesPublic(p);
+        }}
+        placeholder="Add a note for this template…"
+      />
 
       <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(sessionType)}`} />
 

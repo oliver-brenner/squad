@@ -111,18 +111,36 @@ bucket_definitions:
   # `sets` — defensive and ready to use the moment PowerSync lifts one of
   # those restrictions, or if we route this through a Postgres view that
   # bakes in `CURRENT_DATE - 30`.
+  #
+  # NOT `SELECT *`: the session note (`notes`) is nulled out unless the owner
+  # marked it public (`notes_public`), so a follower's device never receives
+  # private note text. `notes_public` itself is intentionally omitted. Any new
+  # `workouts` column must be added to this explicit list.
   followee_workouts:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
-      - SELECT * FROM workouts WHERE user_id = bucket.user_id
+      - >-
+        SELECT id, user_id, name, performed_on, session_type, calories,
+        created_at, updated_at,
+        CASE WHEN notes_public = 1 THEN notes ELSE NULL END as notes
+        FROM workouts WHERE user_id = bucket.user_id
 
-  # Followee sets — same caveat as followee_workouts.
+  # Followee sets — same caveat as followee_workouts. Also NOT `SELECT *`: the
+  # per-exercise note (`notes`) is nulled out unless the owner marked it public
+  # (`notes_public`, omitted from the projection). Any new `sets` column must
+  # be added to this explicit list.
   followee_sets:
     parameters:
       - SELECT followee_id as user_id FROM follows WHERE follower_id = request.user_id()
     data:
-      - SELECT * FROM sets WHERE user_id = bucket.user_id
+      - >-
+        SELECT id, user_id, performed_on, workout_id, exercise_id, position,
+        reps, weight_kg, distance_km, duration_sec, resistance, speed_ms,
+        incline_pct, rest_sec, calories, rpe, circuit_id, circuit_rounds,
+        circuit_name, variation,
+        CASE WHEN notes_public = 1 THEN notes ELSE NULL END as notes
+        FROM sets WHERE user_id = bucket.user_id
 
   # Followees' session guests — so a friend's session shows who they trained
   # with. (The guest's own profile is resolved live; if the viewer doesn't

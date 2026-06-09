@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
-import { nowISO, uuid } from "@/lib/db/encoding";
+import { boolInt, nowISO, uuid } from "@/lib/db/encoding";
 import type { ExerciseRow, WorkoutRow, WorkoutSetRow } from "@/lib/db/schema";
 import { copyExerciseInTx } from "@/lib/mutations/exercises";
 
@@ -23,6 +23,8 @@ const setInputSchema = z.object({
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
   variation: z.string().min(1).max(80).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+  notesPublic: z.boolean().optional(),
 });
 
 const workoutInputSchema = z.object({
@@ -30,6 +32,7 @@ const workoutInputSchema = z.object({
   name: z.string().trim().min(1).max(80),
   performedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: z.string().trim().max(2000).nullable().optional(),
+  notesPublic: z.boolean().optional(),
   sets: z.array(setInputSchema),
 });
 
@@ -44,15 +47,33 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
   await powersync.writeTransaction(async (tx) => {
     if (parsed.id) {
       await tx.execute(
-        `UPDATE workouts SET name = ?, performed_on = ?, notes = ?, updated_at = ?
+        `UPDATE workouts SET name = ?, performed_on = ?, notes = ?, notes_public = ?, updated_at = ?
          WHERE id = ? AND user_id = ?`,
-        [parsed.name, parsed.performedOn, parsed.notes ?? null, now, parsed.id, userId]
+        [
+          parsed.name,
+          parsed.performedOn,
+          parsed.notes ?? null,
+          boolInt(parsed.notesPublic ?? true),
+          now,
+          parsed.id,
+          userId,
+        ]
       );
     } else {
       await tx.execute(
-        `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [workoutId, userId, parsed.name, parsed.performedOn, "workout", parsed.notes ?? null, now, now]
+        `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, notes_public, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          workoutId,
+          userId,
+          parsed.name,
+          parsed.performedOn,
+          "workout",
+          parsed.notes ?? null,
+          boolInt(parsed.notesPublic ?? true),
+          now,
+          now,
+        ]
       );
     }
 
@@ -64,8 +85,8 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation, notes, notes_public
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
@@ -87,6 +108,8 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           s.circuitRounds ?? null,
           s.circuitName ?? null,
           s.variation ?? null,
+          s.notes ?? null,
+          boolInt(s.notesPublic ?? true),
         ]
       );
     }
@@ -150,9 +173,9 @@ export async function createWorkout(input: z.infer<typeof createWorkoutSchema>):
 
   await powersync.writeTransaction(async (tx) => {
     await tx.execute(
-      `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, userId, parsed.name, parsed.performedOn, parsed.sessionType, null, now, now]
+      `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, notes_public, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, userId, parsed.name, parsed.performedOn, parsed.sessionType, null, 1, now, now]
     );
     if (parsed.guests?.length) {
       await insertGuestsInTx(tx, userId, id, parsed.guests);

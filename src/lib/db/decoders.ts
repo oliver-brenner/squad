@@ -76,6 +76,8 @@ export function decodeWorkout(r: WorkoutRow): Workout {
     performedOn: r.performed_on ?? "",
     sessionType: (r.session_type ?? "workout") as SessionType,
     notes: r.notes,
+    // Public by default: a missing flag (older rows) reads as public.
+    notesPublic: r.notes_public == null ? true : bool(r.notes_public),
     calories: r.calories,
     createdAt: r.created_at ?? "",
     updatedAt: r.updated_at ?? "",
@@ -104,6 +106,9 @@ export function decodeSet(r: WorkoutSetRow): WorkoutSet {
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
     variation: r.variation,
+    notes: r.notes ?? null,
+    // Public by default: a missing flag (older rows) reads as public.
+    notesPublic: r.notes_public == null ? true : bool(r.notes_public),
   };
 }
 
@@ -138,6 +143,8 @@ export function decodeTemplate(r: TemplateRow): Template {
     userId: r.user_id ?? "",
     name: r.name ?? "",
     sessionType: (r.session_type ?? "workout") as SessionType,
+    notes: r.notes ?? null,
+    notesPublic: r.notes_public == null ? true : bool(r.notes_public),
     createdAt: r.created_at ?? "",
     updatedAt: r.updated_at ?? "",
   };
@@ -164,6 +171,8 @@ export function decodeTemplateSet(r: TemplateSetRow): TemplateSet {
     circuitRounds: r.circuit_rounds,
     circuitName: r.circuit_name,
     variation: r.variation,
+    notes: r.notes ?? null,
+    notesPublic: r.notes_public == null ? true : bool(r.notes_public),
   };
 }
 

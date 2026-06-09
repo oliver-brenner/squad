@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
-import { nowISO, uuid } from "@/lib/db/encoding";
+import { boolInt, nowISO, uuid } from "@/lib/db/encoding";
 import type { ExerciseRow, TemplateSetRow, WorkoutRow, WorkoutSetRow } from "@/lib/db/schema";
 import { type GuestInput, insertGuestsInTx } from "@/lib/mutations/workouts";
 import { copyExerciseInTx } from "@/lib/mutations/exercises";
@@ -28,6 +28,8 @@ const templateSetInputSchema = z.object({
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
   variation: z.string().min(1).max(80).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+  notesPublic: z.boolean().optional(),
 });
 
 async function insertTemplateSetsInTx(
@@ -42,8 +44,8 @@ async function insertTemplateSetsInTx(
         id, template_id, user_id, exercise_id, position,
         reps, weight_kg, distance_km, duration_sec,
         resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-        circuit_id, circuit_rounds, circuit_name, variation
-      ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        circuit_id, circuit_rounds, circuit_name, variation, notes, notes_public
+      ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?)`,
       [
         s.id ?? uuid(),
         templateId,
@@ -64,6 +66,8 @@ async function insertTemplateSetsInTx(
         s.circuitRounds ?? null,
         s.circuitName ?? null,
         s.variation ?? null,
+        s.notes ?? null,
+        boolInt(s.notesPublic ?? true),
       ]
     );
   }
@@ -84,9 +88,9 @@ export async function createTemplate(
   const id = uuid();
   const now = nowISO();
   await powersync.execute(
-    `INSERT INTO templates (id, user_id, name, session_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, userId, parsed.name, parsed.sessionType, now, now]
+    `INSERT INTO templates (id, user_id, name, session_type, notes_public, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, userId, parsed.name, parsed.sessionType, 1, now, now]
   );
   return id;
 }
@@ -98,6 +102,8 @@ const saveTemplateSchema = z.object({
   id: z.string().uuid(),
   name: z.string().trim().min(1).max(80),
   sessionType: sessionTypeSchema,
+  notes: z.string().trim().max(2000).nullable().optional(),
+  notesPublic: z.boolean().optional(),
   sets: z.array(templateSetInputSchema),
 });
 
@@ -110,9 +116,17 @@ export async function saveTemplate(
 
   await powersync.writeTransaction(async (tx) => {
     await tx.execute(
-      `UPDATE templates SET name = ?, session_type = ?, updated_at = ?
+      `UPDATE templates SET name = ?, session_type = ?, notes = ?, notes_public = ?, updated_at = ?
        WHERE id = ? AND user_id = ?`,
-      [parsed.name, parsed.sessionType, now, parsed.id, userId]
+      [
+        parsed.name,
+        parsed.sessionType,
+        parsed.notes ?? null,
+        boolInt(parsed.notesPublic ?? true),
+        now,
+        parsed.id,
+        userId,
+      ]
     );
     await tx.execute(`DELETE FROM template_sets WHERE template_id = ?`, [parsed.id]);
     await insertTemplateSetsInTx(tx, userId, parsed.id, parsed.sets);
@@ -172,13 +186,15 @@ export async function createTemplateFromWorkout(
     if (!workout) throw new Error("Session not found");
 
     await tx.execute(
-      `INSERT INTO templates (id, user_id, name, session_type, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO templates (id, user_id, name, session_type, notes, notes_public, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         templateId,
         userId,
         parsed.name?.trim() || workout.name || "Template",
         workout.session_type ?? "workout",
+        workout.notes ?? null,
+        workout.notes_public ?? 1,
         now,
         now,
       ]
@@ -203,8 +219,8 @@ export async function createTemplateFromWorkout(
           id, template_id, user_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation, notes, notes_public
+        ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?)`,
         [
           uuid(),
           templateId,
@@ -225,6 +241,8 @@ export async function createTemplateFromWorkout(
           s.circuit_rounds,
           s.circuit_name,
           s.variation,
+          s.notes ?? null,
+          s.notes_public ?? 1,
         ]
       );
     }
@@ -379,16 +397,30 @@ export async function applyTemplate(
   const now = nowISO();
 
   await powersync.writeTransaction(async (tx) => {
-    const template = await tx.getOptional<{ id: string }>(
-      `SELECT id FROM templates WHERE id = ? AND user_id = ?`,
+    const template = await tx.getOptional<{
+      id: string;
+      notes: string | null;
+      notes_public: number | null;
+    }>(
+      `SELECT id, notes, notes_public FROM templates WHERE id = ? AND user_id = ?`,
       [parsed.templateId, userId]
     );
     if (!template) throw new Error("Template not found");
 
     await tx.execute(
-      `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [workoutId, userId, parsed.name, parsed.performedOn, parsed.sessionType, null, now, now]
+      `INSERT INTO workouts (id, user_id, name, performed_on, session_type, notes, notes_public, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        workoutId,
+        userId,
+        parsed.name,
+        parsed.performedOn,
+        parsed.sessionType,
+        template.notes ?? null,
+        template.notes_public ?? 1,
+        now,
+        now,
+      ]
     );
 
     const templateSets = await tx.getAll<TemplateSetRow>(
@@ -412,8 +444,8 @@ export async function applyTemplate(
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
-          circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+          circuit_id, circuit_rounds, circuit_name, variation, notes, notes_public
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -435,6 +467,8 @@ export async function applyTemplate(
           s.circuit_rounds,
           s.circuit_name,
           s.variation,
+          s.notes ?? null,
+          s.notes_public ?? 1,
         ]
       );
     }

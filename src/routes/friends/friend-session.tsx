@@ -373,6 +373,15 @@ export function FriendSession() {
         </div>
       )}
 
+      {workout.notes && workout.notes.trim().length > 0 && (
+        <div className="rounded-2xl border border-border bg-card px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Note
+          </span>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{workout.notes}</p>
+        </div>
+      )}
+
       <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
 
       <SessionReadOnlyItems

@@ -2,7 +2,7 @@ import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronDown, Plus, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X } from "lucide-react";
 import {
   DndContext,
   closestCorners,
@@ -26,6 +26,7 @@ import { sessionTypeColor } from "@/lib/session-type-color";
 import { sanitizeReturnHref } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NoteTray } from "@/components/note-field";
 import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
 import { SessionGuests } from "@/components/session-guests";
@@ -123,6 +124,10 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(workout.name);
+  const [notes, setNotes] = useState(workout.notes);
+  const [notesPublic, setNotesPublic] = useState(workout.notesPublic);
+  const [guestCount, setGuestCount] = useState(0);
+  const [noteTrayOpen, setNoteTrayOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   // Local copy of the exercises list so we can reflect inline edits (e.g.
   // renaming or changing tracked metrics via the embedded ExerciseForm)
@@ -235,19 +240,20 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   }, [name, isRenaming]);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestStateRef = useRef({ name, items });
+  const latestStateRef = useRef({ name, notes, notesPublic, items });
 
   useEffect(() => {
-    latestStateRef.current = { name, items };
-  }, [name, items]);
+    latestStateRef.current = { name, notes, notesPublic, items };
+  }, [name, notes, notesPublic, items]);
 
   const buildSavePayload = useCallback(() => {
-    const { name: n, items: it } = latestStateRef.current;
+    const { name: n, notes: nt, notesPublic: np, items: it } = latestStateRef.current;
     return {
       id: workout.id,
       name: n.trim() || "Workout",
       performedOn: workout.performedOn,
-      notes: null,
+      notes: nt,
+      notesPublic: np,
       sets: flattenItems(it),
     };
   }, [workout.id, workout.performedOn]);
@@ -270,7 +276,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [name, items, doSave]);
+  }, [name, notes, notesPublic, items, doSave]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
@@ -338,6 +344,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         exercise: ex,
         sets: [emptySet(ex)],
         variation: null,
+        notes: null,
+        notesPublic: true,
       },
     ]);
     setPicking(false);
@@ -367,6 +375,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
           exercise: ex,
           sets: [emptySet(ex)],
           variation: null,
+          notes: null,
+          notesPublic: true,
         };
         return { ...item, exercises: [...item.exercises, newEg] };
       })
@@ -519,8 +529,6 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         )}
       </header>
 
-      <SessionGuests workoutId={workout.id} variant="page" backHref={`/log/${workout.id}`} editable />
-
       {items.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {[
@@ -586,7 +594,32 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         </div>
       )}
 
-      <div className={`h-1.5 rounded-full my-2 ${sessionTypeColor(workout.sessionType)}`} />
+      <SessionNoteRow
+        guestCount={guestCount}
+        notes={notes}
+        notesPublic={notesPublic}
+        onGuestCountChange={setGuestCount}
+        onOpenTray={() => setNoteTrayOpen(true)}
+        onDeleteNote={() => { setNotes(null); }}
+        workoutId={workout.id}
+        backHref={`/log/${workout.id}`}
+      />
+
+      {noteTrayOpen && (
+        <NoteTray
+          initialValue={notes}
+          initialPublic={notesPublic}
+          placeholder="Add a note for this session…"
+          onConfirm={(v, p) => {
+            setNotes(v);
+            setNotesPublic(p);
+            setNoteTrayOpen(false);
+          }}
+          onClose={() => setNoteTrayOpen(false)}
+        />
+      )}
+
+      <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
 
       <DndContext
         sensors={sensors}
@@ -672,6 +705,87 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   );
 }
 
+const ADD_NOTE_BTN_CLS =
+  "flex items-center gap-1.5 rounded-xl border border-border bg-muted/30 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground";
+
+function SessionNoteRow({
+  guestCount,
+  notes,
+  notesPublic,
+  onGuestCountChange,
+  onOpenTray,
+  onDeleteNote,
+  workoutId,
+  backHref,
+}: {
+  guestCount: number;
+  notes: string | null;
+  notesPublic: boolean;
+  onGuestCountChange: (n: number) => void;
+  onOpenTray: () => void;
+  onDeleteNote: () => void;
+  workoutId: string;
+  backHref: string;
+}) {
+  const hasGuests = guestCount > 0;
+  const hasNote = !!notes && notes.trim().length > 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Row 1: guests + inline add-note when no guests and no note yet */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <SessionGuests
+          workoutId={workoutId}
+          variant="page"
+          backHref={backHref}
+          editable
+          onGuestCountChange={onGuestCountChange}
+        />
+        {!hasGuests && !hasNote && (
+          <button type="button" onClick={onOpenTray} className={ADD_NOTE_BTN_CLS}>
+            <Plus className="h-4 w-4 flex-shrink-0" />
+            <span className="font-medium">Add note</span>
+          </button>
+        )}
+      </div>
+
+      {/* Row 2: add-note button below when guests exist but no note yet */}
+      {hasGuests && !hasNote && (
+        <button type="button" onClick={onOpenTray} className={`self-start ${ADD_NOTE_BTN_CLS}`}>
+          <Plus className="h-4 w-4 flex-shrink-0" />
+          <span className="font-medium">Add note</span>
+        </button>
+      )}
+
+      {/* Note bubble: always its own row when note exists */}
+      {hasNote && (
+        <div className="w-full rounded-xl bg-muted/50 px-3 py-2 text-sm flex items-center gap-2">
+          {notesPublic ? (
+            <Globe className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          ) : (
+            <Lock className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+          )}
+          <button
+            type="button"
+            onClick={onOpenTray}
+            className="flex-1 whitespace-pre-wrap text-left"
+          >
+            {notes}
+          </button>
+          <button
+            type="button"
+            onClick={onDeleteNote}
+            aria-label="Delete note"
+            className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function toWorkoutSet(
   s: DraftSet,
   exerciseId: string,
@@ -700,6 +814,8 @@ function toWorkoutSet(
     circuitRounds: null,
     circuitName: null,
     variation: null,
+    notes: null,
+    notesPublic: true,
   };
 }
 

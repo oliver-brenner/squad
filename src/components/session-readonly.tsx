@@ -174,6 +174,9 @@ function ExerciseCard({
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
   const ex = item.exercise;
+  // Per-exercise note (denormalised across the group's sets). Private notes
+  // arrive as null from the sync layer, so any text here is meant to be shown.
+  const note = item.sets.find((s) => s.notes && s.notes.trim().length > 0)?.notes ?? null;
   return (
     <Card>
       <div className="flex items-start gap-3 p-3">
@@ -207,6 +210,14 @@ function ExerciseCard({
           />
         ))}
       </div>
+      {note && (
+        <div className="border-t border-border px-3 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Note
+          </span>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{note}</p>
+        </div>
+      )}
     </Card>
   );
 }

@@ -49,6 +49,7 @@ export type Workout = {
   performedOn: string;
   sessionType: SessionType;
   notes: string | null;
+  notesPublic: boolean;
   calories: number | null;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +76,8 @@ export type WorkoutSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
+  notes: string | null;
+  notesPublic: boolean;
 };
 
 export type UserFieldOption = {
@@ -110,6 +113,8 @@ export type Template = {
   userId: string;
   name: string;
   sessionType: SessionType;
+  notes: string | null;
+  notesPublic: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -136,6 +141,8 @@ export type TemplateSet = {
   circuitRounds: number | null;
   circuitName: string | null;
   variation: string | null;
+  notes: string | null;
+  notesPublic: boolean;
 };
 
 export type WorkoutWithSets = { workout: Workout; sets: WorkoutSet[] };
