@@ -132,11 +132,8 @@ function SessionRow({
 
   return (
     <li className="relative flex items-center rounded-2xl border border-border bg-card overflow-hidden">
-      <Link
-        to={href}
-        className={`flex flex-1 flex-col gap-1 p-4 min-w-0 ${showMenu ? "pr-12" : ""}`}
-      >
-        <div className="flex items-center gap-3 min-w-0">
+      <Link to={href} className="flex flex-1 flex-col gap-1 p-4 min-w-0">
+        <div className={`flex items-center gap-3 min-w-0 ${showMenu ? "pr-8" : ""}`}>
           <div
             className={`h-2.5 w-2.5 rounded-full shrink-0 ${sessionTypeColor(session.sessionType)}`}
           />
@@ -184,7 +181,7 @@ function SessionRow({
               e.preventDefault();
               setOpen(true);
             }}
-            className="absolute right-0 top-0 bottom-0 flex items-center px-4 text-muted-foreground"
+            className="absolute right-2 top-3 flex h-8 w-8 items-center justify-center text-muted-foreground"
             aria-label={`Options for ${session.name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
