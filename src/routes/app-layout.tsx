@@ -1,6 +1,8 @@
 import { Outlet } from "react-router-dom";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { UserFieldOptionsProvider } from "@/components/providers/user-field-options-provider";
+import { TimerProvider } from "@/components/providers/timer-provider";
+import { TimerBar } from "@/components/timer/timer-bar";
 import { BottomNav } from "@/components/nav/bottom-nav";
 
 // Shell shared by every authenticated route. Mounts inside AuthGuard (auth
@@ -10,14 +12,17 @@ export function AppLayout() {
   return (
     <QueryProvider>
       <UserFieldOptionsProvider>
-        <div className="flex min-h-dvh flex-col">
-          <main className="flex-1 mx-auto w-full max-w-2xl px-4 pb-24">
-            <Outlet />
-          </main>
-          <div className="fixed inset-x-0 bottom-0 z-40">
-            <BottomNav />
+        <TimerProvider>
+          <div className="flex min-h-dvh flex-col">
+            <main className="flex-1 mx-auto w-full max-w-2xl px-4 pb-24">
+              <Outlet />
+            </main>
+            <div className="fixed inset-x-0 bottom-0 z-40">
+              <TimerBar />
+              <BottomNav />
+            </div>
           </div>
-        </div>
+        </TimerProvider>
       </UserFieldOptionsProvider>
     </QueryProvider>
   );

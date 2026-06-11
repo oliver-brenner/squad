@@ -42,6 +42,9 @@ const SPEED_UNITS: { value: SpeedUnit; label: string }[] = [
   { value: "kmh", label: "km/h" },
 ];
 
+// "rest" is intentionally absent — it's no longer a metric chip. It's surfaced
+// as a dedicated "Rest timer" toggle below the metrics (backed by track_rest),
+// which both shows the per-set Rest field and drives the live rest timer.
 const METRICS: Metric[] = [
   "weight",
   "reps",
@@ -50,7 +53,6 @@ const METRICS: Metric[] = [
   "incline",
   "resistance",
   "distance",
-  "rest",
   "calories",
   "rpe",
 ];
@@ -70,7 +72,6 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.trackIncline) m.add("incline");
   if (exercise.trackResistance) m.add("resistance");
   if (exercise.distanceUnit) m.add("distance");
-  if (exercise.trackRest) m.add("rest");
   if (exercise.trackCalories) m.add("calories");
   if (exercise.trackRpe) m.add("rpe");
   return m;
@@ -121,6 +122,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   const [metrics, setMetrics] = useState<Set<Metric>>(
     exercise ? deriveMetrics(exercise) : new Set(["reps", "weight"])
   );
+  const [restTimer, setRestTimer] = useState(exercise?.trackRest ?? false);
   const [hasDefaultWeight, setHasDefaultWeight] = useState((exercise?.defaultWeightKg ?? 0) > 0);
   const [defaultWeightKg, setDefaultWeightKg] = useState(exercise?.defaultWeightKg ?? 0);
   const [doubleReps, setDoubleReps] = useState(exercise?.doubleReps ?? false);
@@ -176,7 +178,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           speedUnit: metrics.has("speed") ? speedUnit : null,
           trackIncline: metrics.has("incline"),
           inclineUnit: metrics.has("incline") ? inclineUnit : null,
-          trackRest: metrics.has("rest"),
+          trackRest: restTimer,
           trackCalories: metrics.has("calories"),
           trackRpe: metrics.has("rpe"),
           muscles: (() => {
@@ -442,6 +444,16 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="ex-rest-timer">Rest timer</Label>
+              <span className="text-xs text-muted-foreground">
+                Shows a Rest field per set and starts a countdown timer after each set.
+              </span>
+            </div>
+            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
           </div>
 
           {metrics.has("incline") && (

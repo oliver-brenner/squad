@@ -15,6 +15,7 @@ import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { updateExerciseNotes } from "@/lib/mutations/exercises";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { useTimer } from "@/components/providers/timer-provider";
 import {
   formatDuration,
   secToTimeParts,
@@ -43,6 +44,7 @@ type TrayState = {
 export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "workout" }: Props) {
   const isTemplate = mode === "template";
   const navigate = useNavigate();
+  const timer = useTimer();
   const [tray, setTray] = useState<TrayState | null>(null);
   const lastLoggedRef = useRef<Array<{
     reps: number | null;
@@ -220,11 +222,16 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
 
   function confirmTray(draft: DraftSet) {
     if (!tray) return;
-    if (tray.setIndex === -1) {
+    const isNewSet = tray.setIndex === -1;
+    if (isNewSet) {
       onUpdate({ ...group, sets: [...group.sets, draft] });
     } else {
       const next = group.sets.map((s, i) => (i === tray.setIndex ? { ...s, ...draft } : s));
       onUpdate({ ...group, sets: next });
+    }
+    // Logging a new set with a rest value (re)starts the live rest timer.
+    if (isNewSet && !isTemplate && group.exercise.trackRest && draft.restSec != null) {
+      timer.startRest(draft.restSec);
     }
     setTray(null);
   }
