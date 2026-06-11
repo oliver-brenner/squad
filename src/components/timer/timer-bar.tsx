@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Pause, Play, RotateCcw, Timer, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,13 +21,39 @@ function formatClock(sec: number): string {
 }
 
 export function TimerBar() {
-  const { active, mode, running, completed, elapsedSec, toggle, reset, dismiss } = useTimer();
+  const { active, mode, running, completed, elapsedSec, suppressed, toggle, reset, dismiss } =
+    useTimer();
   const { pathname } = useLocation();
+  const barRef = useRef<HTMLDivElement>(null);
+  const show = active && !suppressed && SESSION_PATH_RE.test(pathname);
 
-  if (!active || !SESSION_PATH_RE.test(pathname)) return null;
+  // Publish the bar's height so the page can pad its bottom by exactly this
+  // much (plus the nav) — keeps content scrollable clear of the pinned bar,
+  // even when the controls wrap to extra rows on a narrow screen.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const el = barRef.current;
+    if (!show || !el) {
+      root.style.setProperty("--timer-bar-h", "0px");
+      return;
+    }
+    const update = () => root.style.setProperty("--timer-bar-h", `${el.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.setProperty("--timer-bar-h", "0px");
+    };
+  }, [show]);
+
+  if (!show) return null;
 
   return (
-    <div className="border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div
+      ref={barRef}
+      className="border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+    >
       <div className="mx-auto flex max-w-2xl items-stretch gap-3 px-4 py-3">
         <div
           className={cn(

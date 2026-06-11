@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { createExercise, updateExercise } from "@/lib/mutations/exercises";
 import { getExerciseById } from "@/lib/db/queries";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
+import { useHideTimer } from "@/components/providers/timer-provider";
 
 type Metric =
   | "reps"
@@ -92,6 +93,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
     variations,
   } = useUserFieldOptions();
   const location = useLocation();
+  // The edit form takes over the screen, so hide the timer bar while it's open.
+  useHideTimer();
   // The form is rendered inline (no dedicated URL), so to come back to it
   // after a Customise-fields trip we encode the editing target in `?open=`.
   // The parent route picks this up on return and re-opens the form. New-form
@@ -450,7 +453,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
             <div className="flex flex-col">
               <Label htmlFor="ex-rest-timer">Rest timer</Label>
               <span className="text-xs text-muted-foreground">
-                Shows a Rest field per set and starts a countdown timer after each set.
+                Time your rests between each set.
               </span>
             </div>
             <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />

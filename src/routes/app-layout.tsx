@@ -14,7 +14,13 @@ export function AppLayout() {
       <UserFieldOptionsProvider>
         <TimerProvider>
           <div className="flex min-h-dvh flex-col">
-            <main className="flex-1 mx-auto w-full max-w-2xl px-4 pb-24">
+            {/* Bottom padding clears the nav (6rem) plus the timer bar when
+                present — its measured height is published as --timer-bar-h so
+                pinned-bottom content (e.g. Add exercise) stays scrollable. */}
+            <main
+              className="flex-1 mx-auto w-full max-w-2xl px-4"
+              style={{ paddingBottom: "calc(6rem + var(--timer-bar-h, 0px))" }}
+            >
               <Outlet />
             </main>
             <div className="fixed inset-x-0 bottom-0 z-40">
