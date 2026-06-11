@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
@@ -391,11 +391,14 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
   );
 }
 
-function formatSetSummary(
+// Returns each metric as its own string (e.g. "RPE 7", "40 kg") so the row can
+// render them as individual non-wrapping blocks — a metric never splits across
+// lines, it wraps as a whole.
+function formatSetSummaryParts(
   s: DraftSet,
   ex: Exercise,
   distanceUnit: "m" | "km" | "yd"
-): string {
+): string[] {
   const parts: string[] = [];
   if (!ex.isBodyweight && s.weightKg != null) {
     const dw = ex.defaultWeightKg ?? 0;
@@ -420,7 +423,7 @@ function formatSetSummary(
   }
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
-  return parts.length > 0 ? parts.join(" · ") : "—";
+  return parts;
 }
 
 function SetSummaryRow({
@@ -446,9 +449,25 @@ function SetSummaryRow({
       <button
         type="button"
         onClick={onClick}
-        className="flex-1 text-left text-sm py-0.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1"
+        className="flex-1 text-left text-sm py-0.5 inline-flex flex-wrap items-center gap-x-1.5 gap-y-1"
       >
-        <span>{formatSetSummary(set, exercise, distanceUnit)}</span>
+        {(() => {
+          const parts = formatSetSummaryParts(set, exercise, distanceUnit);
+          if (parts.length === 0) return <span>—</span>;
+          // Each metric is its own non-wrapping block, so "RPE 7" wraps as a
+          // whole. The divider is a separate item between metrics: on wrap it
+          // stays trailing on the previous line rather than leading the new one.
+          return parts.map((p, i) => (
+            <Fragment key={i}>
+              {i > 0 && (
+                <span className="text-muted-foreground/50" aria-hidden>
+                  ·
+                </span>
+              )}
+              <span className="whitespace-nowrap">{p}</span>
+            </Fragment>
+          ));
+        })()}
         <PBBadges types={pbs} />
       </button>
       <button
