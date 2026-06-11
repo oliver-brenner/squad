@@ -15,6 +15,12 @@ import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { updateExerciseNotes } from "@/lib/mutations/exercises";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import {
+  formatDuration,
+  secToTimeParts,
+  timePartsToSec,
+  type TimeParts,
+} from "@/lib/set-format";
 import { VariationControl } from "./variation-control";
 
 interface Props {
@@ -390,8 +396,7 @@ function formatSetSummary(
   }
   if (ex.trackReps && s.reps != null)
     parts.push(`${s.reps} reps${ex.doubleReps ? " x2" : ""}`);
-  if (ex.trackTime && s.durationSec != null)
-    parts.push(formatDuration(s.durationSec, (ex.timeUnit ?? "min") as "h" | "min" | "sec"));
+  if (ex.trackTime && s.durationSec != null) parts.push(formatDuration(s.durationSec));
   if (ex.trackSpeed && s.speedMs != null) {
     const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
     parts.push(isKmh ? `${+(s.speedMs * 3.6).toFixed(1)} km/h` : `${s.speedMs} m/s`);
@@ -409,16 +414,6 @@ function formatSetSummary(
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
-}
-
-function formatDuration(sec: number, unit: "h" | "min" | "sec"): string {
-  if (unit === "sec") return `${sec} secs`;
-  if (unit === "min") {
-    const mins = Math.round((sec / 60) * 10) / 10;
-    return `${mins} mins`;
-  }
-  const hrs = Math.round((sec / 3600) * 100) / 100;
-  return `${hrs} hrs`;
 }
 
 function SetSummaryRow({
@@ -543,6 +538,12 @@ export function SetTray({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<DraftSet>(initialDraft);
+  // Time is edited as separate h/m/s inputs but still stored as total seconds
+  // on the draft, so we hold the editable breakdown locally and recombine on
+  // every change.
+  const [timeParts, setTimeParts] = useState<TimeParts>(() =>
+    secToTimeParts(initialDraft.durationSec)
+  );
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -552,6 +553,12 @@ export function SetTray({
 
   function patch(p: Partial<DraftSet>) {
     setDraft((prev) => ({ ...prev, ...p }));
+  }
+
+  function patchTime(p: Partial<TimeParts>) {
+    const next = { ...timeParts, ...p };
+    setTimeParts(next);
+    patch({ durationSec: timePartsToSec(next) });
   }
 
   function handleConfirm() {
@@ -586,10 +593,10 @@ export function SetTray({
   const showCalories = ex.trackCalories;
   const showRpe = ex.trackRpe;
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
-  const timeUnit = (ex.timeUnit ?? "min") as "h" | "min" | "sec";
   const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
 
   const sg = isNew ? suggestion : null;
+  const sgTime = secToTimeParts(sg?.durationSec ?? null);
 
   return (
     <>
@@ -639,23 +646,35 @@ export function SetTray({
             </TrayField>
           )}
           {showTime && (
-            <TrayField label="Duration" unit={timeUnit}>
-              <NumInput
-                value={toDisplayTime(draft.durationSec, timeUnit)}
-                onChange={(v) => patch({ durationSec: toSec(v, timeUnit) })}
-                step={timeUnit === "h" ? 0.25 : timeUnit === "sec" ? 5 : 0.5}
-                placeholder={
-                  sg?.durationSec != null
-                    ? String(toDisplayTime(sg.durationSec, timeUnit) ?? "")
-                    : timeUnit === "h"
-                      ? "1.0"
-                      : timeUnit === "sec"
-                        ? "60"
-                        : "30"
-                }
-                className="w-full"
-              />
-            </TrayField>
+            <div className="col-span-2 grid grid-cols-3 gap-4">
+              <TrayField label="Hours" unit="h">
+                <NumInput
+                  value={timeParts.h}
+                  onChange={(v) => patchTime({ h: v == null ? null : Math.max(0, Math.round(v)) })}
+                  step={1}
+                  placeholder={sgTime.h != null ? String(sgTime.h) : "0"}
+                  className="w-full"
+                />
+              </TrayField>
+              <TrayField label="Minutes" unit="m">
+                <NumInput
+                  value={timeParts.m}
+                  onChange={(v) => patchTime({ m: v == null ? null : Math.max(0, Math.round(v)) })}
+                  step={1}
+                  placeholder={sgTime.m != null ? String(sgTime.m) : "0"}
+                  className="w-full"
+                />
+              </TrayField>
+              <TrayField label="Seconds" unit="s">
+                <NumInput
+                  value={timeParts.s}
+                  onChange={(v) => patchTime({ s: v == null ? null : Math.max(0, Math.round(v)) })}
+                  step={5}
+                  placeholder={sgTime.s != null ? String(sgTime.s) : "0"}
+                  className="w-full"
+                />
+              </TrayField>
+            </div>
           )}
           {showSpeed && (
             <TrayField label="Speed" unit={isKmh ? "km/h" : "m/s"}>
@@ -785,20 +804,6 @@ function TrayField({ label, unit, children }: { label: string; unit: string; chi
       </div>
     </div>
   );
-}
-
-function toDisplayTime(sec: number | null, unit: "h" | "min" | "sec"): number | null {
-  if (sec == null) return null;
-  if (unit === "h") return Math.round((sec / 3600) * 100) / 100;
-  if (unit === "sec") return sec;
-  return Math.round((sec / 60) * 10) / 10;
-}
-
-function toSec(display: number | null, unit: "h" | "min" | "sec"): number | null {
-  if (display == null) return null;
-  if (unit === "h") return Math.round(display * 3600);
-  if (unit === "sec") return Math.round(display);
-  return Math.round(display * 60);
 }
 
 function toDisplayDist(km: number | null, unit: "m" | "km" | "yd"): number | null {

@@ -14,6 +14,7 @@ import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } f
 import { SetTray } from "./set-rows";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { formatDuration } from "@/lib/set-format";
 import { VariationControl } from "./variation-control";
 
 interface Props {
@@ -557,13 +558,7 @@ function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
   if (!ex.isBodyweight && set.weightKg != null) parts.push(`${set.weightKg} kg`);
   if (ex.trackReps && set.reps != null)
     parts.push(`${set.reps} reps${ex.doubleReps ? " x2" : ""}`);
-  if (ex.trackTime && set.durationSec != null) {
-    const unit = (ex.timeUnit ?? "min") as "h" | "min" | "sec";
-    if (unit === "sec") parts.push(`${set.durationSec}s`);
-    else if (unit === "min")
-      parts.push(`${Math.round((set.durationSec / 60) * 10) / 10} min`);
-    else parts.push(`${Math.round((set.durationSec / 3600) * 100) / 100} h`);
-  }
+  if (ex.trackTime && set.durationSec != null) parts.push(formatDuration(set.durationSec));
   if (ex.trackResistance && set.resistance != null) parts.push(`res ${set.resistance}`);
   if (ex.trackIncline && set.inclinePct != null) {
     parts.push(

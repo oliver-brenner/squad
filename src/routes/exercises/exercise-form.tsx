@@ -23,7 +23,6 @@ type Metric =
   | "calories"
   | "rpe";
 type DistanceUnit = "m" | "km" | "yd";
-type TimeUnit = "h" | "min" | "sec";
 type InclineUnit = "pct" | "setting";
 type SpeedUnit = "ms" | "kmh";
 
@@ -31,12 +30,6 @@ const DISTANCE_UNITS: { value: DistanceUnit; label: string }[] = [
   { value: "m", label: "Meters" },
   { value: "km", label: "Kilometers" },
   { value: "yd", label: "Yards" },
-];
-
-const TIME_UNITS: { value: TimeUnit; label: string }[] = [
-  { value: "h", label: "Hours" },
-  { value: "min", label: "Minutes" },
-  { value: "sec", label: "Seconds" },
 ];
 
 const INCLINE_UNITS: { value: InclineUnit; label: string }[] = [
@@ -137,9 +130,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(
     (exercise?.distanceUnit as DistanceUnit | null) ?? "km"
   );
-  const [timeUnit, setTimeUnit] = useState<TimeUnit>(
-    (exercise?.timeUnit as TimeUnit | null) ?? "min"
-  );
   const [inclineUnit, setInclineUnit] = useState<InclineUnit>(
     (exercise?.inclineUnit as InclineUnit | null) ?? "pct"
   );
@@ -177,7 +167,10 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           doubleReps,
           distanceUnit: metrics.has("distance") ? distanceUnit : null,
           trackTime: metrics.has("time"),
-          timeUnit: metrics.has("time") ? timeUnit : null,
+          // Time no longer has a per-exercise unit; durations are entered and
+          // shown as h/m/s derived from the stored seconds. Kept nullable in
+          // the schema/column so existing rows stay valid.
+          timeUnit: null,
           trackResistance: metrics.has("resistance"),
           trackSpeed: metrics.has("speed"),
           speedUnit: metrics.has("speed") ? speedUnit : null,
@@ -481,25 +474,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                     size="sm"
                     variant={speedUnit === value ? "default" : "outline"}
                     onClick={() => setSpeedUnit(value)}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {metrics.has("time") && (
-            <div className="flex flex-col gap-2">
-              <Label>Time unit</Label>
-              <div className="flex flex-wrap gap-2">
-                {TIME_UNITS.map(({ value, label }) => (
-                  <Button
-                    key={value}
-                    type="button"
-                    size="sm"
-                    variant={timeUnit === value ? "default" : "outline"}
-                    onClick={() => setTimeUnit(value)}
                   >
                     {label}
                   </Button>
