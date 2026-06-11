@@ -20,8 +20,7 @@ function formatClock(sec: number): string {
 }
 
 export function TimerBar() {
-  const { active, mode, running, completed, elapsedSec, targetSec, toggle, reset, dismiss } =
-    useTimer();
+  const { active, mode, running, completed, elapsedSec, toggle, reset, dismiss } = useTimer();
   const { pathname } = useLocation();
 
   if (!active || !SESSION_PATH_RE.test(pathname)) return null;
