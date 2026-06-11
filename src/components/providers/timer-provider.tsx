@@ -68,6 +68,12 @@ interface TimerContextValue {
   reset: () => void;
   // Hide and clear the bar (re-shows the "Add timer" box).
   dismiss: () => void;
+  // True while a mounted view wants the bar hidden without clearing the timer
+  // (e.g. the exercise edit form). The timer keeps running underneath.
+  suppressed: boolean;
+  // Hide the bar while the caller is mounted; returns an undo to restore it.
+  // Ref-counted so overlapping suppressors don't clobber each other.
+  suppress: () => () => void;
 }
 
 const TimerContext = createContext<TimerContextValue | null>(null);
@@ -79,6 +85,12 @@ function elapsedMsOf(s: TimerState, now: number): number {
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TimerState>(INITIAL);
   const [now, setNow] = useState(() => Date.now());
+  const [suppressCount, setSuppressCount] = useState(0);
+
+  const suppress = useCallback(() => {
+    setSuppressCount((c) => c + 1);
+    return () => setSuppressCount((c) => Math.max(0, c - 1));
+  }, []);
 
   // Tick only while actively running, and only while the tab is visible — a
   // hidden tab stops ticking entirely (no background work) and recomputes from
@@ -219,8 +231,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       toggle,
       reset,
       dismiss,
+      suppressed: suppressCount > 0,
+      suppress,
     };
-  }, [state, now, startRest, startFree, toggle, reset, dismiss]);
+  }, [state, now, startRest, startFree, toggle, reset, dismiss, suppressCount, suppress]);
 
   return <TimerContext.Provider value={value}>{children}</TimerContext.Provider>;
 }
@@ -229,4 +243,12 @@ export function useTimer(): TimerContextValue {
   const ctx = useContext(TimerContext);
   if (!ctx) throw new Error("useTimer must be used within a TimerProvider");
   return ctx;
+}
+
+// Hide the timer bar for as long as the calling component is mounted, without
+// clearing the timer (it keeps running underneath). Used by views that should
+// take over the screen, e.g. the exercise edit form.
+export function useHideTimer(): void {
+  const { suppress } = useTimer();
+  useEffect(() => suppress(), [suppress]);
 }
