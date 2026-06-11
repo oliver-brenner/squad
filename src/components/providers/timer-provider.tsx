@@ -19,7 +19,7 @@ type Mode = "rest" | "free";
 interface TimerState {
   // Whether the pinned bar is shown at all.
   active: boolean;
-  // "rest" counts up and freezes at targetSec; "free" counts up indefinitely.
+  // "rest" counts up and freezes at targetSec; "free" counts up to a safety cap.
   mode: Mode;
   targetSec: number | null;
   // Counting (play) vs paused.
@@ -41,6 +41,13 @@ const INITIAL: TimerState = {
   baseMs: 0,
   completed: false,
 };
+
+// Safety cap for a free (no-target) timer — long enough to time a whole workout
+// but bounded so nothing counts up forever if a session is left open in a
+// backgrounded tab. Once a running free timer passes this, the module closes
+// itself. (Fully closing the app already clears the timer — state is in-memory
+// only.)
+const MAX_FREE_RUN_SEC = 6 * 60 * 60; // 6 hours
 
 interface TimerContextValue {
   active: boolean;
@@ -73,26 +80,58 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TimerState>(INITIAL);
   const [now, setNow] = useState(() => Date.now());
 
-  // Tick only while actively running.
+  // Tick only while actively running, and only while the tab is visible — a
+  // hidden tab stops ticking entirely (no background work) and recomputes from
+  // the timestamp the moment it's shown again, so elapsed stays accurate.
   useEffect(() => {
     if (!state.active || !state.running) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | undefined;
+    const startTicking = () => {
+      if (id == null) id = setInterval(() => setNow(Date.now()), 250);
+    };
+    const stopTicking = () => {
+      if (id != null) {
+        clearInterval(id);
+        id = undefined;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
+        startTicking();
+      } else {
+        stopTicking();
+      }
+    };
+    if (document.visibilityState === "visible") startTicking();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopTicking();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [state.active, state.running]);
 
-  // Freeze a rest timer at its target and buzz once when it gets there.
+  // Handle a timer reaching its limit. A rest timer freezes at its target and
+  // buzzes once. A free timer that hits the safety cap closes itself, so it
+  // can't run forever in a left-open session.
   useEffect(() => {
-    if (!state.active || !state.running || state.mode !== "rest" || state.targetSec == null) return;
-    if (elapsedMsOf(state, now) >= state.targetSec * 1000) {
-      setState((s) => ({
-        ...s,
-        running: false,
-        startedAt: null,
-        baseMs: (s.targetSec ?? 0) * 1000,
-        completed: true,
-      }));
-      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-        navigator.vibrate([200, 100, 200]);
+    if (!state.active || !state.running) return;
+    const capSec = state.mode === "rest" ? state.targetSec : MAX_FREE_RUN_SEC;
+    if (capSec == null) return;
+    if (elapsedMsOf(state, now) >= capSec * 1000) {
+      if (state.mode === "rest") {
+        setState((s) => ({
+          ...s,
+          running: false,
+          startedAt: null,
+          baseMs: (s.targetSec ?? 0) * 1000,
+          completed: true,
+        }));
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          navigator.vibrate([200, 100, 200]);
+        }
+      } else {
+        setState(INITIAL);
       }
     }
   }, [now, state]);

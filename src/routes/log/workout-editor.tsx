@@ -190,6 +190,21 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
   const { muscleGroups } = useUserFieldOptions();
   const timer = useTimer();
+  const timerRef = useRef(timer);
+  timerRef.current = timer;
+  useEffect(() => {
+    // Returning to the session: a rest timer that finished while away is stale,
+    // so close it rather than reopening the "Rest complete" module.
+    if (timerRef.current.mode === "rest" && timerRef.current.completed) {
+      timerRef.current.dismiss();
+    }
+    // Leaving the session: close the timer unless it's still running — a running
+    // timer (rest or free) keeps going in the background and reopens on return;
+    // an idle/paused/finished one is cleared so it's closed by default.
+    return () => {
+      if (!timerRef.current.running) timerRef.current.dismiss();
+    };
+  }, []);
   const breakdown = useMemo(() => {
     const rows: SetWithExerciseRow[] = [];
     for (const item of items) {

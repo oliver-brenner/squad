@@ -1,6 +1,12 @@
+import { useLocation } from "react-router-dom";
 import { Pause, Play, RotateCcw, Timer, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTimer } from "@/components/providers/timer-provider";
+
+// The timer is a session-only feature, so the bar only appears on a workout
+// session page (/log/:id). A running timer kept alive in the background stays
+// hidden elsewhere and reappears here on return.
+const SESSION_PATH_RE = /^\/log\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Pinned timer module. Rendered just above the bottom nav (see app-layout) and
 // only when a timer is active. Reads all state from the TimerProvider.
@@ -16,8 +22,9 @@ function formatClock(sec: number): string {
 export function TimerBar() {
   const { active, mode, running, completed, elapsedSec, targetSec, toggle, reset, dismiss } =
     useTimer();
+  const { pathname } = useLocation();
 
-  if (!active) return null;
+  if (!active || !SESSION_PATH_RE.test(pathname)) return null;
 
   return (
     <div className="border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
