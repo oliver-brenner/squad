@@ -2,7 +2,7 @@ import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X } from "lucide-react";
+import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X, Timer } from "lucide-react";
 import {
   DndContext,
   closestCorners,
@@ -21,6 +21,7 @@ import type { Exercise, Workout, WorkoutSet, SetWithExerciseRow } from "@/lib/db
 import { computeSessionStats, type StatItem } from "@/lib/session-stats";
 import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
+import { useTimer } from "@/components/providers/timer-provider";
 import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { sanitizeReturnHref } from "@/lib/utils";
@@ -188,6 +189,22 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   }, [items, picking, pickingForCircuit]);
 
   const { muscleGroups } = useUserFieldOptions();
+  const timer = useTimer();
+  const timerRef = useRef(timer);
+  timerRef.current = timer;
+  useEffect(() => {
+    // Returning to the session: a rest timer that finished while away is stale,
+    // so close it rather than reopening the "Rest complete" module.
+    if (timerRef.current.mode === "rest" && timerRef.current.completed) {
+      timerRef.current.dismiss();
+    }
+    // Leaving the session: close the timer unless it's still running — a running
+    // timer (rest or free) keeps going in the background and reopens on return;
+    // an idle/paused/finished one is cleared so it's closed by default.
+    return () => {
+      if (!timerRef.current.running) timerRef.current.dismiss();
+    };
+  }, []);
   const breakdown = useMemo(() => {
     const rows: SetWithExerciseRow[] = [];
     for (const item of items) {
@@ -682,6 +699,18 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
           <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add circuit</span>
         </Button>
       </div>
+
+      {!timer.active && (
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() => timer.startFree()}
+          className="w-full"
+        >
+          <Timer className="h-4 w-4" />{" "}
+          <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add timer</span>
+        </Button>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {isPending && null}

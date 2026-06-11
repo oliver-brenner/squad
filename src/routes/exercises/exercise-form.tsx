@@ -23,7 +23,6 @@ type Metric =
   | "calories"
   | "rpe";
 type DistanceUnit = "m" | "km" | "yd";
-type TimeUnit = "h" | "min" | "sec";
 type InclineUnit = "pct" | "setting";
 type SpeedUnit = "ms" | "kmh";
 
@@ -31,12 +30,6 @@ const DISTANCE_UNITS: { value: DistanceUnit; label: string }[] = [
   { value: "m", label: "Meters" },
   { value: "km", label: "Kilometers" },
   { value: "yd", label: "Yards" },
-];
-
-const TIME_UNITS: { value: TimeUnit; label: string }[] = [
-  { value: "h", label: "Hours" },
-  { value: "min", label: "Minutes" },
-  { value: "sec", label: "Seconds" },
 ];
 
 const INCLINE_UNITS: { value: InclineUnit; label: string }[] = [
@@ -49,6 +42,9 @@ const SPEED_UNITS: { value: SpeedUnit; label: string }[] = [
   { value: "kmh", label: "km/h" },
 ];
 
+// "rest" is intentionally absent — it's no longer a metric chip. It's surfaced
+// as a dedicated "Rest timer" toggle below the metrics (backed by track_rest),
+// which both shows the per-set Rest field and drives the live rest timer.
 const METRICS: Metric[] = [
   "weight",
   "reps",
@@ -57,7 +53,6 @@ const METRICS: Metric[] = [
   "incline",
   "resistance",
   "distance",
-  "rest",
   "calories",
   "rpe",
 ];
@@ -77,7 +72,6 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.trackIncline) m.add("incline");
   if (exercise.trackResistance) m.add("resistance");
   if (exercise.distanceUnit) m.add("distance");
-  if (exercise.trackRest) m.add("rest");
   if (exercise.trackCalories) m.add("calories");
   if (exercise.trackRpe) m.add("rpe");
   return m;
@@ -128,6 +122,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   const [metrics, setMetrics] = useState<Set<Metric>>(
     exercise ? deriveMetrics(exercise) : new Set(["reps", "weight"])
   );
+  const [restTimer, setRestTimer] = useState(exercise?.trackRest ?? false);
   const [hasDefaultWeight, setHasDefaultWeight] = useState((exercise?.defaultWeightKg ?? 0) > 0);
   const [defaultWeightKg, setDefaultWeightKg] = useState(exercise?.defaultWeightKg ?? 0);
   const [doubleReps, setDoubleReps] = useState(exercise?.doubleReps ?? false);
@@ -136,9 +131,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   );
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(
     (exercise?.distanceUnit as DistanceUnit | null) ?? "km"
-  );
-  const [timeUnit, setTimeUnit] = useState<TimeUnit>(
-    (exercise?.timeUnit as TimeUnit | null) ?? "min"
   );
   const [inclineUnit, setInclineUnit] = useState<InclineUnit>(
     (exercise?.inclineUnit as InclineUnit | null) ?? "pct"
@@ -177,13 +169,16 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           doubleReps,
           distanceUnit: metrics.has("distance") ? distanceUnit : null,
           trackTime: metrics.has("time"),
-          timeUnit: metrics.has("time") ? timeUnit : null,
+          // Time no longer has a per-exercise unit; durations are entered and
+          // shown as h/m/s derived from the stored seconds. Kept nullable in
+          // the schema/column so existing rows stay valid.
+          timeUnit: null,
           trackResistance: metrics.has("resistance"),
           trackSpeed: metrics.has("speed"),
           speedUnit: metrics.has("speed") ? speedUnit : null,
           trackIncline: metrics.has("incline"),
           inclineUnit: metrics.has("incline") ? inclineUnit : null,
-          trackRest: metrics.has("rest"),
+          trackRest: restTimer,
           trackCalories: metrics.has("calories"),
           trackRpe: metrics.has("rpe"),
           muscles: (() => {
@@ -451,6 +446,16 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
             </div>
           </div>
 
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="ex-rest-timer">Rest timer</Label>
+              <span className="text-xs text-muted-foreground">
+                Shows a Rest field per set and starts a countdown timer after each set.
+              </span>
+            </div>
+            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
+          </div>
+
           {metrics.has("incline") && (
             <div className="flex flex-col gap-2">
               <Label>Incline unit</Label>
@@ -481,25 +486,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                     size="sm"
                     variant={speedUnit === value ? "default" : "outline"}
                     onClick={() => setSpeedUnit(value)}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {metrics.has("time") && (
-            <div className="flex flex-col gap-2">
-              <Label>Time unit</Label>
-              <div className="flex flex-wrap gap-2">
-                {TIME_UNITS.map(({ value, label }) => (
-                  <Button
-                    key={value}
-                    type="button"
-                    size="sm"
-                    variant={timeUnit === value ? "default" : "outline"}
-                    onClick={() => setTimeUnit(value)}
                   >
                     {label}
                   </Button>

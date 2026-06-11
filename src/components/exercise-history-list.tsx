@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { formatDuration } from "@/lib/set-format";
 import { PBBadges } from "@/components/pb-badge";
 import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 
@@ -23,8 +24,7 @@ function formatSet(s: WorkoutSet, ex: Exercise): string {
   }
   if (ex.trackReps && s.reps != null)
     parts.push(`${s.reps} reps${ex.doubleReps ? " x2" : ""}`);
-  if (ex.trackTime && s.durationSec != null)
-    parts.push(formatDuration(s.durationSec, (ex.timeUnit ?? "min") as "h" | "min" | "sec"));
+  if (ex.trackTime && s.durationSec != null) parts.push(formatDuration(s.durationSec));
   if (ex.trackSpeed && s.speedMs != null) {
     const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
     parts.push(isKmh ? `${+(s.speedMs * 3.6).toFixed(1)} km/h` : `${s.speedMs} m/s`);
@@ -42,12 +42,6 @@ function formatSet(s: WorkoutSet, ex: Exercise): string {
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
-}
-
-function formatDuration(sec: number, unit: "h" | "min" | "sec"): string {
-  if (unit === "sec") return `${sec} secs`;
-  if (unit === "min") return `${Math.round((sec / 60) * 10) / 10} mins`;
-  return `${Math.round((sec / 3600) * 100) / 100} hrs`;
 }
 
 function toDisplayDist(km: number, unit: "m" | "km" | "yd"): number {
