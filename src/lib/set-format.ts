@@ -83,8 +83,9 @@ export function formatSetSummary(
     const dist = toDisplayDist(s.distanceKm, distanceUnit);
     parts.push(`${dist} ${distanceUnit}`);
   }
-  if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
+  // Rest is always shown last against the set.
+  if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
