@@ -1,6 +1,6 @@
 import { PB_LABEL, type PBType } from "@/lib/stats/set-pbs";
 
-// Multiple PB types collapse into a single pill (e.g. `PB 1RM+VOL`) to save
+// Multiple PB types collapse into a single pill (e.g. `PB RM+VOL`) to save
 // horizontal space on the set row — order is preserved from the input array,
 // which the computer already aligns with the metric display order.
 export function PBBadges({ types }: { types: PBType[] }) {
