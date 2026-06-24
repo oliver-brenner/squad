@@ -242,6 +242,7 @@ export function CircuitRows({
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
+            style={{ touchAction: "none" }}
             className="flex items-start gap-3 px-3 pt-3 pb-2"
           >
             <div className="flex-1 min-w-0">
@@ -440,6 +441,7 @@ function CircuitExerciseRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
+    touchAction: "none" as const,
   };
 
   const set = exGroup.sets[0];
