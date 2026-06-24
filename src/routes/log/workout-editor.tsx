@@ -2,7 +2,7 @@ import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X, Timer } from "lucide-react";
+import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X } from "lucide-react";
 import {
   DndContext,
   closestCorners,
@@ -529,6 +529,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             workoutId={workout.id}
             onClose={() => setMenuOpen(false)}
             onExport={() => setReceiptOpen(true)}
+            onAddTimer={!timer.active ? () => timer.startFree() : undefined}
             onDelete={() => {
               startTransition(async () => {
                 await deleteWorkout(workout.id);
@@ -700,18 +701,6 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         </Button>
       </div>
 
-      {!timer.active && (
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={() => timer.startFree()}
-          className="w-full"
-        >
-          <Timer className="h-4 w-4" />{" "}
-          <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add timer</span>
-        </Button>
-      )}
-
       {error && <p className="text-sm text-red-600">{error}</p>}
       {isPending && null}
 
@@ -847,11 +836,13 @@ function WorkoutMenu({
   onClose,
   onExport,
   onDelete,
+  onAddTimer,
 }: {
   workoutId: string;
   onClose: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onAddTimer?: () => void;
 }) {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
@@ -871,6 +862,18 @@ function WorkoutMenu({
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
         <div className="flex flex-col py-4 gap-2 px-4">
+          {onAddTimer && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onAddTimer();
+              }}
+              className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+            >
+              Add timer
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
