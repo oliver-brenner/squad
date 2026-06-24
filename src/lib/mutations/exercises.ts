@@ -30,6 +30,8 @@ const exerciseSchema = z.object({
   trackRest: z.boolean(),
   trackCalories: z.boolean(),
   trackRpe: z.boolean(),
+  trackSteps: z.boolean(),
+  heightUnit: z.enum(["cm", "m", "in", "ft"]).nullable().optional(),
   muscles: z.array(z.string()).nullable().optional(),
   secondaryMuscles: z.array(z.string()).nullable().optional(),
   variations: z
@@ -57,8 +59,9 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      track_steps, height_unit,
       muscles, secondary_muscles, variations, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?, ?, ?)`,
     [
       id,
       userId,
@@ -81,6 +84,8 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
       boolInt(data.trackRpe),
+      boolInt(data.trackSteps),
+      data.heightUnit ?? null,
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       variationsStr(data.variations ?? null),
@@ -105,6 +110,7 @@ export async function updateExercise(
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
       track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?, track_rpe = ?,
+      track_steps = ?, height_unit = ?,
       muscles = ?, secondary_muscles = ?, variations = ?, notes = ?
      WHERE id = ? AND user_id = ?`,
     [
@@ -127,6 +133,8 @@ export async function updateExercise(
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
       boolInt(data.trackRpe),
+      boolInt(data.trackSteps),
+      data.heightUnit ?? null,
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
       variationsStr(data.variations ?? null),
@@ -302,8 +310,9 @@ export async function copyExerciseInTx(
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      track_steps, height_unit,
       muscles, secondary_muscles, variations, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -326,6 +335,8 @@ export async function copyExerciseInTx(
       boolInt(source.trackRest),
       boolInt(source.trackCalories),
       boolInt(source.trackRpe),
+      boolInt(source.trackSteps),
+      source.heightUnit ?? null,
       arrStr(source.muscles ?? null),
       arrStr(source.secondaryMuscles ?? null),
       variationsStr(source.variations ?? null),

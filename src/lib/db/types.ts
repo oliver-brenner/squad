@@ -42,6 +42,8 @@ export type Exercise = {
   trackRest: boolean;
   trackCalories: boolean;
   trackRpe: boolean;
+  trackSteps: boolean;
+  heightUnit: string | null;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
   variations: ExerciseVariation[] | null;
@@ -79,6 +81,8 @@ export type WorkoutSet = {
   restSec: number | null;
   calories: number | null;
   rpe: number | null;
+  steps: number | null;
+  heightM: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;
@@ -142,6 +146,8 @@ export type TemplateSet = {
   restSec: number | null;
   calories: number | null;
   rpe: number | null;
+  steps: number | null;
+  heightM: number | null;
   circuitId: string | null;
   circuitRounds: number | null;
   circuitName: string | null;

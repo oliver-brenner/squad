@@ -23,15 +23,25 @@ type Metric =
   | "distance"
   | "rest"
   | "calories"
-  | "rpe";
+  | "rpe"
+  | "steps"
+  | "height";
 type DistanceUnit = "m" | "km" | "yd";
 type InclineUnit = "pct" | "setting";
 type SpeedUnit = "ms" | "kmh";
+type HeightUnit = "cm" | "m" | "in" | "ft";
 
 const DISTANCE_UNITS: { value: DistanceUnit; label: string }[] = [
   { value: "m", label: "Meters" },
   { value: "km", label: "Kilometers" },
   { value: "yd", label: "Yards" },
+];
+
+const HEIGHT_UNITS: { value: HeightUnit; label: string }[] = [
+  { value: "cm", label: "Centimetres" },
+  { value: "m", label: "Metres" },
+  { value: "in", label: "Inches" },
+  { value: "ft", label: "Feet" },
 ];
 
 const INCLINE_UNITS: { value: InclineUnit; label: string }[] = [
@@ -57,6 +67,8 @@ const METRICS: Metric[] = [
   "distance",
   "calories",
   "rpe",
+  "steps",
+  "height",
 ];
 
 // Most metric chips capitalize their key for display; a few need an explicit
@@ -76,6 +88,8 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.distanceUnit) m.add("distance");
   if (exercise.trackCalories) m.add("calories");
   if (exercise.trackRpe) m.add("rpe");
+  if (exercise.trackSteps) m.add("steps");
+  if (exercise.heightUnit) m.add("height");
   return m;
 }
 
@@ -137,6 +151,9 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   const [speedUnit, setSpeedUnit] = useState<SpeedUnit>(
     (exercise?.speedUnit as SpeedUnit | null) ?? "kmh"
   );
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>(
+    (exercise?.heightUnit as HeightUnit | null) ?? "cm"
+  );
   const [error, setError] = useState<string | null>(null);
 
   function toggleMetric(m: Metric) {
@@ -180,6 +197,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           trackRest: restTimer,
           trackCalories: metrics.has("calories"),
           trackRpe: metrics.has("rpe"),
+          trackSteps: metrics.has("steps"),
+          heightUnit: metrics.has("height") ? heightUnit : null,
           muscles: (() => {
             const p = [...muscleMap.entries()]
               .filter(([, v]) => v === "primary")
@@ -425,16 +444,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <Label htmlFor="ex-rest-timer">Rest timer</Label>
-              <span className="text-xs text-muted-foreground">
-                Time your rests between each set.
-              </span>
-            </div>
-            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
-          </div>
-
           {metrics.has("incline") && (
             <div className="flex flex-col gap-2">
               <Label>Incline unit</Label>
@@ -491,6 +500,35 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               </div>
             </div>
           )}
+
+          {metrics.has("height") && (
+            <div className="flex flex-col gap-2">
+              <Label>Height unit</Label>
+              <div className="flex flex-wrap gap-2">
+                {HEIGHT_UNITS.map(({ value, label }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={heightUnit === value ? "default" : "outline"}
+                    onClick={() => setHeightUnit(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="ex-rest-timer">Rest timer</Label>
+              <span className="text-xs text-muted-foreground">
+                Time your rests between each set.
+              </span>
+            </div>
+            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
+          </div>
 
           {metrics.has("weight") && (
             <div className="flex flex-col gap-3">

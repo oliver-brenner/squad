@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { formatDuration } from "@/lib/set-format";
+import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { PBBadges } from "@/components/pb-badge";
 
 function formatDate(iso: string): string {
@@ -38,6 +38,11 @@ function formatSet(s: WorkoutSet, ex: Exercise): string {
     const dist = toDisplayDist(s.distanceKm, distanceUnit);
     parts.push(`${dist} ${distanceUnit}`);
   }
+  if (ex.heightUnit && s.heightM != null) {
+    const unit = ex.heightUnit as HeightUnit;
+    parts.push(`${mToHeight(s.heightM, unit)} ${unit}`);
+  }
+  if (ex.trackSteps && s.steps != null) parts.push(`${s.steps} steps`);
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
