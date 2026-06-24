@@ -13,6 +13,8 @@ export type DraftSet = {
   restSec: number | null;
   calories: number | null;
   rpe: number | null;
+  steps: number | null;
+  heightM: number | null;
 };
 
 export type ExerciseGroup = {

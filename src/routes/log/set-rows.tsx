@@ -20,7 +20,10 @@ import {
   formatDuration,
   secToTimeParts,
   timePartsToSec,
+  mToHeight,
+  heightToM,
   type TimeParts,
+  type HeightUnit,
 } from "@/lib/set-format";
 import { VariationControl } from "./variation-control";
 
@@ -56,6 +59,8 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     inclinePct: number | null;
     restSec: number | null;
     rpe: number | null;
+    steps: number | null;
+    heightM: number | null;
   }> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteTrayOpen, setNoteTrayOpen] = useState(false);
@@ -115,6 +120,8 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
           inclinePct: s.inclinePct,
           restSec: s.restSec,
           rpe: s.rpe,
+          steps: s.steps,
+          heightM: s.heightM,
         }));
         lastLoggedRef.current = lastSets;
         const currentGroup = groupRef.current;
@@ -128,7 +135,9 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             s.speedMs != null ||
             s.inclinePct != null ||
             s.restSec != null ||
-            s.rpe != null
+            s.rpe != null ||
+            s.steps != null ||
+            s.heightM != null
           )
             return s;
           const src = lastSets[i] ?? lastSets[0];
@@ -143,6 +152,8 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             inclinePct: src.inclinePct,
             restSec: src.restSec,
             rpe: src.rpe,
+            steps: src.steps,
+            heightM: src.heightM,
           };
         });
         // Exercise notes are now persisted on the Exercise itself (not the
@@ -211,6 +222,8 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
         restSec: null,
         calories: null,
         rpe: null,
+        steps: null,
+        heightM: null,
       },
       suggestion: last ?? historySuggestion,
     });
@@ -421,6 +434,11 @@ function formatSetSummaryParts(
     const dist = toDisplayDist(s.distanceKm, distanceUnit);
     parts.push(`${dist} ${distanceUnit}`);
   }
+  if (ex.heightUnit && s.heightM != null) {
+    const unit = ex.heightUnit as HeightUnit;
+    parts.push(`${mToHeight(s.heightM, unit)} ${unit}`);
+  }
+  if (ex.trackSteps && s.steps != null) parts.push(`${s.steps} steps`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   // Rest is always shown last against the set.
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
@@ -602,6 +620,8 @@ export function SetTray({
         restSec: draft.restSec ?? suggestion.restSec,
         calories: draft.calories ?? suggestion.calories,
         rpe: draft.rpe ?? suggestion.rpe,
+        steps: draft.steps ?? suggestion.steps,
+        heightM: draft.heightM ?? suggestion.heightM,
       });
     } else {
       onConfirm(draft);
@@ -619,7 +639,10 @@ export function SetTray({
   const showRest = ex.trackRest;
   const showCalories = ex.trackCalories;
   const showRpe = ex.trackRpe;
+  const showSteps = ex.trackSteps;
+  const showHeight = !!ex.heightUnit;
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
+  const heightUnit = (ex.heightUnit ?? "cm") as HeightUnit;
   const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
 
   const sg = isNew ? suggestion : null;
@@ -773,6 +796,36 @@ export function SetTray({
                       },
                     }
                   : {})}
+              />
+            </TrayField>
+          )}
+          {showHeight && (
+            <TrayField label="Height" unit={heightUnit}>
+              <NumInput
+                value={draft.heightM != null ? mToHeight(draft.heightM, heightUnit) : null}
+                onChange={(v) => patch({ heightM: v != null ? heightToM(v, heightUnit) : null })}
+                step={heightUnit === "cm" || heightUnit === "in" ? 1 : 0.1}
+                placeholder={
+                  sg?.heightM != null
+                    ? String(mToHeight(sg.heightM, heightUnit))
+                    : heightUnit === "cm"
+                      ? "50"
+                      : heightUnit === "in"
+                        ? "20"
+                        : "1"
+                }
+                className="w-full"
+              />
+            </TrayField>
+          )}
+          {showSteps && (
+            <TrayField label="Steps" unit="steps">
+              <NumInput
+                value={draft.steps}
+                onChange={(v) => patch({ steps: v != null ? Math.round(v) : null })}
+                step={1}
+                placeholder={sg?.steps != null ? String(sg.steps) : "1000"}
+                className="w-full"
               />
             </TrayField>
           )}

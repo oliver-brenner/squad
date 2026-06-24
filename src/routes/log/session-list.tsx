@@ -150,7 +150,7 @@ function SessionRow({
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {showPills &&
               [
-                { value: session.totalExercises, label: "exercises" },
+                { value: session.totalExercises, label: "ex" },
                 { value: session.totalSets, label: "sets" },
                 { value: session.totalReps, label: "reps" },
               ].map(({ value, label }) => (

@@ -1,13 +1,11 @@
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
-import { estimateOneRepMax } from "./one-rep-max";
 
-export type PBType = "1RM" | "Volume" | "Distance" | "Reps" | "Time" | "Speed";
+export type PBType = "RM" | "Volume" | "Distance" | "Time" | "Speed";
 
 export const PB_LABEL: Record<PBType, string> = {
-  "1RM": "1RM",
+  RM: "RM",
   Volume: "Vol",
   Distance: "Dist",
-  Reps: "Reps",
   Time: "Time",
   Speed: "Speed",
 };
@@ -26,10 +24,6 @@ function effectiveWeightKg(s: PBInputSet, ex: Exercise): number | null {
   if (ex.isBodyweight) return null;
   if (s.weightKg == null) return null;
   return s.weightKg + (ex.defaultWeightKg ?? 0);
-}
-
-export function setOneRm(s: PBInputSet, ex: Exercise): number | null {
-  return estimateOneRepMax(effectiveWeightKg(s, ex), effectiveReps(s, ex));
 }
 
 export function setVolumeKg(s: PBInputSet, ex: Exercise): number | null {
@@ -57,6 +51,7 @@ export function computeHistoricalPBs<T extends PBInputSet>(
   const tracksSpeed = exercise.trackSpeed;
 
   let maxWeightKg: number | null = null;
+  let maxRepsAtMaxWeight: number | null = null;
   let maxVolume: number | null = null;
   let maxDistance: number | null = null;
   let maxDurationSec: number | null = null;
@@ -76,10 +71,29 @@ export function computeHistoricalPBs<T extends PBInputSet>(
     // Push order mirrors the metric display order on a set row (weight → reps
     // → time → distance) so badges read left-to-right in the same direction.
     if (isStrength) {
+      // RM = rep max: the best (heaviest weight, then most reps at that weight).
+      // A set earns the badge when it sets a new top weight, or matches the top
+      // weight with more reps than any prior set at that weight.
       const w = effectiveWeightKg(s, exercise);
-      if (w != null && beats(w, maxWeightKg)) {
-        pbs.push("1RM");
-        maxWeightKg = w;
+      const r = effectiveReps(s, exercise);
+      if (w != null && r != null) {
+        const heavier = maxWeightKg == null || w > maxWeightKg;
+        const sameWeightMoreReps =
+          maxWeightKg != null && w === maxWeightKg && beats(r, maxRepsAtMaxWeight);
+        const tie =
+          maxWeightKg != null && w === maxWeightKg && r === maxRepsAtMaxWeight;
+
+        if (beats(w, maxWeightKg) || sameWeightMoreReps || (includeTies && tie)) {
+          pbs.push("RM");
+        }
+        // Advance the frontier: a heavier weight resets the reps record to this
+        // set's reps; an equal-weight set only bumps it when reps increase.
+        if (heavier) {
+          maxWeightKg = w;
+          maxRepsAtMaxWeight = r;
+        } else if (w === maxWeightKg && r > (maxRepsAtMaxWeight ?? 0)) {
+          maxRepsAtMaxWeight = r;
+        }
       }
       const vol = setVolumeKg(s, exercise);
       if (vol != null && beats(vol, maxVolume)) {
@@ -88,11 +102,11 @@ export function computeHistoricalPBs<T extends PBInputSet>(
       }
     }
 
-    // PB Reps is decided per-set: if the only metric on a set is reps (no
-    // weight, distance, time, or speed actually logged), it's eligible. This
-    // catches pullups/pushups, but also weight-tracking exercises where the
-    // user just logged reps without weight — the running max only competes
-    // across pure-rep sets, so weighted sets don't poison the comparison.
+    // A pure-reps set (only reps logged — no weight, distance, time, or speed)
+    // earns an RM too: with no weight, max reps IS the rep max. This catches
+    // pullups/pushups, but also weight-tracking exercises where the user just
+    // logged reps without weight — the running max only competes across
+    // pure-rep sets, so weighted sets don't poison the comparison.
     if (exercise.trackReps) {
       const r = effectiveReps(s, exercise);
       const setIsPureReps =
@@ -102,7 +116,7 @@ export function computeHistoricalPBs<T extends PBInputSet>(
         s.durationSec == null &&
         s.speedMs == null;
       if (setIsPureReps && beats(r, maxReps)) {
-        pbs.push("Reps");
+        pbs.push("RM");
         maxReps = r;
       }
     }

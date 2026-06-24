@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { formatDuration } from "@/lib/set-format";
+import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { PBBadges } from "@/components/pb-badge";
-import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -39,6 +38,11 @@ function formatSet(s: WorkoutSet, ex: Exercise): string {
     const dist = toDisplayDist(s.distanceKm, distanceUnit);
     parts.push(`${dist} ${distanceUnit}`);
   }
+  if (ex.heightUnit && s.heightM != null) {
+    const unit = ex.heightUnit as HeightUnit;
+    parts.push(`${mToHeight(s.heightM, unit)} ${unit}`);
+  }
+  if (ex.trackSteps && s.steps != null) parts.push(`${s.steps} steps`);
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   return parts.length > 0 ? parts.join(" · ") : "—";
@@ -79,12 +83,11 @@ export function ExerciseHistoryList({
   futureSets,
 }: Props) {
   const [entries, setEntries] = useState<ExerciseHistoryEntry[] | null>(initialEntries ?? null);
-  // Resolve variation keys to labels against the exercise OWNER's options, so a
-  // friend's exercise detail shows their variation names as they named them.
-  const { variations } = useUserFieldOptionsForUser(exercise.userId);
+  // Variations live on the exercise itself (key + label), so resolve labels
+  // straight from it — friend exercises carry their owner's names already.
   const variationLabels = useMemo(
-    () => new Map(variations.map((v) => [v.key, v.label])),
-    [variations]
+    () => new Map((exercise.variations ?? []).map((v) => [v.key, v.label])),
+    [exercise.variations]
   );
 
   useEffect(() => {

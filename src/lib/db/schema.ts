@@ -42,10 +42,12 @@ const exercises = new Table(
     track_rest: column.integer,
     track_calories: column.integer,
     track_rpe: column.integer,
+    track_steps: column.integer,
+    height_unit: column.text,
     muscles: column.text,
     secondary_muscles: column.text,
-    // JSON-encoded text[] of variation keys attached to this exercise; decode
-    // /encode in the data layer like categories/muscles.
+    // jsonb array of {key,label} variations belonging to this exercise. Stored
+    // locally as JSON text; decode/encode via decodeVariations/variationsStr.
     variations: column.text,
     // Private free-text note attached to the exercise (owner-only — excluded
     // from the followee_exercises sync rule projection). Persists across every
@@ -106,6 +108,8 @@ const sets = new Table(
     rest_sec: column.integer,
     calories: column.integer,
     rpe: column.integer,
+    steps: column.integer,
+    height_m: column.real,
     circuit_id: column.text,
     circuit_rounds: column.integer,
     circuit_name: column.text,
@@ -222,6 +226,8 @@ const template_sets = new Table(
     rest_sec: column.integer,
     calories: column.integer,
     rpe: column.integer,
+    steps: column.integer,
+    height_m: column.real,
     circuit_id: column.text,
     circuit_rounds: column.integer,
     circuit_name: column.text,
@@ -270,5 +276,4 @@ export type UserFieldKind =
   | "category"
   | "equipment"
   | "muscle_group"
-  | "muscle_child"
-  | "variation";
+  | "muscle_child";

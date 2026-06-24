@@ -13,9 +13,28 @@ export type FormattableSet = Pick<
   | "inclinePct"
   | "restSec"
   | "rpe"
+  | "steps"
+  | "heightM"
 >;
 
 export type DistanceUnit = "m" | "km" | "yd";
+export type HeightUnit = "cm" | "m" | "in" | "ft";
+
+// Heights are stored canonically in metres; convert to the exercise's display
+// unit for rendering (mirrors how distance is stored in km).
+export function mToHeight(m: number, unit: HeightUnit): number {
+  if (unit === "cm") return Math.round(m * 100);
+  if (unit === "in") return Math.round(m * 39.3701);
+  if (unit === "ft") return +(m * 3.28084).toFixed(1);
+  return +m.toFixed(2);
+}
+
+export function heightToM(display: number, unit: HeightUnit): number {
+  if (unit === "cm") return display / 100;
+  if (unit === "in") return display / 39.3701;
+  if (unit === "ft") return display / 3.28084;
+  return display;
+}
 
 // Renders a stored duration (always persisted as total seconds) as a compact
 // h/m/s string showing only the non-zero components — e.g. "1h 30m", "45s",
@@ -83,6 +102,11 @@ export function formatSetSummary(
     const dist = toDisplayDist(s.distanceKm, distanceUnit);
     parts.push(`${dist} ${distanceUnit}`);
   }
+  if (ex.heightUnit && s.heightM != null) {
+    const unit = ex.heightUnit as HeightUnit;
+    parts.push(`${mToHeight(s.heightM, unit)} ${unit}`);
+  }
+  if (ex.trackSteps && s.steps != null) parts.push(`${s.steps} steps`);
   if (ex.trackRpe && s.rpe != null) parts.push(`RPE ${s.rpe}`);
   // Rest is always shown last against the set.
   if (ex.trackRest && s.restSec != null) parts.push(`${s.restSec}s rest`);

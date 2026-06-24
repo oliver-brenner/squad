@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Transaction } from "@powersync/web";
 import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
-import { arrStr, boolInt, nowISO, uuid } from "@/lib/db/encoding";
+import { arrStr, boolInt, nowISO, uuid, variationsStr } from "@/lib/db/encoding";
 import { decodeExercise } from "@/lib/db/decoders";
 import type {
   ExerciseRow,
@@ -30,9 +30,19 @@ const exerciseSchema = z.object({
   trackRest: z.boolean(),
   trackCalories: z.boolean(),
   trackRpe: z.boolean(),
+  trackSteps: z.boolean(),
+  heightUnit: z.enum(["cm", "m", "in", "ft"]).nullable().optional(),
   muscles: z.array(z.string()).nullable().optional(),
   secondaryMuscles: z.array(z.string()).nullable().optional(),
-  variations: z.array(z.string().min(1).max(80)).nullable().optional(),
+  variations: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(80),
+        label: z.string().trim().min(1).max(80),
+      })
+    )
+    .nullable()
+    .optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
 });
 
@@ -49,8 +59,9 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      track_steps, height_unit,
       muscles, secondary_muscles, variations, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?, ?, ?)`,
     [
       id,
       userId,
@@ -73,9 +84,11 @@ export async function createExercise(input: z.infer<typeof exerciseSchema>): Pro
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
       boolInt(data.trackRpe),
+      boolInt(data.trackSteps),
+      data.heightUnit ?? null,
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
-      arrStr(data.variations ?? null),
+      variationsStr(data.variations ?? null),
       data.notes ?? null,
       now,
     ]
@@ -97,6 +110,7 @@ export async function updateExercise(
       distance_unit = ?, track_time = ?, time_unit = ?,
       track_resistance = ?, track_speed = ?, speed_unit = ?,
       track_incline = ?, incline_unit = ?, track_rest = ?, track_calories = ?, track_rpe = ?,
+      track_steps = ?, height_unit = ?,
       muscles = ?, secondary_muscles = ?, variations = ?, notes = ?
      WHERE id = ? AND user_id = ?`,
     [
@@ -119,9 +133,11 @@ export async function updateExercise(
       boolInt(data.trackRest),
       boolInt(data.trackCalories),
       boolInt(data.trackRpe),
+      boolInt(data.trackSteps),
+      data.heightUnit ?? null,
       arrStr(data.muscles ?? null),
       arrStr(data.secondaryMuscles ?? null),
-      arrStr(data.variations ?? null),
+      variationsStr(data.variations ?? null),
       data.notes ?? null,
       id,
       userId,
@@ -281,11 +297,8 @@ export async function copyExerciseInTx(
     );
   }
 
-  // Variations — flat keys, just ensure each exists in my options too.
-  for (const k of source.variations ?? []) {
-    const f = pickFriendOption(friendByKey, k, "variation");
-    await ensureMineHasOption(tx, myUserId, "variation", k, f?.label ?? k, null);
-  }
+  // Variations belong to the exercise (key + label), so they copy verbatim
+  // with the rest of the row — no field-options backfill needed.
 
   // Insert the exercise. Tag keys are preserved verbatim — the ensure calls
   // above guarantee each key now exists in my options too.
@@ -297,8 +310,9 @@ export async function copyExerciseInTx(
       distance_unit, track_time, time_unit,
       track_resistance, track_speed, speed_unit,
       track_incline, incline_unit, track_rest, track_calories, track_rpe,
+      track_steps, height_unit,
       muscles, secondary_muscles, variations, created_at
-    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?,  ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?,  ?, ?, ?, ?)`,
     [
       newId,
       myUserId,
@@ -321,9 +335,11 @@ export async function copyExerciseInTx(
       boolInt(source.trackRest),
       boolInt(source.trackCalories),
       boolInt(source.trackRpe),
+      boolInt(source.trackSteps),
+      source.heightUnit ?? null,
       arrStr(source.muscles ?? null),
       arrStr(source.secondaryMuscles ?? null),
-      arrStr(source.variations ?? null),
+      variationsStr(source.variations ?? null),
       nowISO(),
     ]
   );

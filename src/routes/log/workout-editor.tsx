@@ -2,7 +2,7 @@ import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from
 import { Link, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X, Timer } from "lucide-react";
+import { ChevronLeft, ChevronDown, Plus, MoreHorizontal, Globe, Lock, X } from "lucide-react";
 import {
   DndContext,
   closestCorners,
@@ -58,6 +58,9 @@ import {
 } from "./exercise-items";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Device-wide preference: show every session's exercise list bottom-to-top.
+const REVERSE_ORDER_KEY = "squad.reverseExerciseOrder";
 
 export function WorkoutEditorRoute() {
   const { id } = useParams<{ id: string }>();
@@ -178,15 +181,41 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
   const [calories, setCalories] = useState(workout.calories);
   const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
+  // When enabled, the exercise list is shown bottom-to-top and the add buttons
+  // move up directly below the session-type bar. Persisted device-wide so the
+  // preference carries across every session until toggled off.
+  const [reversed, setReversed] = useState(() => {
+    try {
+      return localStorage.getItem(REVERSE_ORDER_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleReversed = useCallback(() => {
+    setReversed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(REVERSE_ORDER_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage may be unavailable (private mode); keep the in-memory value
+      }
+      return next;
+    });
+  }, []);
 
   // After adding an exercise, the picker view unmounts and the editor re-renders
-  // with the new entry appended. Scroll to it here, once it's in the DOM.
+  // with the new entry appended. Scroll to it here, once it's in the DOM. When
+  // the list is reversed the new entry sits at the top, so scroll there instead.
   useEffect(() => {
     if (!picking && !pickingForCircuit && scrollToBottomRef.current) {
       scrollToBottomRef.current = false;
-      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
+      window.scrollTo({
+        top: reversed ? 0 : document.documentElement.scrollHeight,
+        behavior: "instant",
+      });
     }
-  }, [items, picking, pickingForCircuit]);
+  }, [items, picking, pickingForCircuit, reversed]);
 
   const { muscleGroups } = useUserFieldOptions();
   const timer = useTimer();
@@ -469,6 +498,29 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     );
   }
 
+  const displayItems = reversed ? [...items].reverse() : items;
+
+  const addButtons = (
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={() => {
+          setPicking(true);
+          window.scrollTo({ top: 0, behavior: "instant" });
+        }}
+        className="flex-1"
+      >
+        <Plus className="h-4 w-4" />{" "}
+        <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add exercise</span>
+      </Button>
+      <Button variant="outline" size="lg" onClick={addCircuit} className="flex-1">
+        <Plus className="h-4 w-4" />{" "}
+        <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add circuit</span>
+      </Button>
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       <header className="flex items-center gap-1 pt-4 pb-0">
@@ -529,6 +581,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
             workoutId={workout.id}
             onClose={() => setMenuOpen(false)}
             onExport={() => setReceiptOpen(true)}
+            onAddTimer={!timer.active ? () => timer.startFree() : undefined}
+            onToggleReverse={toggleReversed}
             onDelete={() => {
               startTransition(async () => {
                 await deleteWorkout(workout.id);
@@ -634,6 +688,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
       <div className={`h-1.5 rounded-full ${sessionTypeColor(workout.sessionType)}`} />
 
+      {reversed && addButtons}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -641,10 +697,10 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={items.map((g) => g.groupKey)}
+          items={displayItems.map((g) => g.groupKey)}
           strategy={verticalListSortingStrategy}
         >
-          {items.map((item) => {
+          {displayItems.map((item) => {
             if (isCircuitGroup(item)) {
               return (
                 <CircuitRows
@@ -681,36 +737,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         </SortableContext>
       </DndContext>
 
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={() => {
-            setPicking(true);
-            window.scrollTo({ top: 0, behavior: "instant" });
-          }}
-          className="flex-1"
-        >
-          <Plus className="h-4 w-4" />{" "}
-          <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add exercise</span>
-        </Button>
-        <Button variant="outline" size="lg" onClick={addCircuit} className="flex-1">
-          <Plus className="h-4 w-4" />{" "}
-          <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add circuit</span>
-        </Button>
-      </div>
-
-      {!timer.active && (
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={() => timer.startFree()}
-          className="w-full"
-        >
-          <Timer className="h-4 w-4" />{" "}
-          <span className="whitespace-nowrap text-[clamp(0.75rem,3.5vw,1rem)]">Add timer</span>
-        </Button>
-      )}
+      {!reversed && addButtons}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       {isPending && null}
@@ -835,6 +862,8 @@ function toWorkoutSet(
     restSec: s.restSec,
     calories: s.calories,
     rpe: s.rpe,
+    steps: s.steps,
+    heightM: s.heightM,
     circuitId: null,
     circuitRounds: null,
     circuitName: null,
@@ -847,11 +876,15 @@ function WorkoutMenu({
   onClose,
   onExport,
   onDelete,
+  onAddTimer,
+  onToggleReverse,
 }: {
   workoutId: string;
   onClose: () => void;
   onExport: () => void;
   onDelete: () => void;
+  onAddTimer?: () => void;
+  onToggleReverse: () => void;
 }) {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
@@ -871,6 +904,28 @@ function WorkoutMenu({
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
         <div className="flex flex-col py-4 gap-2 px-4">
+          {onAddTimer && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onAddTimer();
+              }}
+              className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+            >
+              Add timer
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onToggleReverse();
+            }}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+          >
+            Reverse exercise order
+          </button>
           <button
             type="button"
             onClick={() => {

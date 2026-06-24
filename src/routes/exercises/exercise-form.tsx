@@ -1,7 +1,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
-import type { Exercise } from "@/lib/db/types";
+import type { Exercise, ExerciseVariation } from "@/lib/db/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { createExercise, updateExercise } from "@/lib/mutations/exercises";
 import { getExerciseById } from "@/lib/db/queries";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import { useHideTimer } from "@/components/providers/timer-provider";
+import { VariationsEditor } from "./variations-editor";
 
 type Metric =
   | "reps"
@@ -22,15 +23,25 @@ type Metric =
   | "distance"
   | "rest"
   | "calories"
-  | "rpe";
+  | "rpe"
+  | "steps"
+  | "height";
 type DistanceUnit = "m" | "km" | "yd";
 type InclineUnit = "pct" | "setting";
 type SpeedUnit = "ms" | "kmh";
+type HeightUnit = "cm" | "m" | "in" | "ft";
 
 const DISTANCE_UNITS: { value: DistanceUnit; label: string }[] = [
   { value: "m", label: "Meters" },
   { value: "km", label: "Kilometers" },
   { value: "yd", label: "Yards" },
+];
+
+const HEIGHT_UNITS: { value: HeightUnit; label: string }[] = [
+  { value: "cm", label: "Centimetres" },
+  { value: "m", label: "Metres" },
+  { value: "in", label: "Inches" },
+  { value: "ft", label: "Feet" },
 ];
 
 const INCLINE_UNITS: { value: InclineUnit; label: string }[] = [
@@ -56,6 +67,8 @@ const METRICS: Metric[] = [
   "distance",
   "calories",
   "rpe",
+  "steps",
+  "height",
 ];
 
 // Most metric chips capitalize their key for display; a few need an explicit
@@ -75,6 +88,8 @@ function deriveMetrics(exercise: Exercise): Set<Metric> {
   if (exercise.distanceUnit) m.add("distance");
   if (exercise.trackCalories) m.add("calories");
   if (exercise.trackRpe) m.add("rpe");
+  if (exercise.trackSteps) m.add("steps");
+  if (exercise.heightUnit) m.add("height");
   return m;
 }
 
@@ -86,12 +101,7 @@ interface Props {
 }
 
 export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
-  const {
-    categories,
-    equipment: equipmentOptions,
-    muscleGroups,
-    variations,
-  } = useUserFieldOptions();
+  const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
   const location = useLocation();
   // The edit form takes over the screen, so hide the timer bar while it's open.
   useHideTimer();
@@ -113,8 +123,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
     new Set(exercise?.categories ?? [])
   );
   const [equipment, setEquipment] = useState<string | null>(exercise?.equipment ?? null);
-  const [selectedVariations, setSelectedVariations] = useState<Set<string>>(
-    new Set(exercise?.variations ?? [])
+  const [variations, setVariations] = useState<ExerciseVariation[]>(
+    exercise?.variations ?? []
   );
   const [muscleMap, setMuscleMap] = useState<Map<string, "primary" | "secondary">>(() => {
     const map = new Map<string, "primary" | "secondary">();
@@ -140,6 +150,9 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   );
   const [speedUnit, setSpeedUnit] = useState<SpeedUnit>(
     (exercise?.speedUnit as SpeedUnit | null) ?? "kmh"
+  );
+  const [heightUnit, setHeightUnit] = useState<HeightUnit>(
+    (exercise?.heightUnit as HeightUnit | null) ?? "cm"
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -184,6 +197,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           trackRest: restTimer,
           trackCalories: metrics.has("calories"),
           trackRpe: metrics.has("rpe"),
+          trackSteps: metrics.has("steps"),
+          heightUnit: metrics.has("height") ? heightUnit : null,
           muscles: (() => {
             const p = [...muscleMap.entries()]
               .filter(([, v]) => v === "primary")
@@ -196,7 +211,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               .map(([k]) => k);
             return s.length > 0 ? s : null;
           })(),
-          variations: selectedVariations.size > 0 ? Array.from(selectedVariations) : null,
+          variations: variations.length > 0 ? variations : null,
         };
         if (exercise) {
           await updateExercise(exercise.id, input);
@@ -290,31 +305,11 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
 
           <div className="flex flex-col gap-2">
             <Label>Exercise variations</Label>
-            {variations.length === 0 ? (
-              <p className="text-xs text-muted-foreground -mt-1">
-                No variations in your library. Add them using 'Customise fields'.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {variations.map((v) => (
-                  <Button
-                    key={v.id}
-                    type="button"
-                    size="sm"
-                    variant={selectedVariations.has(v.key) ? "default" : "secondary"}
-                    onClick={() =>
-                      setSelectedVariations((prev) => {
-                        const next = new Set(prev);
-                        next.has(v.key) ? next.delete(v.key) : next.add(v.key);
-                        return next;
-                      })
-                    }
-                  >
-                    {v.label}
-                  </Button>
-                ))}
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground -mt-1">
+              Add variations of this exercise (e.g. grip or stance). You can pick one per
+              exercise during a session.
+            </p>
+            <VariationsEditor value={variations} onChange={setVariations} />
           </div>
 
           <div className="flex flex-col gap-2">
@@ -449,16 +444,6 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <Label htmlFor="ex-rest-timer">Rest timer</Label>
-              <span className="text-xs text-muted-foreground">
-                Time your rests between each set.
-              </span>
-            </div>
-            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
-          </div>
-
           {metrics.has("incline") && (
             <div className="flex flex-col gap-2">
               <Label>Incline unit</Label>
@@ -515,6 +500,35 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               </div>
             </div>
           )}
+
+          {metrics.has("height") && (
+            <div className="flex flex-col gap-2">
+              <Label>Height unit</Label>
+              <div className="flex flex-wrap gap-2">
+                {HEIGHT_UNITS.map(({ value, label }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={heightUnit === value ? "default" : "outline"}
+                    onClick={() => setHeightUnit(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <Label htmlFor="ex-rest-timer">Rest timer</Label>
+              <span className="text-xs text-muted-foreground">
+                Time your rests between each set.
+              </span>
+            </div>
+            <Switch id="ex-rest-timer" checked={restTimer} onCheckedChange={setRestTimer} />
+          </div>
 
           {metrics.has("weight") && (
             <div className="flex flex-col gap-3">

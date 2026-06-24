@@ -32,6 +32,45 @@ export function arrStr(v: string[] | null | undefined): string | null {
   return JSON.stringify(v);
 }
 
+// Exercise variations live as a jsonb array of {key,label} on the exercise.
+// Locally PowerSync stores jsonb as JSON text, so decode/encode mirror arr/arrStr
+// but validate the object shape and drop malformed entries.
+export function decodeVariations(
+  v: string | null | undefined
+): { key: string; label: string }[] | null {
+  if (v == null) return null;
+  try {
+    const parsed = JSON.parse(v);
+    if (!Array.isArray(parsed)) return null;
+    const out = parsed.flatMap((e) => {
+      // jsonb rows arrive as objects; a text[] column (pre-migration, or a
+      // sync round-trip through PostgREST) double-encodes each entry as a JSON
+      // string — tolerate both.
+      let obj = e;
+      if (typeof obj === "string") {
+        try {
+          obj = JSON.parse(obj);
+        } catch {
+          return [];
+        }
+      }
+      return obj && typeof obj === "object" && typeof obj.key === "string" && typeof obj.label === "string"
+        ? [{ key: obj.key, label: obj.label }]
+        : [];
+    });
+    return out.length > 0 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+export function variationsStr(
+  v: { key: string; label: string }[] | null | undefined
+): string | null {
+  if (v == null || v.length === 0) return null;
+  return JSON.stringify(v);
+}
+
 // Some Postgres text[] values arrive as raw array literals (e.g. `{barbell}`
 // or `{"big lifts"}`) rather than JSON-encoded strings — this happens when
 // PowerSync streams down a column the client expects to be a scalar text.

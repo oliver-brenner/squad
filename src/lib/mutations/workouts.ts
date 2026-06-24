@@ -19,6 +19,8 @@ const setInputSchema = z.object({
   restSec: z.number().int().min(0).max(3600).nullable(),
   calories: z.number().int().min(0).max(100_000).nullable(),
   rpe: z.number().int().min(0).nullable(),
+  steps: z.number().int().min(0).max(1_000_000).nullable(),
+  heightM: z.number().min(0).max(100).nullable(),
   circuitId: z.string().uuid().nullable().optional(),
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
@@ -82,9 +84,9 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
@@ -102,6 +104,8 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           s.restSec,
           s.calories ?? null,
           s.rpe ?? null,
+          s.steps,
+          s.heightM,
           s.circuitId ?? null,
           s.circuitRounds ?? null,
           s.circuitName ?? null,
@@ -306,6 +310,8 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
       rest_sec: number | null;
       calories: number | null;
       rpe: number | null;
+      steps: number | null;
+      height_m: number | null;
       circuit_id: string | null;
       circuit_rounds: number | null;
       circuit_name: string | null;
@@ -317,9 +323,9 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -337,6 +343,8 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
           s.rest_sec,
           s.calories ?? null,
           s.rpe ?? null,
+          s.steps,
+          s.height_m,
           s.circuit_id,
           s.circuit_rounds,
           s.circuit_name,
@@ -466,9 +474,9 @@ export async function copyFriendSession(
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
           reps, weight_kg, distance_km, duration_sec,
-          resistance, speed_ms, incline_pct, rest_sec, calories, rpe,
+          resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           uuid(),
           myUserId,
@@ -486,6 +494,8 @@ export async function copyFriendSession(
           s.rest_sec,
           s.calories ?? null,
           s.rpe ?? null,
+          s.steps,
+          s.height_m,
           myCircuitId,
           s.circuit_rounds,
           s.circuit_name,

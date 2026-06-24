@@ -15,7 +15,7 @@ import { SetTray } from "./set-rows";
 import { useTimer } from "@/components/providers/timer-provider";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { formatDuration } from "@/lib/set-format";
+import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { VariationControl } from "./variation-control";
 
 interface Props {
@@ -100,6 +100,8 @@ export function CircuitRows({
           restSec: r.set.restSec,
           calories: r.set.calories,
           rpe: r.set.rpe,
+          steps: r.set.steps,
+          heightM: r.set.heightM,
         });
       }
 
@@ -120,7 +122,9 @@ export function CircuitRows({
           s.speedMs != null ||
           s.inclinePct != null ||
           s.restSec != null ||
-          s.rpe != null
+          s.rpe != null ||
+          s.steps != null ||
+          s.heightM != null
         )
           return eg;
         if (
@@ -132,7 +136,9 @@ export function CircuitRows({
           cached.speedMs == null &&
           cached.inclinePct == null &&
           cached.restSec == null &&
-          cached.rpe == null
+          cached.rpe == null &&
+          cached.steps == null &&
+          cached.heightM == null
         )
           return eg;
         changed = true;
@@ -150,6 +156,8 @@ export function CircuitRows({
               inclinePct: cached.inclinePct,
               restSec: cached.restSec,
               rpe: cached.rpe,
+              steps: cached.steps,
+              heightM: cached.heightM,
             },
           ],
         };
@@ -199,7 +207,9 @@ export function CircuitRows({
       draft.speedMs == null &&
       draft.inclinePct == null &&
       draft.restSec == null &&
-      draft.rpe == null;
+      draft.rpe == null &&
+      draft.steps == null &&
+      draft.heightM == null;
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
     setActiveTray({ exIdx, draft, suggestion: isEmptyDraft ? cached : null });
@@ -242,6 +252,7 @@ export function CircuitRows({
             ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
+            style={{ touchAction: "none" }}
             className="flex items-start gap-3 px-3 pt-3 pb-2"
           >
             <div className="flex-1 min-w-0">
@@ -440,6 +451,7 @@ function CircuitExerciseRow({
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
+    touchAction: "none" as const,
   };
 
   const set = exGroup.sets[0];
@@ -460,7 +472,9 @@ function CircuitExerciseRow({
       set.speedMs != null ||
       set.inclinePct != null ||
       set.restSec != null ||
-      set.rpe != null);
+      set.rpe != null ||
+      set.steps != null ||
+      set.heightM != null);
 
   return (
     <>
@@ -571,6 +585,11 @@ function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
       ex.inclineUnit === "setting" ? `${set.inclinePct} incline` : `${set.inclinePct}%`
     );
   }
+  if (ex.heightUnit && set.heightM != null) {
+    const unit = ex.heightUnit as HeightUnit;
+    parts.push(`${mToHeight(set.heightM, unit)} ${unit}`);
+  }
+  if (ex.trackSteps && set.steps != null) parts.push(`${set.steps} steps`);
   if (ex.trackRpe && set.rpe != null) parts.push(`RPE ${set.rpe}`);
   return parts.join(" · ") || "—";
 }
@@ -680,5 +699,7 @@ function makeEmptyDraft(exerciseId: string): DraftSet {
     restSec: null,
     calories: null,
     rpe: null,
+    steps: null,
+    heightM: null,
   };
 }
