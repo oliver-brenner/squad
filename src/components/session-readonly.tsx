@@ -6,7 +6,6 @@ import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { PBType } from "@/lib/stats/set-pbs";
 import { formatSetSummary, type DistanceUnit } from "@/lib/set-format";
-import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
 
 export type PBMap = Map<string, PBType[]>;
 
@@ -142,9 +141,9 @@ export function SessionReadOnlyItems({
   );
 }
 
-// Resolves the variation key carried on a session's sets to the exercise
-// OWNER's label, so a friend's variation shows up exactly as they named it.
-// Renders nothing when no variation was attached or the key is unknown.
+// Resolves the variation key carried on a session's sets to its label using the
+// exercise's own variations (key + label). Renders nothing when no variation
+// was attached or the key is unknown.
 function VariationBadge({
   exercise,
   sets,
@@ -152,10 +151,9 @@ function VariationBadge({
   exercise: Exercise;
   sets: WorkoutSet[];
 }) {
-  const { variations } = useUserFieldOptionsForUser(exercise.userId);
   const key = sets.find((s) => s.variation)?.variation ?? null;
   if (!key) return null;
-  const label = variations.find((v) => v.key === key)?.label;
+  const label = (exercise.variations ?? []).find((v) => v.key === key)?.label;
   if (!label) return null;
   return (
     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">

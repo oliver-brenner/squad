@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import type { ExerciseGroup } from "./workout-editor-types";
 
 // The "+ Add variation" control shown next to an exercise's title inside a
@@ -15,15 +14,11 @@ export function VariationControl({
   group: ExerciseGroup;
   onChange: (variation: string | null) => void;
 }) {
-  const { variations } = useUserFieldOptions();
   const [trayOpen, setTrayOpen] = useState(false);
 
-  const attached = group.exercise.variations ?? [];
-  if (attached.length === 0) return null;
-
-  // Resolve the exercise's attached keys to options, preserving the user's
-  // library order. Keys without a matching library option are dropped.
-  const options = variations.filter((v) => attached.includes(v.key));
+  // Variations belong to the exercise (key + label, in saved order), so offer
+  // them directly — no library lookup needed.
+  const options = group.exercise.variations ?? [];
   if (options.length === 0) return null;
 
   const selectedLabel = group.variation
@@ -89,7 +84,7 @@ function VariationTray({
   onSelect,
   onClose,
 }: {
-  options: Array<{ id: string; key: string; label: string }>;
+  options: Array<{ key: string; label: string }>;
   selected: string | null;
   onSelect: (key: string) => void;
   onClose: () => void;
@@ -116,7 +111,7 @@ function VariationTray({
           </h2>
           {options.map((o) => (
             <button
-              key={o.id}
+              key={o.key}
               type="button"
               onClick={() => onSelect(o.key)}
               className={`w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50 ${

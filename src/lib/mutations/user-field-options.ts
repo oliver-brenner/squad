@@ -10,7 +10,6 @@ const KIND_VALUES = [
   "equipment",
   "muscle_group",
   "muscle_child",
-  "variation",
 ] as const;
 
 function slugify(label: string): string {
@@ -155,23 +154,6 @@ async function unassignKeyFromExercises(
       const next = list.filter((k) => k !== key);
       await tx.execute(
         `UPDATE exercises SET muscles = ? WHERE id = ?`,
-        [arrStr(next.length > 0 ? next : null), r.id]
-      );
-    }
-  } else if (kind === "variation") {
-    // Strip the key from exercises.variations so the form/tray stop offering a
-    // deleted variation. Sets keep their stored key — history simply resolves
-    // it to nothing once the option is gone (per the "store key" decision).
-    const rows = await tx.getAll<{ id: string; variations: string | null }>(
-      `SELECT id, variations FROM exercises WHERE user_id = ?`,
-      [userId]
-    );
-    for (const r of rows) {
-      const list = arr(r.variations);
-      if (!list || !list.includes(key)) continue;
-      const next = list.filter((k) => k !== key);
-      await tx.execute(
-        `UPDATE exercises SET variations = ? WHERE id = ?`,
         [arrStr(next.length > 0 ? next : null), r.id]
       );
     }

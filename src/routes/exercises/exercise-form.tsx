@@ -1,7 +1,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight, SlidersHorizontal } from "lucide-react";
-import type { Exercise } from "@/lib/db/types";
+import type { Exercise, ExerciseVariation } from "@/lib/db/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { createExercise, updateExercise } from "@/lib/mutations/exercises";
 import { getExerciseById } from "@/lib/db/queries";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import { useHideTimer } from "@/components/providers/timer-provider";
+import { VariationsEditor } from "./variations-editor";
 
 type Metric =
   | "reps"
@@ -86,12 +87,7 @@ interface Props {
 }
 
 export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props) {
-  const {
-    categories,
-    equipment: equipmentOptions,
-    muscleGroups,
-    variations,
-  } = useUserFieldOptions();
+  const { categories, equipment: equipmentOptions, muscleGroups } = useUserFieldOptions();
   const location = useLocation();
   // The edit form takes over the screen, so hide the timer bar while it's open.
   useHideTimer();
@@ -113,8 +109,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
     new Set(exercise?.categories ?? [])
   );
   const [equipment, setEquipment] = useState<string | null>(exercise?.equipment ?? null);
-  const [selectedVariations, setSelectedVariations] = useState<Set<string>>(
-    new Set(exercise?.variations ?? [])
+  const [variations, setVariations] = useState<ExerciseVariation[]>(
+    exercise?.variations ?? []
   );
   const [muscleMap, setMuscleMap] = useState<Map<string, "primary" | "secondary">>(() => {
     const map = new Map<string, "primary" | "secondary">();
@@ -196,7 +192,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
               .map(([k]) => k);
             return s.length > 0 ? s : null;
           })(),
-          variations: selectedVariations.size > 0 ? Array.from(selectedVariations) : null,
+          variations: variations.length > 0 ? variations : null,
         };
         if (exercise) {
           await updateExercise(exercise.id, input);
@@ -290,31 +286,11 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
 
           <div className="flex flex-col gap-2">
             <Label>Exercise variations</Label>
-            {variations.length === 0 ? (
-              <p className="text-xs text-muted-foreground -mt-1">
-                No variations in your library. Add them using 'Customise fields'.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {variations.map((v) => (
-                  <Button
-                    key={v.id}
-                    type="button"
-                    size="sm"
-                    variant={selectedVariations.has(v.key) ? "default" : "secondary"}
-                    onClick={() =>
-                      setSelectedVariations((prev) => {
-                        const next = new Set(prev);
-                        next.has(v.key) ? next.delete(v.key) : next.add(v.key);
-                        return next;
-                      })
-                    }
-                  >
-                    {v.label}
-                  </Button>
-                ))}
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground -mt-1">
+              Add variations of this exercise (e.g. grip or stance). You can pick one per
+              exercise during a session.
+            </p>
+            <VariationsEditor value={variations} onChange={setVariations} />
           </div>
 
           <div className="flex flex-col gap-2">

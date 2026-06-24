@@ -1,7 +1,7 @@
 // Decoders translate raw SQLite rows (snake_case, ints-for-bools, JSON-string
 // arrays) into the typed camelCase entities UI code consumes.
 
-import { arr, bool, unwrapPgArrayLiteral } from "./encoding";
+import { arr, bool, decodeVariations, unwrapPgArrayLiteral } from "./encoding";
 import type {
   ExerciseRow,
   ProfileRow,
@@ -63,7 +63,7 @@ export function decodeExercise(r: ExerciseRow): Exercise {
     trackRpe: bool(r.track_rpe),
     muscles: arr(r.muscles),
     secondaryMuscles: arr(r.secondary_muscles),
-    variations: arr(r.variations),
+    variations: decodeVariations(r.variations),
     notes: r.notes ?? null,
     createdAt: r.created_at ?? "",
   };

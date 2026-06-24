@@ -4,6 +4,12 @@
 
 import type { SessionType } from "./schema";
 
+// A variation belongs to a single exercise (not a shared library). `key` is a
+// stable identifier carried onto `sets.variation` when chosen in a session, so
+// renaming `label` never orphans past sets. Stored as a jsonb array on the
+// exercise; array order is the display order.
+export type ExerciseVariation = { key: string; label: string };
+
 export type Profile = {
   id: string;
   username: string | null;
@@ -38,7 +44,7 @@ export type Exercise = {
   trackRpe: boolean;
   muscles: string[] | null;
   secondaryMuscles: string[] | null;
-  variations: string[] | null;
+  variations: ExerciseVariation[] | null;
   notes: string | null;
   createdAt: string;
 };
@@ -82,7 +88,7 @@ export type WorkoutSet = {
 export type UserFieldOption = {
   id: string;
   userId: string;
-  kind: "category" | "equipment" | "muscle_group" | "muscle_child" | "variation";
+  kind: "category" | "equipment" | "muscle_group" | "muscle_child";
   parentId: string | null;
   key: string;
   label: string;
