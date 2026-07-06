@@ -91,6 +91,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
+    touchAction: "none" as const,
   };
 
   // Keep refs of the latest `group` and `onUpdate` so the async effect below
