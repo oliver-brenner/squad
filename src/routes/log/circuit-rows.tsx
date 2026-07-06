@@ -265,36 +265,8 @@ export function CircuitRows({
     <>
       <div ref={setNodeRef} style={dragStyle}>
         <Card className="border-dashed border-muted-foreground/30">
-          <div className="flex items-start gap-3 px-3 pt-3 pb-2">
+          <div className="flex items-center gap-3 px-3 pt-3 pb-2">
             <div className="flex-1 min-w-0">
-              <div className="float-right ml-3 flex items-center gap-2 shrink-0">
-                <span className="text-base font-medium text-primary">
-                  {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdate({ ...circuit, rounds: Math.max(0, circuit.rounds - 1) });
-                  }}
-                  disabled={circuit.rounds <= 0}
-                  className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90 disabled:opacity-40 disabled:hover:bg-white"
-                  aria-label="Decrease rounds"
-                >
-                  <Minus className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUpdate({ ...circuit, rounds: Math.min(999, circuit.rounds + 1) });
-                  }}
-                  className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90"
-                  aria-label="Increase rounds"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </div>
               {renamingName ? (
                 <input
                   ref={nameInputRef}
@@ -327,28 +299,58 @@ export function CircuitRows({
                 </button>
               )}
             </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(true);
-              }}
-              aria-label="Circuit options"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-            <button
-              type="button"
-              ref={setActivatorNodeRef}
-              {...attributes}
-              {...listeners}
-              style={{ touchAction: "none" }}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
-              aria-label="Drag to reorder circuit"
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-base font-medium text-primary">
+                {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdate({ ...circuit, rounds: Math.max(0, circuit.rounds - 1) });
+                }}
+                disabled={circuit.rounds <= 0}
+                className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90 disabled:opacity-40 disabled:hover:bg-white"
+                aria-label="Decrease rounds"
+              >
+                <Minus className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdate({ ...circuit, rounds: Math.min(999, circuit.rounds + 1) });
+                }}
+                className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90"
+                aria-label="Increase rounds"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="flex items-center gap-0 shrink-0">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(true);
+                }}
+                aria-label="Circuit options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                ref={setActivatorNodeRef}
+                {...attributes}
+                {...listeners}
+                style={{ touchAction: "none" }}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
+                aria-label="Drag to reorder circuit"
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           <div
