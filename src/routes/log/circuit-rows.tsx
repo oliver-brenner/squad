@@ -23,6 +23,7 @@ interface Props {
   workoutId: string;
   onUpdate: (next: CircuitGroup) => void;
   onRemove: () => void;
+  onDuplicate: () => void;
   onAddExercise: () => void;
   onEditExercise: (exercise: Exercise) => void;
   // See SetRows: "template" mode drops history-driven prefill/PBs/history list.
@@ -34,6 +35,7 @@ export function CircuitRows({
   workoutId,
   onUpdate,
   onRemove,
+  onDuplicate,
   onAddExercise,
   onEditExercise,
   mode = "workout",
@@ -237,6 +239,21 @@ export function CircuitRows({
     onUpdate({ ...circuit, exercises: next });
   }
 
+  function duplicateExercise(exIdx: number) {
+    const eg = circuit.exercises[exIdx];
+    const copy: ExerciseGroup = {
+      ...eg,
+      groupKey: crypto.randomUUID(),
+      sets: eg.sets.map((s) => ({ ...s, id: undefined })),
+    };
+    const next = [
+      ...circuit.exercises.slice(0, exIdx + 1),
+      copy,
+      ...circuit.exercises.slice(exIdx + 1),
+    ];
+    onUpdate({ ...circuit, exercises: next });
+  }
+
   function setExerciseVariation(exIdx: number, variation: string | null) {
     const nextExercises = circuit.exercises.map((eg, i) =>
       i === exIdx ? { ...eg, variation } : eg
@@ -355,6 +372,7 @@ export function CircuitRows({
                   mode={mode}
                   onClick={() => openSetTray(i)}
                   onRemove={() => removeExercise(i)}
+                  onDuplicate={() => duplicateExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
                   onChangeVariation={(v) => setExerciseVariation(i, v)}
                 />
@@ -391,6 +409,10 @@ export function CircuitRows({
 
       {menuOpen && (
         <CircuitMenu
+          onDuplicate={() => {
+            setMenuOpen(false);
+            onDuplicate();
+          }}
           onRemove={() => {
             setMenuOpen(false);
             onRemove();
@@ -408,6 +430,7 @@ function CircuitExerciseRow({
   mode = "workout",
   onClick,
   onRemove,
+  onDuplicate,
   onEdit,
   onChangeVariation,
 }: {
@@ -416,6 +439,7 @@ function CircuitExerciseRow({
   mode?: "workout" | "template";
   onClick: () => void;
   onRemove: () => void;
+  onDuplicate: () => void;
   onEdit: () => void;
   onChangeVariation: (variation: string | null) => void;
 }) {
@@ -584,6 +608,10 @@ function CircuitExerciseRow({
             setMenuOpen(false);
             onEdit();
           }}
+          onDuplicate={() => {
+            setMenuOpen(false);
+            onDuplicate();
+          }}
           onRemove={() => {
             setMenuOpen(false);
             onRemove();
@@ -620,11 +648,13 @@ function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
 function CircuitExerciseMenu({
   onViewStats,
   onEdit,
+  onDuplicate,
   onRemove,
   onClose,
 }: {
   onViewStats: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -661,6 +691,13 @@ function CircuitExerciseMenu({
           </button>
           <button
             type="button"
+            onClick={onDuplicate}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+          >
+            Duplicate exercise
+          </button>
+          <button
+            type="button"
             onClick={onRemove}
             className="w-full py-4 text-center text-base font-medium rounded-xl text-red-500 hover:bg-muted/50"
           >
@@ -673,9 +710,11 @@ function CircuitExerciseMenu({
 }
 
 function CircuitMenu({
+  onDuplicate,
   onRemove,
   onClose,
 }: {
+  onDuplicate: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -696,6 +735,13 @@ function CircuitMenu({
       >
         <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
         <div className="flex flex-col py-4 gap-2 px-4">
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+          >
+            Duplicate circuit
+          </button>
           <button
             type="button"
             onClick={onRemove}

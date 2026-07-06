@@ -32,6 +32,7 @@ interface Props {
   workoutId: string;
   onUpdate: (next: ExerciseGroup) => void;
   onRemove: () => void;
+  onDuplicate: () => void;
   onEdit: () => void;
   // "template" mode edits a template skeleton: no auto-prefill from history, no
   // PB badges, no history list, and "See stats" returns to the template editor.
@@ -44,7 +45,15 @@ type TrayState = {
   suggestion?: DraftSet | null;
 };
 
-export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "workout" }: Props) {
+export function SetRows({
+  group,
+  workoutId,
+  onUpdate,
+  onRemove,
+  onDuplicate,
+  onEdit,
+  mode = "workout",
+}: Props) {
   const isTemplate = mode === "template";
   const navigate = useNavigate();
   const timer = useTimer();
@@ -412,6 +421,10 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
             setMenuOpen(false);
             onEdit();
           }}
+          onDuplicate={() => {
+            setMenuOpen(false);
+            onDuplicate();
+          }}
           onRemove={() => {
             setMenuOpen(false);
             onRemove();
@@ -525,6 +538,7 @@ function ExerciseMenu({
   onNote,
   onViewStats,
   onEdit,
+  onDuplicate,
   onRemove,
   onClose,
 }: {
@@ -532,6 +546,7 @@ function ExerciseMenu({
   onNote: () => void;
   onViewStats: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -572,6 +587,13 @@ function ExerciseMenu({
             className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
           >
             Edit exercise
+          </button>
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="w-full py-4 text-center text-base font-medium rounded-xl hover:bg-muted/50"
+          >
+            Duplicate exercise
           </button>
           <button
             type="button"

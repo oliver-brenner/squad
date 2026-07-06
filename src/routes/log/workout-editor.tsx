@@ -434,6 +434,35 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     setItems((prev) => prev.filter((item) => item.groupKey !== groupKey));
   }
 
+  // Deep-copies a circuit (with its exercises and sets) or a standalone
+  // exercise (with its sets) and inserts the copy directly below the
+  // original. Fresh groupKeys avoid collisions with the source, and set ids
+  // are dropped so the copy is saved as new rows rather than overwriting the
+  // originals.
+  function duplicateItem(groupKey: string) {
+    setItems((prev) => {
+      const idx = prev.findIndex((item) => item.groupKey === groupKey);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const copy: WorkoutItem = isCircuitGroup(original)
+        ? {
+            ...original,
+            groupKey: crypto.randomUUID(),
+            exercises: original.exercises.map((eg) => ({
+              ...eg,
+              groupKey: crypto.randomUUID(),
+              sets: eg.sets.map((s) => ({ ...s, id: undefined })),
+            })),
+          }
+        : {
+            ...original,
+            groupKey: crypto.randomUUID(),
+            sets: original.sets.map((s) => ({ ...s, id: undefined })),
+          };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+  }
+
   function applyExerciseUpdate(updated: Exercise) {
     setExercises((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
     setItems((prev) =>
@@ -709,6 +738,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                   workoutId={workout.id}
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
+                  onDuplicate={() => duplicateItem(item.groupKey)}
                   onAddExercise={() => {
                     setPickingForCircuit(item.groupKey);
                     window.scrollTo({ top: 0, behavior: "instant" });
@@ -727,6 +757,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                 workoutId={workout.id}
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
+                onDuplicate={() => duplicateItem(item.groupKey)}
                 onEdit={() => {
                   setEditingExercise((item as ExerciseGroup).exercise);
                   window.scrollTo({ top: 0, behavior: "instant" });
