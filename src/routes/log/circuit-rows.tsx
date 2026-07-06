@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, Minus, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Minus, MoreHorizontal, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
@@ -248,13 +248,7 @@ export function CircuitRows({
     <>
       <div ref={setNodeRef} style={dragStyle}>
         <Card className="border-dashed border-muted-foreground/30">
-          <div
-            ref={setActivatorNodeRef}
-            {...attributes}
-            {...listeners}
-            style={{ touchAction: "none" }}
-            className="flex items-start gap-3 px-3 pt-3 pb-2"
-          >
+          <div className="flex items-start gap-3 px-3 pt-3 pb-2">
             <div className="flex-1 min-w-0">
               <div className="float-right ml-3 flex items-center gap-2 shrink-0">
                 <span className="text-base font-medium text-primary">
@@ -327,6 +321,17 @@ export function CircuitRows({
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              style={{ touchAction: "none" }}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
+              aria-label="Drag to reorder circuit"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
           </div>
 
           <div
@@ -444,14 +449,21 @@ function CircuitExerciseRow({
     };
   }, [exGroup.exerciseId, workoutId]);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: exGroup.groupKey,
   });
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
-    touchAction: "none" as const,
   };
 
   const set = exGroup.sets[0];
@@ -481,8 +493,6 @@ function CircuitExerciseRow({
       <div
         ref={setNodeRef}
         style={dragStyle}
-        {...attributes}
-        {...listeners}
         className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/50"
       >
         <div className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -512,15 +522,28 @@ function CircuitExerciseRow({
             )}
           </button>
         </div>
-        <div className="flex flex-col items-center shrink-0">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label={`Options for ${exGroup.exercise.name}`}
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+        <div className="flex flex-col items-end shrink-0">
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={`Options for ${exGroup.exercise.name}`}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              style={{ touchAction: "none" }}
+              className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground cursor-grab touch-none hover:bg-muted hover:text-foreground"
+              aria-label={`Drag to reorder ${exGroup.exercise.name}`}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          </div>
           {!isTemplate && (
             <button
               type="button"

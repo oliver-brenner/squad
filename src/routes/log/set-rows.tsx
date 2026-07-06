@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, MoreHorizontal, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, X } from "lucide-react";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -84,14 +84,21 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
     }
   }
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: group.groupKey,
   });
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : undefined,
-    touchAction: "none" as const,
   };
 
   // Keep refs of the latest `group` and `onUpdate` so the async effect below
@@ -260,7 +267,7 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
 
   return (
     <>
-      <div ref={setNodeRef} style={dragStyle} {...attributes} {...listeners}>
+      <div ref={setNodeRef} style={dragStyle}>
         <Card>
           <div className="flex items-start gap-3 p-3">
             <div className="min-w-0 flex-1 flex flex-col gap-1.5">
@@ -286,6 +293,17 @@ export function SetRows({ group, workoutId, onUpdate, onRemove, onEdit, mode = "
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
+              <button
+                type="button"
+                ref={setActivatorNodeRef}
+                {...attributes}
+                {...listeners}
+                style={{ touchAction: "none" }}
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
+                aria-label="Drag to reorder"
+              >
+                <GripVertical className="h-4 w-4" />
+              </button>
             </span>
           </div>
 
