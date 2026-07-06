@@ -32,7 +32,11 @@ import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
 import { SessionGuests } from "@/components/session-guests";
 import { ExerciseForm } from "@/routes/exercises/exercise-form";
-import { getWorkoutWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
+import {
+  getWorkoutWithSets,
+  getUserExercisesOrderedByLastLogged,
+  getMostRecentWorkoutId,
+} from "@/lib/db/queries";
 import { useAuth } from "@/lib/auth/auth-context";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
@@ -41,6 +45,7 @@ import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
 import { CalorieTray } from "./calorie-tray";
 import {
+  isBlankSet,
   isCircuitGroup,
   type DraftSet,
   type ExerciseGroup,
@@ -67,7 +72,13 @@ export function WorkoutEditorRoute() {
   const [data, setData] = useState<
     | { state: "loading" }
     | { state: "not-found" }
-    | { state: "ready"; workout: Workout; sets: WorkoutSet[]; exercises: Exercise[] }
+    | {
+        state: "ready";
+        workout: Workout;
+        sets: WorkoutSet[];
+        exercises: Exercise[];
+        isMostRecent: boolean;
+      }
   >({ state: "loading" });
 
   useEffect(() => {
@@ -82,11 +93,13 @@ export function WorkoutEditorRoute() {
         return;
       }
       const exercises = await getUserExercisesOrderedByLastLogged();
+      const mostRecentId = await getMostRecentWorkoutId();
       setData({
         state: "ready",
         workout: workout.workout,
         sets: workout.sets,
         exercises,
+        isMostRecent: mostRecentId === workout.workout.id,
       });
     })();
   }, [id]);
@@ -106,6 +119,7 @@ export function WorkoutEditorRoute() {
       formattedDate={format(parseISO(data.workout.performedOn), "EEE d MMM")}
       initialSets={data.sets}
       exercises={data.exercises}
+      isMostRecent={data.isMostRecent}
     />
   );
 }
@@ -115,11 +129,18 @@ interface Props {
   formattedDate: string;
   initialSets: WorkoutSet[];
   exercises: Exercise[];
+  isMostRecent: boolean;
 }
 
-function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initialExercises }: Props) {
+function WorkoutEditor({
+  workout,
+  formattedDate,
+  initialSets,
+  exercises: initialExercises,
+  isMostRecent,
+}: Props) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // `?from=…` lets the caller decide where Back returns. Friends feed passes
   // `/friends` for own sessions opened there; Log-tab links omit it and
   // fall through to the default `/log`.
@@ -141,19 +162,24 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     buildItemsFromSets(initialSets, initialExercises)
   );
   const stats = useMemo(() => {
+    // Exclude not-yet-logged "anchor" sets so an exercise the user has added
+    // but not logged doesn't inflate the set/rep counts.
     const statItems: StatItem[] = items.map((item) =>
       isCircuitGroup(item)
         ? {
             type: "circuit",
             rounds: item.rounds,
             exercises: item.exercises.map((eg) => ({
-              sets: eg.sets,
+              sets: eg.sets.filter((s) => !isBlankSet(s)),
               doubleReps: eg.exercise.doubleReps,
             })),
           }
         : {
             type: "single",
-            exercise: { sets: item.sets, doubleReps: item.exercise.doubleReps },
+            exercise: {
+              sets: item.sets.filter((s) => !isBlankSet(s)),
+              doubleReps: item.exercise.doubleReps,
+            },
           }
     );
     return computeSessionStats(statItems);
@@ -162,6 +188,24 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   const [picking, setPicking] = useState(false);
   const [pickingForCircuit, setPickingForCircuit] = useState<string | null>(null);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  // `?open=<id>` re-opens the exercise editor after a Customise-fields
+  // round trip (see exercise-form.tsx's customiseFieldsHref). Mirrors the
+  // same pattern in exercises.tsx. Stripped once consumed so a refresh
+  // doesn't keep re-opening it.
+  const openParam = searchParams.get("open");
+  useEffect(() => {
+    if (!openParam) return;
+    const ex = exercises.find((e) => e.id === openParam);
+    if (ex) setEditingExercise(ex);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [openParam, exercises, setSearchParams]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
@@ -240,6 +284,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       if (isCircuitGroup(item)) {
         for (const eg of item.exercises) {
           for (const s of eg.sets) {
+            if (isBlankSet(s)) continue;
             rows.push({
               set: toWorkoutSet(s, eg.exerciseId, workout.id, workout.userId, workout.performedOn),
               exercise: eg.exercise,
@@ -250,6 +295,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         }
       } else {
         for (const s of item.sets) {
+          if (isBlankSet(s)) continue;
           rows.push({
             set: toWorkoutSet(s, item.exerciseId, workout.id, workout.userId, workout.performedOn),
             exercise: item.exercise,
@@ -325,8 +371,8 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   }, [name, notes, notesPublic, items, doSave]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 4 } })
   );
 
   function handleDragOver(event: DragOverEvent) {
@@ -340,7 +386,23 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       const activeContainer = findContainer(activeId, prev);
       const overContainer = findContainer(overId, prev);
       if (!activeContainer || !overContainer) return prev;
-      if (activeContainer === overContainer) return prev;
+
+      if (activeContainer === overContainer) {
+        if (activeContainer === ROOT) {
+          const oldIndex = prev.findIndex((g) => g.groupKey === activeId);
+          const newIndex = prev.findIndex((g) => g.groupKey === overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+          return arrayMove(prev, oldIndex, newIndex);
+        }
+
+        return prev.map((item) => {
+          if (!isCircuitGroup(item) || item.groupKey !== activeContainer) return item;
+          const oldIndex = item.exercises.findIndex((eg) => eg.groupKey === activeId);
+          const newIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return item;
+          return { ...item, exercises: arrayMove(item.exercises, oldIndex, newIndex) };
+        });
+      }
 
       const activeItem = findExerciseGroupAnywhere(activeId, prev);
       if (!activeItem) return prev;
@@ -350,33 +412,9 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     });
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
-
-    setItems((prev) => {
-      const activeContainer = findContainer(activeId, prev);
-      const overContainer = findContainer(overId, prev);
-      if (!activeContainer || !overContainer) return prev;
-      if (activeContainer !== overContainer) return prev;
-
-      if (activeContainer === ROOT) {
-        const oldIndex = prev.findIndex((g) => g.groupKey === activeId);
-        const newIndex = prev.findIndex((g) => g.groupKey === overId);
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
-        return arrayMove(prev, oldIndex, newIndex);
-      }
-
-      return prev.map((item) => {
-        if (!isCircuitGroup(item) || item.groupKey !== activeContainer) return item;
-        const oldIndex = item.exercises.findIndex((eg) => eg.groupKey === activeId);
-        const newIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return item;
-        return { ...item, exercises: arrayMove(item.exercises, oldIndex, newIndex) };
-      });
-    });
+  function handleDragEnd(_event: DragEndEvent) {
+    // Reordering happens live in handleDragOver so the array stays in sync
+    // with dnd-kit's preview animation; nothing left to do on drop.
   }
 
   function addExercise(ex: Exercise) {
@@ -432,6 +470,35 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
   function removeItem(groupKey: string) {
     setItems((prev) => prev.filter((item) => item.groupKey !== groupKey));
+  }
+
+  // Deep-copies a circuit (with its exercises and sets) or a standalone
+  // exercise (with its sets) and inserts the copy directly below the
+  // original. Fresh groupKeys avoid collisions with the source, and set ids
+  // are dropped so the copy is saved as new rows rather than overwriting the
+  // originals.
+  function duplicateItem(groupKey: string) {
+    setItems((prev) => {
+      const idx = prev.findIndex((item) => item.groupKey === groupKey);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const copy: WorkoutItem = isCircuitGroup(original)
+        ? {
+            ...original,
+            groupKey: crypto.randomUUID(),
+            exercises: original.exercises.map((eg) => ({
+              ...eg,
+              groupKey: crypto.randomUUID(),
+              sets: eg.sets.map((s) => ({ ...s, id: undefined })),
+            })),
+          }
+        : {
+            ...original,
+            groupKey: crypto.randomUUID(),
+            sets: original.sets.map((s) => ({ ...s, id: undefined })),
+          };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
   }
 
   function applyExerciseUpdate(updated: Exercise) {
@@ -499,6 +566,12 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
   }
 
   const displayItems = reversed ? [...items].reverse() : items;
+
+  // The greyed "ghost set" is a live-logging aid, so it appears only on the
+  // session currently being logged (the most recent one) and only on the last
+  // entry — the one you're working on. Earlier entries don't get a ghost.
+  const activeGroupKey =
+    isMostRecent && items.length > 0 ? items[items.length - 1].groupKey : null;
 
   const addButtons = (
     <div className="flex gap-2">
@@ -707,8 +780,10 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                   key={item.groupKey}
                   circuit={item}
                   workoutId={workout.id}
+                  showGhost={item.groupKey === activeGroupKey}
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
+                  onDuplicate={() => duplicateItem(item.groupKey)}
                   onAddExercise={() => {
                     setPickingForCircuit(item.groupKey);
                     window.scrollTo({ top: 0, behavior: "instant" });
@@ -725,8 +800,10 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                 key={item.groupKey}
                 group={item as ExerciseGroup}
                 workoutId={workout.id}
+                showGhost={item.groupKey === activeGroupKey}
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
+                onDuplicate={() => duplicateItem(item.groupKey)}
                 onEdit={() => {
                   setEditingExercise((item as ExerciseGroup).exercise);
                   window.scrollTo({ top: 0, behavior: "instant" });

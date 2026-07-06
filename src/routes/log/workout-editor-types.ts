@@ -17,6 +17,26 @@ export type DraftSet = {
   heightM: number | null;
 };
 
+// A set with no logged metric of any kind. Newly-added exercises carry one
+// such "anchor" set so the exercise persists before anything is logged; the
+// editor hides it and shows a greyed "ghost" suggestion in its place instead.
+export function isBlankSet(s: DraftSet): boolean {
+  return (
+    s.reps == null &&
+    s.weightKg == null &&
+    s.distanceKm == null &&
+    s.durationSec == null &&
+    s.resistance == null &&
+    s.speedMs == null &&
+    s.inclinePct == null &&
+    s.restSec == null &&
+    s.calories == null &&
+    s.rpe == null &&
+    s.steps == null &&
+    s.heightM == null
+  );
+}
+
 export type ExerciseGroup = {
   groupKey: string;
   exerciseId: string;
