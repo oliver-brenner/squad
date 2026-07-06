@@ -10,7 +10,7 @@ import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
-import { circuitBodyId, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
+import { circuitBodyId, isBlankSet, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
 import { SetTray } from "./set-rows";
 import { useTimer } from "@/components/providers/timer-provider";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
@@ -28,6 +28,9 @@ interface Props {
   onEditExercise: (exercise: Exercise) => void;
   // See SetRows: "template" mode drops history-driven prefill/PBs/history list.
   mode?: "workout" | "template";
+  // Show greyed "ghost" sets on this circuit's exercises. Only true for the
+  // active entry of the most recent session.
+  showGhost?: boolean;
 }
 
 export function CircuitRows({
@@ -39,6 +42,7 @@ export function CircuitRows({
   onAddExercise,
   onEditExercise,
   mode = "workout",
+  showGhost = false,
 }: Props) {
   const isTemplate = mode === "template";
   const timer = useTimer();
@@ -48,27 +52,19 @@ export function CircuitRows({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
-  // Cache of "last logged" values per exerciseId, populated as exercises are
-  // discovered. Used both to pre-fill the displayed first set on add and to
-  // surface a suggestion when the user opens the tray for an exercise that
-  // hasn't been logged in this circuit yet.
+  // Cache of the previous session's first set per exerciseId, populated as
+  // exercises are discovered. Drives the greyed "ghost" suggestion shown for a
+  // circuit exercise that hasn't been logged yet (tap to harden) and the
+  // suggestion placeholders when the tray is opened for manual entry. Held in a
+  // ref (fetch-dedupe by key); `cacheVersion` re-renders once values land.
   const lastByExerciseRef = useRef<Map<string, DraftSet>>(new Map());
-
-  // Keep refs to latest circuit / onUpdate so async prefill doesn't write back
-  // against stale state.
-  const circuitRef = useRef(circuit);
-  const onUpdateRef = useRef(onUpdate);
-  useEffect(() => {
-    circuitRef.current = circuit;
-    onUpdateRef.current = onUpdate;
-  });
+  const [, bumpCache] = useState(0);
 
   useEffect(() => {
     if (isTemplate) return;
     let cancelled = false;
     // Fetch the first set of the last session that logged each exercise (even
-    // if that session wasn't a circuit) for any exercise whose first set is
-    // still empty (or whose history we haven't cached yet).
+    // if that session wasn't a circuit) for any exercise not yet cached.
     const toFetch = circuit.exercises.filter(
       (eg) => !lastByExerciseRef.current.has(eg.exerciseId)
     );
@@ -106,67 +102,7 @@ export function CircuitRows({
           heightM: r.set.heightM,
         });
       }
-
-      // Apply prefill to any first set that's still all-null.
-      const cur = circuitRef.current;
-      let changed = false;
-      const nextExercises = cur.exercises.map((eg) => {
-        const cached = lastByExerciseRef.current.get(eg.exerciseId);
-        if (!cached) return eg;
-        const s = eg.sets[0];
-        if (!s) return eg;
-        if (
-          s.reps != null ||
-          s.weightKg != null ||
-          s.distanceKm != null ||
-          s.durationSec != null ||
-          s.resistance != null ||
-          s.speedMs != null ||
-          s.inclinePct != null ||
-          s.restSec != null ||
-          s.rpe != null ||
-          s.steps != null ||
-          s.heightM != null
-        )
-          return eg;
-        if (
-          cached.reps == null &&
-          cached.weightKg == null &&
-          cached.distanceKm == null &&
-          cached.durationSec == null &&
-          cached.resistance == null &&
-          cached.speedMs == null &&
-          cached.inclinePct == null &&
-          cached.restSec == null &&
-          cached.rpe == null &&
-          cached.steps == null &&
-          cached.heightM == null
-        )
-          return eg;
-        changed = true;
-        return {
-          ...eg,
-          sets: [
-            {
-              ...s,
-              reps: cached.reps,
-              weightKg: cached.weightKg,
-              distanceKm: cached.distanceKm,
-              durationSec: cached.durationSec,
-              resistance: cached.resistance,
-              speedMs: cached.speedMs,
-              inclinePct: cached.inclinePct,
-              restSec: cached.restSec,
-              rpe: cached.rpe,
-              steps: cached.steps,
-              heightM: cached.heightM,
-            },
-          ],
-        };
-      });
-      if (changed) {
-        onUpdateRef.current({ ...cur, exercises: nextExercises });
-      }
+      bumpCache((n) => n + 1);
     });
 
     return () => {
@@ -200,21 +136,24 @@ export function CircuitRows({
     const existing = eg.sets[0];
     const draft: DraftSet = existing ? { ...existing } : makeEmptyDraft(eg.exerciseId);
     const cached = lastByExerciseRef.current.get(eg.exerciseId) ?? null;
-    const isEmptyDraft =
-      draft.reps == null &&
-      draft.weightKg == null &&
-      draft.distanceKm == null &&
-      draft.durationSec == null &&
-      draft.resistance == null &&
-      draft.speedMs == null &&
-      draft.inclinePct == null &&
-      draft.restSec == null &&
-      draft.rpe == null &&
-      draft.steps == null &&
-      draft.heightM == null;
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
-    setActiveTray({ exIdx, draft, suggestion: isEmptyDraft ? cached : null });
+    setActiveTray({ exIdx, draft, suggestion: isBlankSet(draft) ? cached : null });
+  }
+
+  // One-tap harden of the greyed ghost: copy the previous session's set into
+  // this circuit exercise's single set.
+  function hardenSet(exIdx: number) {
+    const eg = circuit.exercises[exIdx];
+    const cached = lastByExerciseRef.current.get(eg.exerciseId);
+    if (!cached || isBlankSet(cached)) return;
+    const nextExercises = circuit.exercises.map((e, i) =>
+      i === exIdx ? { ...e, sets: [{ ...cached, id: undefined }] } : e
+    );
+    onUpdate({ ...circuit, exercises: nextExercises });
+    if (!isTemplate && eg.exercise.trackRest && cached.restSec != null) {
+      timer.startRest(cached.restSec);
+    }
   }
 
   function confirmSetTray(draft: DraftSet) {
@@ -372,7 +311,10 @@ export function CircuitRows({
                   exGroup={eg}
                   workoutId={workoutId}
                   mode={mode}
+                  ghostEnabled={showGhost}
+                  suggestion={lastByExerciseRef.current.get(eg.exerciseId) ?? null}
                   onClick={() => openSetTray(i)}
+                  onHarden={() => hardenSet(i)}
                   onRemove={() => removeExercise(i)}
                   onDuplicate={() => duplicateExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
@@ -430,7 +372,10 @@ function CircuitExerciseRow({
   exGroup,
   workoutId,
   mode = "workout",
+  ghostEnabled,
+  suggestion,
   onClick,
+  onHarden,
   onRemove,
   onDuplicate,
   onEdit,
@@ -439,7 +384,10 @@ function CircuitExerciseRow({
   exGroup: ExerciseGroup;
   workoutId: string;
   mode?: "workout" | "template";
+  ghostEnabled: boolean;
+  suggestion: DraftSet | null;
   onClick: () => void;
+  onHarden: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
@@ -500,19 +448,11 @@ function CircuitExerciseRow({
     const all = computePBsInOrder(combined, exGroup.exercise);
     return all[all.length - 1] ?? [];
   }, [priorSetsAsc, set, exGroup.exercise]);
-  const hasData =
-    set &&
-    (set.reps != null ||
-      set.weightKg != null ||
-      set.durationSec != null ||
-      set.distanceKm != null ||
-      set.resistance != null ||
-      set.speedMs != null ||
-      set.inclinePct != null ||
-      set.restSec != null ||
-      set.rpe != null ||
-      set.steps != null ||
-      set.heightM != null);
+  const hasData = !!set && !isBlankSet(set);
+  // Before anything is logged, show the previous session's set as a greyed
+  // ghost the user taps to harden. None in templates or without history.
+  const showGhost =
+    ghostEnabled && !isTemplate && !hasData && !!suggestion && !isBlankSet(suggestion);
 
   return (
     <>
@@ -547,6 +487,17 @@ function CircuitExerciseRow({
               </p>
             )}
           </button>
+          {showGhost && suggestion && (
+            <button
+              type="button"
+              onClick={onHarden}
+              aria-label={`Log ${exGroup.exercise.name} (repeat previous)`}
+              className="text-left text-sm mt-3 pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 opacity-45 hover:opacity-70 transition-opacity before:content-['•'] before:mr-2 before:text-muted-foreground"
+            >
+              <span>{formatCircuitSetSummary(suggestion, exGroup)}</span>
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         <div className="flex flex-col items-end shrink-0">
           <div className="flex items-center">

@@ -32,7 +32,11 @@ import { saveWorkout, deleteWorkout } from "@/lib/mutations/workouts";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
 import { SessionGuests } from "@/components/session-guests";
 import { ExerciseForm } from "@/routes/exercises/exercise-form";
-import { getWorkoutWithSets, getUserExercisesOrderedByLastLogged } from "@/lib/db/queries";
+import {
+  getWorkoutWithSets,
+  getUserExercisesOrderedByLastLogged,
+  getMostRecentWorkoutId,
+} from "@/lib/db/queries";
 import { useAuth } from "@/lib/auth/auth-context";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
@@ -41,6 +45,7 @@ import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
 import { CalorieTray } from "./calorie-tray";
 import {
+  isBlankSet,
   isCircuitGroup,
   type DraftSet,
   type ExerciseGroup,
@@ -67,7 +72,13 @@ export function WorkoutEditorRoute() {
   const [data, setData] = useState<
     | { state: "loading" }
     | { state: "not-found" }
-    | { state: "ready"; workout: Workout; sets: WorkoutSet[]; exercises: Exercise[] }
+    | {
+        state: "ready";
+        workout: Workout;
+        sets: WorkoutSet[];
+        exercises: Exercise[];
+        isMostRecent: boolean;
+      }
   >({ state: "loading" });
 
   useEffect(() => {
@@ -82,11 +93,13 @@ export function WorkoutEditorRoute() {
         return;
       }
       const exercises = await getUserExercisesOrderedByLastLogged();
+      const mostRecentId = await getMostRecentWorkoutId();
       setData({
         state: "ready",
         workout: workout.workout,
         sets: workout.sets,
         exercises,
+        isMostRecent: mostRecentId === workout.workout.id,
       });
     })();
   }, [id]);
@@ -106,6 +119,7 @@ export function WorkoutEditorRoute() {
       formattedDate={format(parseISO(data.workout.performedOn), "EEE d MMM")}
       initialSets={data.sets}
       exercises={data.exercises}
+      isMostRecent={data.isMostRecent}
     />
   );
 }
@@ -115,9 +129,16 @@ interface Props {
   formattedDate: string;
   initialSets: WorkoutSet[];
   exercises: Exercise[];
+  isMostRecent: boolean;
 }
 
-function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initialExercises }: Props) {
+function WorkoutEditor({
+  workout,
+  formattedDate,
+  initialSets,
+  exercises: initialExercises,
+  isMostRecent,
+}: Props) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   // `?from=…` lets the caller decide where Back returns. Friends feed passes
@@ -141,19 +162,24 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
     buildItemsFromSets(initialSets, initialExercises)
   );
   const stats = useMemo(() => {
+    // Exclude not-yet-logged "anchor" sets so an exercise the user has added
+    // but not logged doesn't inflate the set/rep counts.
     const statItems: StatItem[] = items.map((item) =>
       isCircuitGroup(item)
         ? {
             type: "circuit",
             rounds: item.rounds,
             exercises: item.exercises.map((eg) => ({
-              sets: eg.sets,
+              sets: eg.sets.filter((s) => !isBlankSet(s)),
               doubleReps: eg.exercise.doubleReps,
             })),
           }
         : {
             type: "single",
-            exercise: { sets: item.sets, doubleReps: item.exercise.doubleReps },
+            exercise: {
+              sets: item.sets.filter((s) => !isBlankSet(s)),
+              doubleReps: item.exercise.doubleReps,
+            },
           }
     );
     return computeSessionStats(statItems);
@@ -240,6 +266,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
       if (isCircuitGroup(item)) {
         for (const eg of item.exercises) {
           for (const s of eg.sets) {
+            if (isBlankSet(s)) continue;
             rows.push({
               set: toWorkoutSet(s, eg.exerciseId, workout.id, workout.userId, workout.performedOn),
               exercise: eg.exercise,
@@ -250,6 +277,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
         }
       } else {
         for (const s of item.sets) {
+          if (isBlankSet(s)) continue;
           rows.push({
             set: toWorkoutSet(s, item.exerciseId, workout.id, workout.userId, workout.performedOn),
             exercise: item.exercise,
@@ -521,6 +549,12 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
 
   const displayItems = reversed ? [...items].reverse() : items;
 
+  // The greyed "ghost set" is a live-logging aid, so it appears only on the
+  // session currently being logged (the most recent one) and only on the last
+  // entry — the one you're working on. Earlier entries don't get a ghost.
+  const activeGroupKey =
+    isMostRecent && items.length > 0 ? items[items.length - 1].groupKey : null;
+
   const addButtons = (
     <div className="flex gap-2">
       <Button
@@ -728,6 +762,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                   key={item.groupKey}
                   circuit={item}
                   workoutId={workout.id}
+                  showGhost={item.groupKey === activeGroupKey}
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
                   onDuplicate={() => duplicateItem(item.groupKey)}
@@ -747,6 +782,7 @@ function WorkoutEditor({ workout, formattedDate, initialSets, exercises: initial
                 key={item.groupKey}
                 group={item as ExerciseGroup}
                 workoutId={workout.id}
+                showGhost={item.groupKey === activeGroupKey}
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
                 onDuplicate={() => duplicateItem(item.groupKey)}

@@ -166,6 +166,18 @@ export async function getSessionGuests(workoutId: string): Promise<ResolvedSessi
   );
 }
 
+// The id of the user's single most recent session (by date, then creation
+// order), or null if they have none. Gates the live-logging "ghost set" so it
+// only appears while logging the latest session, not when editing older ones.
+export async function getMostRecentWorkoutId(): Promise<string | null> {
+  const userId = await getCurrentUserId();
+  const row = await powersync.getOptional<{ id: string }>(
+    `SELECT id FROM workouts WHERE user_id = ? ORDER BY performed_on DESC, created_at DESC LIMIT 1`,
+    [userId]
+  );
+  return row?.id ?? null;
+}
+
 export async function getRecentWorkouts(limit = 30): Promise<Workout[]> {
   const userId = await getCurrentUserId();
   const rows = await powersync.getAll<WorkoutRow>(

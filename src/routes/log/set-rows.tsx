@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
@@ -11,7 +11,7 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import { NoteTray } from "@/components/note-field";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
-import type { DraftSet, ExerciseGroup } from "./workout-editor-types";
+import { isBlankSet, type DraftSet, type ExerciseGroup } from "./workout-editor-types";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { updateExerciseNotes } from "@/lib/mutations/exercises";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
@@ -37,6 +37,9 @@ interface Props {
   // "template" mode edits a template skeleton: no auto-prefill from history, no
   // PB badges, no history list, and "See stats" returns to the template editor.
   mode?: "workout" | "template";
+  // Show the greyed "ghost" set. Only the active entry of the most recent
+  // session gets one, so earlier exercises stay clean.
+  showGhost?: boolean;
 }
 
 type TrayState = {
@@ -53,24 +56,16 @@ export function SetRows({
   onDuplicate,
   onEdit,
   mode = "workout",
+  showGhost = false,
 }: Props) {
   const isTemplate = mode === "template";
   const navigate = useNavigate();
   const timer = useTimer();
   const [tray, setTray] = useState<TrayState | null>(null);
-  const lastLoggedRef = useRef<Array<{
-    reps: number | null;
-    weightKg: number | null;
-    distanceKm: number | null;
-    durationSec: number | null;
-    resistance: number | null;
-    speedMs: number | null;
-    inclinePct: number | null;
-    restSec: number | null;
-    rpe: number | null;
-    steps: number | null;
-    heightM: number | null;
-  }> | null>(null);
+  // Sets from the most recent session that logged this exercise, in performed
+  // order. Drives the greyed "ghost" suggestion for the first (not-yet-logged)
+  // set. State (not a ref) so the ghost appears once the async load resolves.
+  const [lastLogged, setLastLogged] = useState<DraftSet[] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteTrayOpen, setNoteTrayOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -110,75 +105,32 @@ export function SetRows({
     opacity: isDragging ? 0.5 : undefined,
   };
 
-  // Keep refs of the latest `group` and `onUpdate` so the async effect below
-  // doesn't write back stale state. Without this, an edit made by the parent
-  // while getLastSessionSetsForExercise is in flight gets overwritten when the
-  // closure-captured `group` resolves.
-  const groupRef = useRef(group);
-  const onUpdateRef = useRef(onUpdate);
-  useEffect(() => {
-    groupRef.current = group;
-    onUpdateRef.current = onUpdate;
-  });
-
+  // Load the previous session's sets for this exercise. These are no longer
+  // written into the draft automatically — instead they seed the greyed ghost
+  // suggestion (see `ghostSuggestion`) that the user taps to harden.
   useEffect(() => {
     if (isTemplate) return;
     let cancelled = false;
     getLastSessionSetsForExercise(group.exerciseId, workoutId)
       .then((last) => {
-        if (cancelled || last.length === 0) return;
-        const lastSets = last.map((s) => ({
-          reps: s.reps,
-          weightKg: s.weightKg,
-          distanceKm: s.distanceKm,
-          durationSec: s.durationSec,
-          resistance: s.resistance,
-          speedMs: s.speedMs,
-          inclinePct: s.inclinePct,
-          restSec: s.restSec,
-          rpe: s.rpe,
-          steps: s.steps,
-          heightM: s.heightM,
-        }));
-        lastLoggedRef.current = lastSets;
-        const currentGroup = groupRef.current;
-        const nextSets = currentGroup.sets.map((s, i) => {
-          if (
-            s.reps != null ||
-            s.weightKg != null ||
-            s.distanceKm != null ||
-            s.durationSec != null ||
-            s.resistance != null ||
-            s.speedMs != null ||
-            s.inclinePct != null ||
-            s.restSec != null ||
-            s.rpe != null ||
-            s.steps != null ||
-            s.heightM != null
-          )
-            return s;
-          const src = lastSets[i] ?? lastSets[0];
-          return {
-            ...s,
-            reps: src.reps,
-            weightKg: src.weightKg,
-            distanceKm: src.distanceKm,
-            durationSec: src.durationSec,
-            resistance: src.resistance,
-            speedMs: src.speedMs,
-            inclinePct: src.inclinePct,
-            restSec: src.restSec,
-            rpe: src.rpe,
-            steps: src.steps,
-            heightM: src.heightM,
-          };
-        });
-        // Exercise notes are now persisted on the Exercise itself (not the
-        // session), so no per-session carry-forward is needed.
-        const setsChanged = nextSets.some((s, i) => s !== currentGroup.sets[i]);
-        if (setsChanged) {
-          onUpdateRef.current({ ...currentGroup, sets: nextSets });
-        }
+        if (cancelled) return;
+        setLastLogged(
+          last.map((s) => ({
+            exerciseId: group.exerciseId,
+            reps: s.reps,
+            weightKg: s.weightKg,
+            distanceKm: s.distanceKm,
+            durationSec: s.durationSec,
+            resistance: s.resistance,
+            speedMs: s.speedMs,
+            inclinePct: s.inclinePct,
+            restSec: s.restSec,
+            calories: s.calories,
+            rpe: s.rpe,
+            steps: s.steps,
+            heightM: s.heightM,
+          }))
+        );
       })
       .catch((err) => {
         console.error("[set-rows] failed to load last sets:", err);
@@ -186,8 +138,7 @@ export function SetRows({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.exerciseId, workoutId]);
+  }, [group.exerciseId, workoutId, isTemplate]);
 
   // Pull prior sets for this exercise (excluding the current workout) so we
   // can detect PBs hit by sets being logged right now.
@@ -213,18 +164,49 @@ export function SetRows({
     };
   }, [group.exerciseId, workoutId]);
 
+  // The logged (hardened) sets. In a live session the not-yet-logged "anchor"
+  // set is hidden and replaced by the ghost row; templates keep every set
+  // (including intentionally-blank skeleton sets) visible and editable.
+  const displaySets = useMemo(
+    () => (isTemplate ? group.sets : group.sets.filter((s) => !isBlankSet(s))),
+    [group.sets, isTemplate]
+  );
+
   const pbsByCurrentSetIndex = useMemo<PBType[][]>(() => {
-    if (priorSetsAsc === null) return group.sets.map(() => []);
-    const combined = [...priorSetsAsc, ...group.sets];
+    if (priorSetsAsc === null) return displaySets.map(() => []);
+    const combined = [...priorSetsAsc, ...displaySets];
     const all = computePBsInOrder(combined, group.exercise);
     return all.slice(priorSetsAsc.length);
-  }, [priorSetsAsc, group.sets, group.exercise]);
+  }, [priorSetsAsc, displaySets, group.exercise]);
+
+  // The greyed set shown below the logged sets, waiting to be tapped. It
+  // duplicates the last logged set, or — before anything is logged — the first
+  // set of the previous session. Null (no ghost) in templates and when there's
+  // nothing to suggest.
+  const ghostSuggestion = useMemo<DraftSet | null>(() => {
+    if (isTemplate) return null;
+    const last = displaySets[displaySets.length - 1];
+    if (last) {
+      const { id: _id, ...rest } = last;
+      return rest;
+    }
+    const hist = lastLogged?.[0];
+    return hist ? { ...hist } : null;
+  }, [isTemplate, displaySets, lastLogged]);
+
+  function hardenGhost() {
+    if (!ghostSuggestion) return;
+    const newSet: DraftSet = { ...ghostSuggestion, id: undefined };
+    // Drop the blank anchor (if this is the first set) and append the new one.
+    onUpdate({ ...group, sets: [...group.sets.filter((s) => !isBlankSet(s)), newSet] });
+    if (!isTemplate && group.exercise.trackRest && newSet.restSec != null) {
+      timer.startRest(newSet.restSec);
+    }
+  }
 
   function openAddTray() {
-    const last = group.sets[group.sets.length - 1];
-    const historySuggestion = lastLoggedRef.current?.[0]
-      ? { exerciseId: group.exerciseId, ...lastLoggedRef.current[0] }
-      : null;
+    const last = displaySets[displaySets.length - 1];
+    const historySuggestion = lastLogged?.[0] ?? null;
     setTray({
       setIndex: -1,
       draft: {
@@ -246,15 +228,19 @@ export function SetRows({
     });
   }
 
-  function openEditTray(idx: number) {
-    setTray({ setIndex: idx, draft: { ...group.sets[idx] } });
+  function openEditTray(set: DraftSet) {
+    setTray({ setIndex: group.sets.indexOf(set), draft: { ...set } });
   }
 
   function confirmTray(draft: DraftSet) {
     if (!tray) return;
     const isNewSet = tray.setIndex === -1;
     if (isNewSet) {
-      onUpdate({ ...group, sets: [...group.sets, draft] });
+      // Manual entry takes priority over the ghost: drop the blank anchor (if
+      // present) so the typed set becomes the first real one. Templates keep
+      // every set, so append there.
+      const base = isTemplate ? group.sets : group.sets.filter((s) => !isBlankSet(s));
+      onUpdate({ ...group, sets: [...base, draft] });
     } else {
       const next = group.sets.map((s, i) => (i === tray.setIndex ? { ...s, ...draft } : s));
       onUpdate({ ...group, sets: next });
@@ -266,9 +252,8 @@ export function SetRows({
     setTray(null);
   }
 
-  function removeSet(idx: number) {
-    const next = group.sets.filter((_, i) => i !== idx);
-    onUpdate({ ...group, sets: next });
+  function removeSet(set: DraftSet) {
+    onUpdate({ ...group, sets: group.sets.filter((s) => s !== set) });
   }
 
   const ex = group.exercise;
@@ -317,7 +302,7 @@ export function SetRows({
           </div>
 
           <div className="px-3 pb-3 flex flex-col gap-0.5">
-            {group.sets.map((s, i) => (
+            {displaySets.map((s, i) => (
               <SetSummaryRow
                 key={s.id ?? `new-${i}`}
                 index={i + 1}
@@ -325,10 +310,19 @@ export function SetRows({
                 exercise={ex}
                 distanceUnit={distanceUnit}
                 pbs={pbsByCurrentSetIndex[i] ?? []}
-                onClick={() => openEditTray(i)}
-                onRemove={() => removeSet(i)}
+                onClick={() => openEditTray(s)}
+                onRemove={() => removeSet(s)}
               />
             ))}
+            {showGhost && ghostSuggestion && (
+              <GhostSetRow
+                index={displaySets.length + 1}
+                set={ghostSuggestion}
+                exercise={ex}
+                distanceUnit={distanceUnit}
+                onClick={hardenGhost}
+              />
+            )}
             <div className="flex items-center mt-1">
               <Button variant="ghost" size="sm" onClick={openAddTray} className="flex-1">
                 <Plus className="h-4 w-4" /> Add set
@@ -367,7 +361,7 @@ export function SetRows({
                 exerciseId={group.exerciseId}
                 exercise={ex}
                 excludeWorkoutId={workoutId}
-                futureSets={group.sets}
+                futureSets={displaySets}
               />
             </div>
           )}
@@ -530,6 +524,53 @@ function SetSummaryRow({
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
+  );
+}
+
+// The greyed, tap-to-log preview of the next set. Renders the suggested values
+// dimmed; tapping hardens it into a real set (see hardenGhost).
+function GhostSetRow({
+  index,
+  set,
+  exercise,
+  distanceUnit,
+  onClick,
+}: {
+  index: number;
+  set: DraftSet;
+  exercise: Exercise;
+  distanceUnit: "m" | "km" | "yd";
+  onClick: () => void;
+}) {
+  const parts = formatSetSummaryParts(set, exercise, distanceUnit);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-md px-1 py-0.5 text-left opacity-45 hover:opacity-70 transition-opacity"
+      aria-label={`Add set ${index} (repeat previous)`}
+    >
+      <span className="text-sm text-muted-foreground w-6 shrink-0 text-center">{index}</span>
+      <span className="flex-1 text-sm py-0.5 inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {parts.length === 0 ? (
+          <span>—</span>
+        ) : (
+          parts.map((p, i) => (
+            <Fragment key={i}>
+              {i > 0 && (
+                <span className="text-muted-foreground/50" aria-hidden>
+                  ·
+                </span>
+              )}
+              <span className="whitespace-nowrap">{p}</span>
+            </Fragment>
+          ))
+        )}
+      </span>
+      <span className="flex h-7 w-7 items-center justify-center text-muted-foreground" aria-hidden>
+        <Plus className="h-3.5 w-3.5" />
+      </span>
+    </button>
   );
 }
 
