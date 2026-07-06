@@ -140,7 +140,7 @@ function WorkoutEditor({
   isMostRecent,
 }: Props) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // `?from=…` lets the caller decide where Back returns. Friends feed passes
   // `/friends` for own sessions opened there; Log-tab links omit it and
   // fall through to the default `/log`.
@@ -188,6 +188,24 @@ function WorkoutEditor({
   const [picking, setPicking] = useState(false);
   const [pickingForCircuit, setPickingForCircuit] = useState<string | null>(null);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  // `?open=<id>` re-opens the exercise editor after a Customise-fields
+  // round trip (see exercise-form.tsx's customiseFieldsHref). Mirrors the
+  // same pattern in exercises.tsx. Stripped once consumed so a refresh
+  // doesn't keep re-opening it.
+  const openParam = searchParams.get("open");
+  useEffect(() => {
+    if (!openParam) return;
+    const ex = exercises.find((e) => e.id === openParam);
+    if (ex) setEditingExercise(ex);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("open");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [openParam, exercises, setSearchParams]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
