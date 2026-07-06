@@ -216,8 +216,8 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
   }, [name, notes, notesPublic, sessionType, items, doSave]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 300, tolerance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 4 } })
   );
 
   function handleDragOver(event: DragOverEvent) {
@@ -231,7 +231,23 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
       const activeContainer = findContainer(activeId, prev);
       const overContainer = findContainer(overId, prev);
       if (!activeContainer || !overContainer) return prev;
-      if (activeContainer === overContainer) return prev;
+
+      if (activeContainer === overContainer) {
+        if (activeContainer === ROOT) {
+          const oldIndex = prev.findIndex((g) => g.groupKey === activeId);
+          const newIndex = prev.findIndex((g) => g.groupKey === overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
+          return arrayMove(prev, oldIndex, newIndex);
+        }
+
+        return prev.map((item) => {
+          if (!isCircuitGroup(item) || item.groupKey !== activeContainer) return item;
+          const oldIndex = item.exercises.findIndex((eg) => eg.groupKey === activeId);
+          const newIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
+          if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return item;
+          return { ...item, exercises: arrayMove(item.exercises, oldIndex, newIndex) };
+        });
+      }
 
       const activeItem = findExerciseGroupAnywhere(activeId, prev);
       if (!activeItem) return prev;
@@ -241,33 +257,9 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
     });
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
-    const activeId = String(active.id);
-    const overId = String(over.id);
-
-    setItems((prev) => {
-      const activeContainer = findContainer(activeId, prev);
-      const overContainer = findContainer(overId, prev);
-      if (!activeContainer || !overContainer) return prev;
-      if (activeContainer !== overContainer) return prev;
-
-      if (activeContainer === ROOT) {
-        const oldIndex = prev.findIndex((g) => g.groupKey === activeId);
-        const newIndex = prev.findIndex((g) => g.groupKey === overId);
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return prev;
-        return arrayMove(prev, oldIndex, newIndex);
-      }
-
-      return prev.map((item) => {
-        if (!isCircuitGroup(item) || item.groupKey !== activeContainer) return item;
-        const oldIndex = item.exercises.findIndex((eg) => eg.groupKey === activeId);
-        const newIndex = item.exercises.findIndex((eg) => eg.groupKey === overId);
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return item;
-        return { ...item, exercises: arrayMove(item.exercises, oldIndex, newIndex) };
-      });
-    });
+  function handleDragEnd(_event: DragEndEvent) {
+    // Reordering happens live in handleDragOver so the array stays in sync
+    // with dnd-kit's preview animation; nothing left to do on drop.
   }
 
   function addExercise(ex: Exercise) {
