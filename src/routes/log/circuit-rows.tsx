@@ -204,41 +204,67 @@ export function CircuitRows({
     <>
       <div ref={setNodeRef} style={dragStyle}>
         <Card className="border-dashed border-muted-foreground/30">
-          <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-            <div className="flex-1 min-w-0">
-              {renamingName ? (
-                <input
-                  ref={nameInputRef}
-                  autoFocus
-                  defaultValue={circuit.name}
-                  onBlur={(e) => {
-                    const val = e.target.value.trim() || "Circuit";
-                    onUpdate({ ...circuit, name: val });
-                    setRenamingName(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                    if (e.key === "Escape") {
+          <div className="px-3 pt-3 pb-2">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                {renamingName ? (
+                  <input
+                    ref={nameInputRef}
+                    autoFocus
+                    defaultValue={circuit.name}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim() || "Circuit";
+                      onUpdate({ ...circuit, name: val });
                       setRenamingName(false);
-                    }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-base font-medium text-primary bg-transparent border-b border-primary/40 outline-none w-32 min-w-0"
-                />
-              ) : (
-                <button
-                  type="button"
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        setRenamingName(false);
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-base font-medium text-primary bg-transparent border-b border-primary/40 outline-none w-32 min-w-0"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRenamingName(true);
+                    }}
+                    className="block text-base font-medium text-primary hover:text-primary/70 text-left break-words"
+                  >
+                    {circuit.name}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-0 shrink-0">
+                <Button
+                  size="icon"
+                  variant="ghost"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setRenamingName(true);
+                    setMenuOpen(true);
                   }}
-                  className="block text-base font-medium text-primary hover:text-primary/70 text-left break-words"
+                  aria-label="Circuit options"
                 >
-                  {circuit.name}
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+                <button
+                  type="button"
+                  ref={setActivatorNodeRef}
+                  {...attributes}
+                  {...listeners}
+                  style={{ touchAction: "none" }}
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
+                  aria-label="Drag to reorder circuit"
+                >
+                  <GripVertical className="h-4 w-4" />
                 </button>
-              )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 mt-2">
               <span className="text-base font-medium text-primary">
                 {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
               </span>
@@ -266,35 +292,11 @@ export function CircuitRows({
                 <Plus className="h-3 w-3" />
               </button>
             </div>
-            <div className="flex items-center gap-0 shrink-0">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(true);
-                }}
-                aria-label="Circuit options"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-              <button
-                type="button"
-                ref={setActivatorNodeRef}
-                {...attributes}
-                {...listeners}
-                style={{ touchAction: "none" }}
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center text-muted-foreground cursor-grab touch-none"
-                aria-label="Drag to reorder circuit"
-              >
-                <GripVertical className="h-4 w-4" />
-              </button>
-            </div>
           </div>
 
           <div
             ref={setBodyDroppableRef}
-            className={`px-3 pb-3 flex flex-col gap-2 rounded-b-xl transition-colors ${
+            className={`px-3 pb-3 flex flex-col gap-4 rounded-b-xl transition-colors ${
               isBodyOver ? "bg-primary/5" : ""
             }`}
           >
@@ -459,10 +461,18 @@ function CircuitExerciseRow({
       <div
         ref={setNodeRef}
         style={dragStyle}
-        className="flex items-center gap-2 rounded-md px-1 py-1.5 hover:bg-muted/50"
+        className="flex flex-col gap-1.5 rounded-md px-1 py-1.5 hover:bg-muted/50"
       >
-        <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Title row. The options/drag controls are absolutely positioned so
+            they're out of flow: the row's height is therefore just the title's
+            line height, and the flex-col gap-1.5 below is measured from the
+            title's bottom — matching a normal exercise card. (In flow, the h-9
+            buttons are taller than the title and would define the row's bottom,
+            opening up extra space before the tags.) The controls are centred on
+            the row so they stay dead-centre on the title; pr-[4.5rem] reserves
+            room for them so a long/wrapping name doesn't slide underneath. */}
+        <div className="relative flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2 pr-[4.5rem]">
             <button
               type="button"
               onClick={onClick}
@@ -472,36 +482,7 @@ function CircuitExerciseRow({
             </button>
             <VariationControl group={exGroup} onChange={onChangeVariation} />
           </div>
-          <button
-            type="button"
-            onClick={onClick}
-            className="text-left min-w-0 flex flex-col gap-0.5"
-          >
-            <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
-              <ExerciseMetaTags e={exGroup.exercise} />
-              <VariationTag group={exGroup} onChange={onChangeVariation} />
-            </span>
-            {hasData && (
-              <p className="text-sm mt-3 pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground">
-                <span>{formatCircuitSetSummary(set, exGroup)}</span>
-                <PBBadges types={pbs} />
-              </p>
-            )}
-          </button>
-          {showGhost && suggestion && (
-            <button
-              type="button"
-              onClick={onHarden}
-              aria-label={`Log ${exGroup.exercise.name} (repeat previous)`}
-              className="text-left text-sm mt-3 pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 opacity-45 hover:opacity-70 transition-opacity before:content-['•'] before:mr-2 before:text-muted-foreground"
-            >
-              <span>{formatCircuitSetSummary(suggestion, exGroup)}</span>
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-        <div className="flex flex-col items-end shrink-0">
-          <div className="flex items-center">
+          <div className="absolute right-0 top-1/2 flex -translate-y-1/2 shrink-0 items-center">
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
@@ -522,21 +503,80 @@ function CircuitExerciseRow({
               <GripVertical className="h-4 w-4" />
             </button>
           </div>
-          {!isTemplate && (
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((o) => !o)}
-              aria-label={historyOpen ? "Hide history" : "Show history"}
-              className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {historyOpen ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
-          )}
         </div>
+        {/* flex (not the default inline flow) so the tags span is a flex child
+            with no inline line box — otherwise the button inherits the
+            document's 1.5 line-height and adds ~4px of leading above the tags,
+            which reads as extra title→tags spacing versus a normal card. */}
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex text-left min-w-0"
+        >
+          <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
+            <ExerciseMetaTags e={exGroup.exercise} />
+            <VariationTag group={exGroup} onChange={onChangeVariation} />
+          </span>
+        </button>
+        {/* Set detail row. The history chevron is absolutely positioned (out
+            of flow) so — like the title's controls — it doesn't stretch the
+            row and push the set detail down. The row's height is just the
+            set-detail line, so the tags→set-detail gap (flex-col gap-1.5 +
+            mt-2) matches a normal card. The flex-1 wrapper is flex so its
+            content has no inline line-box leading. The chevron stays centred on
+            the set-detail line; when there's no set detail (a fresh exercise
+            with no data or suggestion) min-h-9 keeps the row tall enough for
+            the chevron alone. hasData and the ghost suggestion are mutually
+            exclusive (ghost requires !hasData). */}
+        {(hasData || (showGhost && suggestion) || !isTemplate) && (
+          <div
+            className={`relative flex items-center mt-2 ${
+              hasData || (showGhost && suggestion) ? "" : "min-h-9"
+            }`}
+          >
+            <div className={`flex-1 min-w-0 flex ${!isTemplate ? "pr-9" : ""}`}>
+              {hasData ? (
+                <button
+                  type="button"
+                  onClick={onClick}
+                  className="text-left text-sm pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground"
+                >
+                  <span>{formatCircuitSetSummary(set, exGroup)}</span>
+                  <PBBadges types={pbs} />
+                </button>
+              ) : (
+                showGhost &&
+                suggestion && (
+                  <button
+                    type="button"
+                    onClick={onHarden}
+                    aria-label={`Log ${exGroup.exercise.name} (repeat previous)`}
+                    className="text-left text-sm pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 opacity-45 hover:opacity-70 transition-opacity before:content-['•'] before:mr-2 before:text-muted-foreground"
+                  >
+                    <span>{formatCircuitSetSummary(suggestion, exGroup)}</span>
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                )
+              )}
+            </div>
+            {!isTemplate && (
+              <div className="absolute right-0 top-1/2 flex -translate-y-1/2 shrink-0 items-center">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOpen((o) => !o)}
+                  aria-label={historyOpen ? "Hide history" : "Show history"}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {historyOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {!isTemplate && historyOpen && (
