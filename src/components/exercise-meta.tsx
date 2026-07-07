@@ -17,7 +17,7 @@ export function BarbellIcon({ className }: { className?: string; strokeWidth?: n
   );
 }
 
-function Dot() {
+export function Dot() {
   return (
     <svg
       viewBox="0 0 6 6"
@@ -47,6 +47,27 @@ type ExerciseMeta = {
   defaultWeightKg: number;
   doubleReps: boolean;
 };
+
+// Whether ExerciseMetaTags would render anything for this exercise. Used to
+// decide if a trailing item (e.g. the selected-variation tag) needs a leading
+// Dot separator, matching how the tags themselves are delimited.
+export function exerciseHasMetaTags(e: {
+  categories?: string[] | null;
+  equipment?: string | null;
+  muscles?: string[] | null;
+  secondaryMuscles?: string[] | null;
+  defaultWeightKg: number;
+  doubleReps: boolean;
+}): boolean {
+  return (
+    (e.categories?.length ?? 0) > 0 ||
+    !!e.equipment ||
+    (e.muscles?.length ?? 0) > 0 ||
+    (e.secondaryMuscles?.length ?? 0) > 0 ||
+    e.defaultWeightKg > 0 ||
+    e.doubleReps
+  );
+}
 
 export function ExerciseMetaTags({ e }: { e: ExerciseMeta }) {
   const { categories, equipment: equipmentOptions, muscleGroups } =
