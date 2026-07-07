@@ -264,34 +264,6 @@ export function CircuitRows({
                 </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-base font-medium text-primary">
-                {circuit.rounds} {circuit.rounds === 1 ? "round" : "rounds"}
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdate({ ...circuit, rounds: Math.max(0, circuit.rounds - 1) });
-                }}
-                disabled={circuit.rounds <= 0}
-                className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90 disabled:opacity-40 disabled:hover:bg-white"
-                aria-label="Decrease rounds"
-              >
-                <Minus className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdate({ ...circuit, rounds: Math.min(999, circuit.rounds + 1) });
-                }}
-                className="h-6 w-6 shrink-0 rounded-full bg-white text-black flex items-center justify-center hover:bg-white/90"
-                aria-label="Increase rounds"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
-            </div>
           </div>
 
           <div
@@ -300,6 +272,12 @@ export function CircuitRows({
               isBodyOver ? "bg-primary/5" : ""
             }`}
           >
+            {/* In the same gap-4 flex column as the exercises, so the counter→
+                first-exercise spacing matches the spacing between exercises. */}
+            <RoundsControl
+              rounds={circuit.rounds}
+              onChange={(rounds) => onUpdate({ ...circuit, rounds })}
+            />
             <SortableContext
               items={circuit.exercises.map((eg) => eg.groupKey)}
               strategy={verticalListSortingStrategy}
@@ -367,6 +345,51 @@ export function CircuitRows({
         />
       )}
     </>
+  );
+}
+
+// Full-width rounds stepper for a circuit card: a rounded bar with circular
+// −/+ controls at each edge and the count (with a label) centred between them.
+function RoundsControl({
+  rounds,
+  onChange,
+  className = "",
+}: {
+  rounds: number;
+  onChange: (rounds: number) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 rounded-xl bg-muted px-2 py-1.5 ${className}`}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange(Math.max(0, rounds - 1));
+        }}
+        disabled={rounds <= 0}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-white/90 disabled:opacity-40 disabled:hover:bg-white"
+        aria-label="Decrease rounds"
+      >
+        <Minus className="h-4 w-4" />
+      </button>
+      <span className="text-base font-medium tabular-nums text-primary">
+        {rounds} {rounds === 1 ? "round" : "rounds"}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onChange(Math.min(999, rounds + 1));
+        }}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-white/90"
+        aria-label="Increase rounds"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
