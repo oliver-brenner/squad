@@ -25,7 +25,7 @@ import {
   type TimeParts,
   type HeightUnit,
 } from "@/lib/set-format";
-import { VariationControl } from "./variation-control";
+import { VariationControl, VariationTag } from "./variation-control";
 
 interface Props {
   group: ExerciseGroup;
@@ -276,6 +276,12 @@ export function SetRows({
               </div>
               <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
                 <ExerciseMetaTags e={ex} />
+                {!isTemplate && (
+                  <VariationTag
+                    group={group}
+                    onChange={(variation) => onUpdate({ ...group, variation })}
+                  />
+                )}
               </span>
             </div>
             <span className="inline-flex h-6 shrink-0 items-center">

@@ -16,7 +16,7 @@ import { useTimer } from "@/components/providers/timer-provider";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
-import { VariationControl } from "./variation-control";
+import { VariationControl, VariationTag } from "./variation-control";
 
 interface Props {
   circuit: CircuitGroup;
@@ -479,6 +479,7 @@ function CircuitExerciseRow({
           >
             <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
               <ExerciseMetaTags e={exGroup.exercise} />
+              <VariationTag group={exGroup} onChange={onChangeVariation} />
             </span>
             {hasData && (
               <p className="text-sm mt-3 pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground">
