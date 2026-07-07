@@ -9,6 +9,7 @@
 // that returns "my" data must filter by user_id; queries that intentionally
 // span friends are explicit in their naming (e.g. `getFeedSessions`).
 
+import { format, parseISO, startOfWeek } from "date-fns";
 import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "./client";
 import {
@@ -684,67 +685,76 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
 // Reads spanning friends' data, explicitly named so callers can't confuse
 // them with "my data". The sync rules in powersync/sync_rules.yaml stream
 // each followee's workouts/sets/exercises/profile into local SQLite.
+//
+// The feed shows EVERY session (own or followee), PB or not — one card per
+// workout, enriched with the session's stat totals, per-exercise PB / NEW
+// tags, and the author's running weekly context (Nth session this week + that
+// week's sets/reps/volume).
 
-export type FeedSession = {
-  workoutId: string;
-  userId: string;
-  name: string;
-  performedOn: string;
-  createdAt: string;
-  sessionType: string;
-  authorUsername: string | null;
-  authorDisplayName: string | null;
-  authorAvatarUrl: string | null;
-};
+// ISO week key (Monday start) for a `YYYY-MM-DD` performed_on. Matches the
+// Mon–Sun bucketing used by the dashboard and profile charts.
+function isoWeekKey(performedOn: string): string {
+  return format(startOfWeek(parseISO(performedOn), { weekStartsOn: 1 }), "yyyy-MM-dd");
+}
 
-// ----- Feed PB highlights -----
-// One feed entry per workout (own or followee) that earned at least one PB
-// at the time of logging. Uses historical PB semantics — a PB once earned
-// stays in the feed even after the user later beats it, so achievements
-// don't disappear from people's timelines.
-
-export type FeedPBSet = {
-  setId: string;
-  setLabel: string;
-  types: PBType[];
-};
-
-export type FeedPBExercise = {
+export type FeedExercise = {
   exerciseId: string;
-  exerciseName: string;
-  sets: FeedPBSet[];
+  name: string;
+  // This session is the exercise's debut for the author (its first-ever log).
+  isNew: boolean;
+  // PB types earned in this session (metric display order). Empty = no PB.
+  pbTypes: PBType[];
+  // Summary of the representative PB set (the last one, read top-to-bottom),
+  // or null when the exercise earned no PB this session.
+  pbSetLabel: string | null;
 };
 
-export type FeedPBHighlight = {
+export type FeedSessionEntry = {
   workoutId: string;
-  workoutName: string;
-  performedOn: string;
-  sessionType: string | null;
   authorId: string;
   authorUsername: string | null;
   authorDisplayName: string | null;
   authorAvatarUrl: string | null;
+  workoutName: string;
+  performedOn: string;
+  sessionType: string | null;
+  calories: number | null;
+  // Public session note (already sync-filtered — NULL if private/absent).
+  note: string | null;
+  totalExercises: number;
+  totalSets: number;
+  totalReps: number;
+  totalVolumeKg: number;
   totalPBs: number;
-  exercises: FeedPBExercise[];
+  exercises: FeedExercise[];
+  // Weekly context for this author, ISO week (Mon–Sun) containing performedOn.
+  weekSessionOrdinal: number; // 1-based: Nth session that week
+  weekSessions: number;
+  weekSets: number;
+  weekReps: number;
+  weekVolumeKg: number;
 };
 
-export async function getFeedPBHighlights(
+export async function getFeedSessions(
   currentUserId: string,
   workoutLimit = 50
-): Promise<FeedPBHighlight[]> {
-  // Candidate workouts: yours + followees, newest first.
+): Promise<FeedSessionEntry[]> {
+  // 1. Candidate headers (the rendered cards): yours + followees, newest first.
+  //    All session types are kept — the feed is a full activity stream now.
   const workoutRows = await powersync.getAll<{
     id: string;
     name: string | null;
     performed_on: string;
     session_type: string | null;
+    calories: number | null;
+    notes: string | null;
     user_id: string;
     author_username: string | null;
     author_display_name: string | null;
     author_avatar_url: string | null;
   }>(
     `SELECT
-       w.id, w.name, w.performed_on, w.session_type, w.user_id,
+       w.id, w.name, w.performed_on, w.session_type, w.calories, w.notes, w.user_id,
        p.username AS author_username,
        p.display_name AS author_display_name,
        p.avatar_url AS author_avatar_url
@@ -761,17 +771,126 @@ export async function getFeedPBHighlights(
   );
   if (workoutRows.length === 0) return [];
 
+  // Earliest ISO-week start among the rendered candidates — the lower bound for
+  // the weekly rollup query so every shown session's week is counted in full,
+  // even for sessions that fall outside the rendered window.
+  let earliestWeekStart = isoWeekKey(workoutRows[0].performed_on);
+  for (const w of workoutRows) {
+    const wk = isoWeekKey(w.performed_on);
+    if (wk < earliestWeekStart) earliestWeekStart = wk;
+  }
+
+  // 2. Per-workout stat totals over the superset window (>= earliestWeekStart).
+  //    Each author's bodyweight comes from the profiles join (COALESCE handles
+  //    a missing profile row), so volume is correct across multiple authors in
+  //    a single query. Multiplier rules mirror getUserSessionAggregates.
+  const statRows = await powersync.getAll<{
+    workout_id: string;
+    user_id: string;
+    performed_on: string;
+    created_at: string | null;
+    total_exercises: number | null;
+    total_sets: number | null;
+    total_reps: number | null;
+    total_volume_kg: number | null;
+  }>(
+    `SELECT
+       w.id AS workout_id, w.user_id, w.performed_on, w.created_at,
+       COUNT(DISTINCT s.exercise_id || '|' || COALESCE(s.circuit_id, '')) AS total_exercises,
+       SUM(COALESCE(s.circuit_rounds, 1)) AS total_sets,
+       SUM(
+         COALESCE(s.reps, 1)
+         * COALESCE(s.circuit_rounds, 1)
+         * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+       ) AS total_reps,
+       SUM(
+         CASE
+           WHEN s.reps IS NOT NULL AND s.reps > 0
+                AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                     + CASE WHEN e.include_bodyweight = 1 THEN COALESCE(p.bodyweight_kg, 0) ELSE 0 END) > 0
+           THEN s.reps
+                * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
+                   + CASE WHEN e.include_bodyweight = 1 THEN COALESCE(p.bodyweight_kg, 0) ELSE 0 END)
+                * COALESCE(s.circuit_rounds, 1)
+                * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
+           ELSE 0
+         END
+       ) AS total_volume_kg
+     FROM workouts w
+     INNER JOIN sets s ON s.workout_id = w.id
+     INNER JOIN exercises e ON s.exercise_id = e.id
+     LEFT JOIN profiles p ON p.id = w.user_id
+     WHERE (w.user_id = ?
+            OR EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = ? AND f.followee_id = w.user_id))
+       AND w.performed_on >= ?
+     GROUP BY w.id, w.user_id, w.performed_on, w.created_at`,
+    [currentUserId, currentUserId, earliestWeekStart]
+  );
+
+  type WorkoutStat = {
+    workoutId: string;
+    userId: string;
+    performedOn: string;
+    createdAt: string;
+    exercises: number;
+    sets: number;
+    reps: number;
+    volumeKg: number;
+  };
+  const statsByWorkout = new Map<string, WorkoutStat>();
+  for (const r of statRows) {
+    statsByWorkout.set(r.workout_id, {
+      workoutId: r.workout_id,
+      userId: r.user_id,
+      performedOn: r.performed_on,
+      createdAt: r.created_at ?? "",
+      exercises: Number(r.total_exercises ?? 0),
+      sets: Number(r.total_sets ?? 0),
+      reps: Number(r.total_reps ?? 0),
+      volumeKg: Number(r.total_volume_kg ?? 0),
+    });
+  }
+
+  // Weekly rollup per (author, ISO week): summed totals + the week's workouts
+  // ordered chronologically so each can be assigned a 1-based session ordinal.
+  type WeekRollup = {
+    sessions: number;
+    sets: number;
+    reps: number;
+    volumeKg: number;
+    workouts: WorkoutStat[];
+  };
+  const weekKeyFor = (userId: string, performedOn: string) =>
+    `${userId}::${isoWeekKey(performedOn)}`;
+  const weekly = new Map<string, WeekRollup>();
+  for (const st of statsByWorkout.values()) {
+    const key = weekKeyFor(st.userId, st.performedOn);
+    const roll =
+      weekly.get(key) ?? { sessions: 0, sets: 0, reps: 0, volumeKg: 0, workouts: [] };
+    roll.sessions += 1;
+    roll.sets += st.sets;
+    roll.reps += st.reps;
+    roll.volumeKg += st.volumeKg;
+    roll.workouts.push(st);
+    weekly.set(key, roll);
+  }
+  const ordinalByWorkout = new Map<string, number>();
+  for (const roll of weekly.values()) {
+    roll.workouts.sort((a, b) =>
+      a.performedOn === b.performedOn
+        ? a.createdAt.localeCompare(b.createdAt)
+        : a.performedOn.localeCompare(b.performedOn)
+    );
+    roll.workouts.forEach((w, i) => ordinalByWorkout.set(w.workoutId, i + 1));
+  }
+
+  // 3. Sets within the rendered workouts, and the exercises they reference.
   const workoutIds = workoutRows.map((w) => w.id);
   const placeholders = workoutIds.map(() => "?").join(",");
-
-  // Sets within those workouts. user_id is denormalized on `sets`, so we can
-  // group by (user_id, exercise_id) without joining workouts.
   const candidateSetRows = await powersync.getAll<WorkoutSetRow>(
     `SELECT * FROM sets WHERE workout_id IN (${placeholders})`,
     workoutIds
   );
-
-  // Resolve every distinct exercise referenced.
   const exerciseIds = [
     ...new Set(candidateSetRows.map((r) => r.exercise_id).filter((v): v is string => !!v)),
   ];
@@ -784,14 +903,14 @@ export async function getFeedPBHighlights(
     for (const r of exRows) exerciseMap.set(r.id, decodeExercise(r));
   }
 
-  // Compute historical PBs per distinct (user_id, exercise_id) pair using
-  // each owner's FULL history — not just the candidate window — so a PB
-  // judgement reflects all of that user's prior work for the exercise.
+  // 4. Historical PBs + debut workout per distinct (user_id, exercise_id) pair,
+  //    using each owner's FULL history — not just the candidate window.
   const pairs = new Set<string>();
   for (const r of candidateSetRows) {
     if (r.user_id && r.exercise_id) pairs.add(`${r.user_id}::${r.exercise_id}`);
   }
   const pbBySetId = new Map<string, PBType[]>();
+  const debutWorkoutByPair = new Map<string, string>();
   await Promise.all(
     [...pairs].map(async (key) => {
       const sep = key.indexOf("::");
@@ -800,9 +919,12 @@ export async function getFeedPBHighlights(
       const exercise = exerciseMap.get(exerciseId);
       if (!exercise) return;
       const history = await getExerciseSetsForUser(exerciseId, userId);
-      // Suppress PBs on a user's first-ever log of an exercise — the very
-      // first session trivially sets every record, which isn't a meaningful
-      // achievement worth posting. Require ≥2 distinct workouts.
+      if (history.length === 0) return;
+      // history is ordered oldest-first, so its first set marks the debut.
+      debutWorkoutByPair.set(key, history[0].workoutId);
+      // Suppress PBs on a user's first-ever log of an exercise — the very first
+      // session trivially sets every record, which isn't a meaningful
+      // achievement. That session earns a NEW tag instead. Require ≥2 workouts.
       const distinctWorkouts = new Set(history.map((s) => s.workoutId)).size;
       if (distinctWorkouts < 2) return;
       const pbs = computeHistoricalPBs(history, exercise);
@@ -812,92 +934,108 @@ export async function getFeedPBHighlights(
     })
   );
 
-  // Group flagged sets by workout → by exercise, preserving position order.
-  const flaggedByWorkout = new Map<string, WorkoutSetRow[]>();
+  // Group the rendered workouts' sets by workout.
+  const setsByWorkout = new Map<string, WorkoutSetRow[]>();
   for (const r of candidateSetRows) {
-    if (!pbBySetId.has(r.id)) continue;
     const wid = r.workout_id ?? "";
-    const arr = flaggedByWorkout.get(wid) ?? [];
+    const arr = setsByWorkout.get(wid) ?? [];
     arr.push(r);
-    flaggedByWorkout.set(wid, arr);
+    setsByWorkout.set(wid, arr);
   }
 
-  const result: FeedPBHighlight[] = [];
+  // 5. Assemble one entry per candidate workout (no PB gate).
+  const result: FeedSessionEntry[] = [];
   for (const w of workoutRows) {
-    const flagged = flaggedByWorkout.get(w.id);
-    if (!flagged || flagged.length === 0) continue;
+    const rows = setsByWorkout.get(w.id) ?? [];
 
-    const byExercise = new Map<string, { exercise: Exercise; rows: WorkoutSetRow[] }>();
-    for (const r of flagged) {
+    // Group this workout's sets by exercise, preserving logged order.
+    const byExercise = new Map<string, WorkoutSetRow[]>();
+    for (const r of rows) {
       if (!r.exercise_id) continue;
-      const ex = exerciseMap.get(r.exercise_id);
-      if (!ex) continue;
-      const entry = byExercise.get(r.exercise_id) ?? { exercise: ex, rows: [] };
-      entry.rows.push(r);
-      byExercise.set(r.exercise_id, entry);
+      const arr = byExercise.get(r.exercise_id) ?? [];
+      arr.push(r);
+      byExercise.set(r.exercise_id, arr);
     }
-
-    // Render exercises in the order they were logged. We sort the per-exercise
-    // groups by their earliest set position within this workout — matching how
-    // a user reads down their session top-to-bottom.
-    const exercises: FeedPBExercise[] = [];
-    let totalPBs = 0;
-    const orderedExercises = [...byExercise.entries()].sort((a, b) => {
-      const aPos = Math.min(...a[1].rows.map((r) => r.position ?? 0));
-      const bPos = Math.min(...b[1].rows.map((r) => r.position ?? 0));
+    // Render exercises in the order they were logged (earliest set position).
+    const orderedExerciseIds = [...byExercise.keys()].sort((a, b) => {
+      const aPos = Math.min(...byExercise.get(a)!.map((r) => r.position ?? 0));
+      const bPos = Math.min(...byExercise.get(b)!.map((r) => r.position ?? 0));
       return aPos - bPos;
     });
-    for (const [exId, { exercise, rows }] of orderedExercises) {
-      rows.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
-      // Within one workout, only the LAST set per PB type keeps the badge.
-      // Walking newest → oldest, each type is claimed once; earlier sets in
-      // the same session that established the record but were superseded
-      // get stripped — there's only one PB-of-the-day per (exercise, type).
+    const exercises: FeedExercise[] = [];
+    let totalPBs = 0;
+    for (const exId of orderedExerciseIds) {
+      const exercise = exerciseMap.get(exId);
+      if (!exercise) continue;
+      const exRows = [...byExercise.get(exId)!].sort(
+        (a, b) => (a.position ?? 0) - (b.position ?? 0)
+      );
+
+      // Within one session, only the LAST set per PB type keeps the badge.
+      // Walking newest → oldest, each type is claimed once.
       const keptByRow = new Map<string, PBType[]>();
       const claimed = new Set<PBType>();
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const all = pbBySetId.get(rows[i].id) ?? [];
+      for (let i = exRows.length - 1; i >= 0; i--) {
+        const all = pbBySetId.get(exRows[i].id) ?? [];
         const kept = all.filter((t) => {
           if (claimed.has(t)) return false;
           claimed.add(t);
           return true;
         });
-        if (kept.length > 0) keptByRow.set(rows[i].id, kept);
+        if (kept.length > 0) keptByRow.set(exRows[i].id, kept);
       }
 
-      const sets: FeedPBSet[] = [];
-      for (const r of rows) {
+      // Union kept types (metric order) + the representative PB set label — the
+      // last PB set read top-to-bottom.
+      const pbTypes: PBType[] = [];
+      let pbSetLabel: string | null = null;
+      for (const r of exRows) {
         const kept = keptByRow.get(r.id);
         if (!kept) continue;
-        const s = decodeSet(r);
+        for (const t of kept) if (!pbTypes.includes(t)) pbTypes.push(t);
         totalPBs += kept.length;
-        sets.push({
-          setId: s.id,
-          setLabel: formatSetSummary(
-            s,
-            exercise,
-            (exercise.distanceUnit ?? "km") as DistanceUnit
-          ),
-          types: kept,
-        });
+        pbSetLabel = formatSetSummary(
+          decodeSet(r),
+          exercise,
+          (exercise.distanceUnit ?? "km") as DistanceUnit
+        );
       }
-      if (sets.length > 0) {
-        exercises.push({ exerciseId: exId, exerciseName: exercise.name, sets });
-      }
+
+      exercises.push({
+        exerciseId: exId,
+        name: exercise.name,
+        isNew: debutWorkoutByPair.get(`${w.user_id}::${exId}`) === w.id,
+        pbTypes,
+        pbSetLabel: pbTypes.length > 0 ? pbSetLabel : null,
+      });
     }
+
+    const stat = statsByWorkout.get(w.id);
+    const roll = weekly.get(weekKeyFor(w.user_id, w.performed_on));
 
     result.push({
       workoutId: w.id,
-      workoutName: w.name ?? "",
-      performedOn: w.performed_on,
-      sessionType: w.session_type,
       authorId: w.user_id,
       authorUsername: w.author_username,
       authorDisplayName: w.author_display_name,
       authorAvatarUrl: w.author_avatar_url,
+      workoutName: w.name ?? "",
+      performedOn: w.performed_on,
+      sessionType: w.session_type,
+      calories: w.calories,
+      note: w.notes && w.notes.trim().length > 0 ? w.notes : null,
+      totalExercises: stat?.exercises ?? 0,
+      totalSets: stat?.sets ?? 0,
+      totalReps: stat?.reps ?? 0,
+      totalVolumeKg: stat?.volumeKg ?? 0,
       totalPBs,
       exercises,
+      weekSessionOrdinal: ordinalByWorkout.get(w.id) ?? 1,
+      weekSessions: roll?.sessions ?? 1,
+      weekSets: roll?.sets ?? 0,
+      weekReps: roll?.reps ?? 0,
+      weekVolumeKg: roll?.volumeKg ?? 0,
     });
   }
 

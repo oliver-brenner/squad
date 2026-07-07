@@ -2,17 +2,18 @@ import { useEffect, useState, useTransition } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useQuery } from "@powersync/react";
 import { useQuery as useReactQuery } from "@tanstack/react-query";
-import { Trophy } from "lucide-react";
+import { Dumbbell } from "lucide-react";
 import { PageHeader } from "@/components/nav/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/components/ui/segmented-tabs";
 import { useAuth } from "@/lib/auth/auth-context";
 import type { FollowRow } from "@/lib/db/schema";
-import { getFeedPBHighlights, type FeedPBHighlight } from "@/lib/db/queries";
+import { getFeedSessions, type FeedSessionEntry } from "@/lib/db/queries";
 import { fetchDiscoverableProfiles, type PublicProfile } from "@/lib/supabase/profiles";
 import { followUser, unfollowUser } from "@/lib/mutations/follows";
-import { FeedPBCard } from "./feed-pb-card";
+import { FeedFriendsRail } from "./feed-friends-rail";
+import { FeedSessionCard } from "./feed-session-card";
 
 type Tab = "feed" | "following";
 
@@ -58,49 +59,48 @@ function FeedView() {
   );
   const dataSignature = sigRows[0]?.sig ?? "";
 
-  const [highlights, setHighlights] = useState<FeedPBHighlight[] | null>(null);
+  const [entries, setEntries] = useState<FeedSessionEntry[] | null>(null);
 
   useEffect(() => {
     if (!myId) return;
     let cancelled = false;
-    getFeedPBHighlights(myId).then((h) => {
-      if (!cancelled) setHighlights(h);
+    getFeedSessions(myId).then((e) => {
+      if (!cancelled) setEntries(e);
     });
     return () => {
       cancelled = true;
     };
   }, [myId, dataSignature]);
 
-  if (highlights === null) {
-    return (
-      <div className="mt-8 flex justify-center">
-        <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
-      </div>
-    );
-  }
-
-  if (highlights.length === 0) {
-    return (
-      <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/15">
-          <Trophy className="h-7 w-7 text-amber-600 dark:text-amber-400" />
-        </div>
-        <p className="font-medium">No PBs yet</p>
-        <p className="max-w-xs text-sm text-muted-foreground">
-          Log a session — or follow some friends — and any new PBs will show up here.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <ul className="mt-4 flex flex-col gap-3">
-      {highlights.map((h) => (
-        <li key={h.workoutId}>
-          <FeedPBCard highlight={h} isMine={h.authorId === myId} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <div className="mt-4">
+        <FeedFriendsRail />
+      </div>
+      {entries === null ? (
+        <div className="mt-8 flex justify-center">
+          <div className="h-5 w-5 rounded-full border-2 border-muted border-t-foreground animate-spin" />
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="mt-12 flex flex-col items-center justify-center gap-3 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+            <Dumbbell className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <p className="font-medium">Your feed is empty</p>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            Log a session — or follow some friends — and your sessions will show up here.
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-3">
+          {entries.map((e) => (
+            <li key={e.workoutId}>
+              <FeedSessionCard entry={e} isMine={e.authorId === myId} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 

@@ -15,3 +15,16 @@ export function PBBadges({ types }: { types: PBType[] }) {
     </span>
   );
 }
+
+// A brand-new exercise for the author — its first-ever appearance in a session.
+// Same pill shape as PBBadges, emerald-tinted to read as "new" not "record".
+export function NewBadge() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-emerald-500/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 leading-4 align-middle"
+      title="First time logging this exercise"
+    >
+      New
+    </span>
+  );
+}
