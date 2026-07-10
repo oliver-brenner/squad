@@ -17,6 +17,7 @@ export type Profile = {
   avatarUrl: string | null;
   bodyweightKg: number | null;
   calorieTrackingEnabled: boolean;
+  sex: "male" | "female";
   createdAt: string;
 };
 

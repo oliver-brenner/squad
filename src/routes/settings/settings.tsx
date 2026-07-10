@@ -14,6 +14,7 @@ import type { ProfileRow } from "@/lib/db/schema";
 import {
   updateBodyweightKg,
   updateCalorieTrackingEnabled,
+  updateSex,
   updateUsername,
   validateUsername,
 } from "@/lib/mutations/profile";
@@ -61,6 +62,8 @@ export function Settings() {
       <UsernameSection currentUsername={profile?.username ?? null} />
 
       <BodyweightSection currentBodyweightKg={profile?.bodyweightKg ?? null} />
+
+      <SexSection current={profile?.sex ?? "male"} />
 
       <CalorieTrackingSection enabled={profile?.calorieTrackingEnabled ?? false} />
 
@@ -198,6 +201,50 @@ function UsernameSection({ currentUsername }: { currentUsername: string | null }
           />
         </label>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+      </div>
+    </Card>
+  );
+}
+
+function SexSection({ current }: { current: "male" | "female" }) {
+  const [pending, startTransition] = useTransition();
+
+  function choose(next: "male" | "female") {
+    if (next === current) return;
+    startTransition(async () => {
+      try {
+        await updateSex(next);
+      } catch (err) {
+        console.error("[settings] updateSex failed:", err);
+      }
+    });
+  }
+
+  return (
+    <Card className="mt-4 p-0">
+      <div className="flex items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Body map</div>
+          <div className="text-sm text-muted-foreground">
+            Silhouette used for your muscle heatmap
+          </div>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
+          {(["male", "female"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => choose(s)}
+              disabled={pending}
+              className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition-colors ${
+                current === s
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
     </Card>
   );

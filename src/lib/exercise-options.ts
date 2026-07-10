@@ -50,6 +50,7 @@ export const MUSCLE_GROUPS = [
       { id: "front delts", label: "Front Delts" },
       { id: "side delts", label: "Side Delts" },
       { id: "rear delts", label: "Rear Delts" },
+      { id: "neck", label: "Neck" },
     ],
   },
   {
@@ -97,7 +98,8 @@ export const MUSCLE_GROUPS = [
       { id: "glutes", label: "Glutes" },
       { id: "calves", label: "Calves" },
       { id: "hip flexors", label: "Hip Flexors" },
-      { id: "groin", label: "Groin" },
+      { id: "adductors", label: "Adductors" },
+      { id: "tibialis", label: "Tibialis" },
       { id: "ankles", label: "Ankles" },
     ],
   },
