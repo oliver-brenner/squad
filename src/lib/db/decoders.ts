@@ -34,6 +34,7 @@ export function decodeProfile(r: ProfileRow): Profile {
     avatarUrl: r.avatar_url,
     bodyweightKg: r.bodyweight_kg,
     calorieTrackingEnabled: bool(r.calorie_tracking_enabled),
+    sex: r.sex === "female" ? "female" : "male",
     createdAt: r.created_at ?? "",
   };
 }

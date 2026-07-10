@@ -1,13 +1,13 @@
-import { useMemo, useState } from "react";
-import { format, subDays } from "date-fns";
+// Shared dashboard data hook: every set joined with its workout date and
+// exercise metadata, all-time. Callers slice by date in memory — the local
+// SQLite join is microseconds and one reactive query beats three.
+
+import { useMemo } from "react";
 import { useQuery } from "@powersync/react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { decodeExercise, decodeSet } from "@/lib/db/decoders";
 import type { WorkoutSetRow, ExerciseRow } from "@/lib/db/schema";
 import type { SetWithExerciseRow } from "@/lib/db/types";
-import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
-import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
-import { TrainingBreakdownPanels } from "@/components/stats/training-breakdown";
 
 type SetExerciseJoinRow = WorkoutSetRow & {
   performed_on: string;
@@ -68,16 +68,10 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
   };
 }
 
-export function ExerciseBreakdown() {
+export function useSetExerciseRows(): SetWithExerciseRow[] {
   const { user } = useAuth();
   const userId = user?.id ?? "";
-  const [days, setDays] = useState<7 | 30 | "all">(7);
-  const { muscleGroups } = useUserFieldOptions();
 
-  const sinceIso =
-    days === "all" ? "0001-01-01" : format(subDays(new Date(), days - 1), "yyyy-MM-dd");
-
-  // Single JOIN query — local SQLite handles the join in microseconds.
   const { data: rows = [] } = useQuery<SetExerciseJoinRow>(
     `SELECT s.*, w.performed_on AS performed_on, w.id AS workout_id_alias,
             e.id AS ex_id, e.user_id AS ex_user_id, e.name AS ex_name,
@@ -94,44 +88,18 @@ export function ExerciseBreakdown() {
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
      INNER JOIN exercises e ON s.exercise_id = e.id
-     WHERE w.user_id = ? AND w.performed_on >= ?`,
-    [userId, sinceIso]
+     WHERE w.user_id = ?`,
+    [userId]
   );
 
-  const data = useMemo(() => {
-    const setRows: SetWithExerciseRow[] = rows.map((r) => ({
-      set: decodeSet(r),
-      exercise: decodeExercise(buildExerciseRow(r)),
-      performedOn: r.performed_on,
-      workoutId: r.workout_id_alias,
-    }));
-    return computeExerciseBreakdown(setRows, muscleGroups);
-  }, [rows, muscleGroups]);
-
-  return (
-    <section className="mt-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Training Breakdown
-        </h2>
-        <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5">
-          {([7, 30, "all"] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={`rounded-md w-8 py-1 text-xs font-medium text-center transition-colors ${
-                days === d
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {d === "all" ? "all" : `${d}d`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <TrainingBreakdownPanels data={data} />
-    </section>
+  return useMemo(
+    () =>
+      rows.map((r) => ({
+        set: decodeSet(r),
+        exercise: decodeExercise(buildExerciseRow(r)),
+        performedOn: r.performed_on,
+        workoutId: r.workout_id_alias,
+      })),
+    [rows]
   );
 }

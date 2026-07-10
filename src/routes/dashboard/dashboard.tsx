@@ -9,7 +9,7 @@ import { StatCard } from "@/components/stats/stat-card";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { PageHeader } from "@/components/nav/page-header";
 import { ActivityCalendar } from "./activity-calendar";
-import { ExerciseBreakdown } from "./exercise-breakdown";
+import { MuscleActivity } from "./muscle-activity";
 
 function greeting() {
   const hour = new Date().getHours();
@@ -93,7 +93,7 @@ export function Dashboard() {
         />
       </div>
 
-      <ExerciseBreakdown />
+      <MuscleActivity />
 
       <section className="mt-6 flex flex-col gap-2">
         <h2 className="text-sm font-medium text-muted-foreground">Recent</h2>

@@ -14,6 +14,8 @@ const profiles = new Table(
     avatar_url: column.text,
     bodyweight_kg: column.real,
     calorie_tracking_enabled: column.integer,
+    // 'male' | 'female' — which body silhouette the dashboard heatmap renders
+    sex: column.text,
     created_at: column.text,
   },
   { viewName: "profiles" }
