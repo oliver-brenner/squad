@@ -84,6 +84,19 @@ export const HEAT_SWATCHES: string[] = [
 const BASE_FILL = "hsl(var(--muted-foreground) / 0.13)";
 const OUTLINE_STROKE = "hsl(var(--muted-foreground) / 0.4)";
 
+// The male front/back viewBoxes happen to share one scale (724×1448 each), but
+// the female ones don't — the upstream art gives the female front view extra
+// margin baked into its viewBox (734×1538 vs the back's 774×1448), so the two
+// views aren't drawn at the same units-per-body-size scale. Deriving a shared
+// box from those raw numbers (what we tried first) just moves the mismatch:
+// equal-height boxes then make the less-padded back render "bigger" than the
+// front. The fix upstream actually uses is a FIXED display box (their default
+// is 200×400, i.e. a 1:2 aspect) for every view regardless of its own viewBox
+// proportions, with `preserveAspectRatio="xMidYMid meet"` centering whatever
+// doesn't quite fill it. That's what guarantees front and back always render
+// at identical size, for both sexes.
+const BODY_BOX_ASPECT = "1 / 2";
+
 function BodySide({
   sex,
   side,
@@ -102,6 +115,7 @@ function BodySide({
     <svg
       viewBox={BODY_VIEWBOX[sex][side]}
       className="h-auto w-full"
+      style={{ aspectRatio: BODY_BOX_ASPECT }}
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={`${side} body muscle heatmap`}
