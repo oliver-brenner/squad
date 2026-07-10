@@ -5,7 +5,7 @@
 import { useMemo, useState } from "react";
 import { format, subDays } from "date-fns";
 import { useQuery } from "@powersync/react";
-import { Dumbbell, Flame, HeartPulse, PersonStanding, Zap } from "lucide-react";
+import { Dumbbell, Flame, Flower2, HeartPulse, PersonStanding } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
@@ -36,11 +36,18 @@ const CATEGORY_STYLE: Record<
   { icon: typeof Dumbbell; text: string; bg: string }
 > = {
   resistance: { icon: Dumbbell, text: "text-blue-400", bg: "bg-blue-400/10" },
-  functional: { icon: Zap, text: "text-emerald-400", bg: "bg-emerald-400/10" },
+  functional: { icon: PersonStanding, text: "text-emerald-400", bg: "bg-emerald-400/10" },
   conditioning: { icon: Flame, text: "text-orange-400", bg: "bg-orange-400/10" },
   cardio: { icon: HeartPulse, text: "text-violet-400", bg: "bg-violet-400/10" },
-  mobility: { icon: PersonStanding, text: "text-sky-400", bg: "bg-sky-400/10" },
+  mobility: { icon: Flower2, text: "text-sky-400", bg: "bg-sky-400/10" },
 };
+// A category re-added after a label collision gets a de-duped key like
+// "functional 2" (see ensureUniqueKey in mutations/user-field-options.ts) —
+// strip that suffix so the icon/colour still matches the canonical category.
+function categoryStyleKey(id: string): string {
+  return id.replace(/\s+\d+$/, "");
+}
+
 const FALLBACK_CATEGORY_STYLE = {
   icon: Dumbbell,
   text: "text-muted-foreground",
@@ -48,12 +55,6 @@ const FALLBACK_CATEGORY_STYLE = {
 };
 
 function fmtVolume(kg: number): string {
-  if (kg <= 0) return "0 kg";
-  if (kg >= 10000) return `${(kg / 1000).toFixed(1)}t`;
-  return `${Math.round(kg).toLocaleString()} kg`;
-}
-
-function fmtVolumeFull(kg: number): string {
   return `${Math.round(kg).toLocaleString()} kg`;
 }
 
@@ -74,7 +75,7 @@ function fmtMinutes(min: number): string {
 export function MuscleActivity() {
   const { user } = useAuth();
   const allRows = useSetExerciseRows();
-  const { muscleGroups } = useUserFieldOptions();
+  const { muscleGroups, categories: categoryOptions } = useUserFieldOptions();
   const [days, setDays] = useState<Days>(7);
   const [selected, setSelected] = useState<BodyRegionSlug | null>(null);
 
@@ -103,7 +104,10 @@ export function MuscleActivity() {
     () => computeExerciseBreakdown(windowRows, muscleGroups),
     [windowRows, muscleGroups]
   );
-  const categories = useMemo(() => computeCategoryActivity(windowRows), [windowRows]);
+  const categories = useMemo(
+    () => computeCategoryActivity(windowRows, categoryOptions),
+    [windowRows, categoryOptions]
+  );
 
   // Every trainable region is tappable; cold ones sit at 0 heat.
   const heat = useMemo(() => {
@@ -216,7 +220,7 @@ export function MuscleActivity() {
           </span>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {categories.map((c) => {
-              const style = CATEGORY_STYLE[c.id] ?? FALLBACK_CATEGORY_STYLE;
+              const style = CATEGORY_STYLE[categoryStyleKey(c.id)] ?? FALLBACK_CATEGORY_STYLE;
               const Icon = style.icon;
               const metrics: string[] = [];
               if (c.minutes > 0) metrics.push(fmtMinutes(c.minutes));
@@ -228,7 +232,7 @@ export function MuscleActivity() {
                     <Icon className={`h-3.5 w-3.5 ${style.text}`} />
                     <span className="text-xs font-medium text-foreground/80">{c.label}</span>
                   </div>
-                  <div className="flex items-baseline gap-1">
+                  <div className="flex flex-col">
                     <span className={`text-xl font-semibold tabular-nums ${style.text}`}>
                       {c.pctSessions}%
                     </span>
@@ -303,7 +307,7 @@ function RegionDetail({
         {[
           { label: "Sets", value: String(stats.sets) },
           { label: "Reps", value: stats.reps.toLocaleString() },
-          { label: "Volume", value: fmtVolumeFull(stats.volumeKg) },
+          { label: "Volume", value: fmtVolume(stats.volumeKg) },
           { label: "Share", value: `${share}%` },
         ].map((s) => (
           <div key={s.label} className="flex flex-col items-start">

@@ -10,7 +10,7 @@
 //   3. unmapped — surfaced so the UI can say "not shown on diagram".
 
 import type { SetWithExerciseRow } from "@/lib/db/types";
-import type { MuscleGroupNode } from "@/lib/user-field-options";
+import type { FieldOption, MuscleGroupNode } from "@/lib/user-field-options";
 import type { BodyRegionSlug } from "@/components/body-map/body-data";
 
 export type RegionTarget = { region: BodyRegionSlug; factor: number };
@@ -370,7 +370,12 @@ export type CategoryActivityRow = {
   volumeKg: number;
 };
 
-export function computeCategoryActivity(rows: SetWithExerciseRow[]): CategoryActivityRow[] {
+export function computeCategoryActivity(
+  rows: SetWithExerciseRow[],
+  categories: FieldOption[]
+): CategoryActivityRow[] {
+  const labelByKey = new Map(categories.map((c) => [c.key, c.label]));
+
   type Acc = {
     sessions: Set<string>;
     sets: number;
@@ -401,7 +406,7 @@ export function computeCategoryActivity(rows: SetWithExerciseRow[]): CategoryAct
   return [...acc.entries()]
     .map(([id, a]) => ({
       id,
-      label: id.charAt(0).toUpperCase() + id.slice(1),
+      label: labelByKey.get(id) ?? id.charAt(0).toUpperCase() + id.slice(1),
       sessions: a.sessions.size,
       pctSessions: total > 0 ? Math.round((a.sessions.size / total) * 100) : 0,
       sets: a.sets,
