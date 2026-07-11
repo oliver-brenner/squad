@@ -2,9 +2,8 @@
 // reports taps. Front and back render as separate <svg>s from the shared
 // artboard in body-data.ts.
 
-import { useMemo, useRef, useState } from "react";
-import type { MouseEvent, Touch, TouchEvent } from "react";
-import { RotateCcw } from "lucide-react";
+import { useMemo, useState } from "react";
+import { RotateCcw, ZoomIn } from "lucide-react";
 import {
   BODY_OUTLINE,
   BODY_PARTS,
@@ -136,7 +135,7 @@ function BodySide({
           <g
             key={part.slug}
             fill={interactive ? heatColor(intensity) : BASE_FILL}
-            stroke={isSelected ? "rgb(59, 130, 246)" : "none"}
+            stroke={isSelected ? "#fff" : "none"}
             strokeWidth={isSelected ? 4 : 0}
             onClick={
               interactive
@@ -159,143 +158,6 @@ function BodySide({
   );
 }
 
-const MIN_SCALE = 1;
-const MAX_SCALE = 3;
-// Below this many pixels of movement, a single-finger touch is still treated
-// as a tap (so selecting a muscle while zoomed in keeps working) rather than
-// a pan drag.
-const PAN_THRESHOLD_PX = 6;
-
-type Gesture =
-  | { mode: "idle" }
-  | { mode: "pinch"; startDist: number; startScale: number; startTx: number; startTy: number }
-  | { mode: "pan"; startX: number; startY: number; startTx: number; startTy: number };
-
-function touchDist(a: Touch, b: Touch): number {
-  return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
-}
-
-// Pinch-to-zoom + drag-to-pan for the body map, clamped so the content never
-// pans past its own edges and never zooms out below the box's natural fit.
-// A tap that doesn't move more than PAN_THRESHOLD_PX still reaches the normal
-// onClick handlers below (muscle select / background deselect); only an
-// actual pinch or drag suppresses the click that would otherwise follow it.
-function useBodyMapZoom() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [tx, setTx] = useState(0);
-  const [ty, setTy] = useState(0);
-  const gesture = useRef<Gesture>({ mode: "idle" });
-  const suppressClick = useRef(false);
-
-  function clamp(value: number, min: number, max: number): number {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  // transform is `translate(tx, ty) scale(s)` with origin (0,0), so content
-  // spans [tx, tx + s*W] × [ty, ty + s*H]; keep that span covering the box.
-  function clampTranslate(nextScale: number, nextTx: number, nextTy: number): [number, number] {
-    const el = containerRef.current;
-    if (!el) return [nextTx, nextTy];
-    const { width, height } = el.getBoundingClientRect();
-    const minX = width * (1 - nextScale);
-    const minY = height * (1 - nextScale);
-    return [clamp(nextTx, minX, 0), clamp(nextTy, minY, 0)];
-  }
-
-  function reset() {
-    setScale(1);
-    setTx(0);
-    setTy(0);
-    gesture.current = { mode: "idle" };
-  }
-
-  function onTouchStart(e: TouchEvent<HTMLDivElement>) {
-    if (e.touches.length === 2) {
-      gesture.current = {
-        mode: "pinch",
-        startDist: touchDist(e.touches[0], e.touches[1]),
-        startScale: scale,
-        startTx: tx,
-        startTy: ty,
-      };
-    } else if (e.touches.length === 1 && scale > 1) {
-      gesture.current = {
-        mode: "pan",
-        startX: e.touches[0].clientX,
-        startY: e.touches[0].clientY,
-        startTx: tx,
-        startTy: ty,
-      };
-    } else {
-      gesture.current = { mode: "idle" };
-    }
-  }
-
-  function onTouchMove(e: TouchEvent<HTMLDivElement>) {
-    const g = gesture.current;
-    const el = containerRef.current;
-    if (!el) return;
-
-    if (g.mode === "pinch" && e.touches.length === 2) {
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      const newDist = touchDist(e.touches[0], e.touches[1]);
-      const newScale = clamp((newDist / g.startDist) * g.startScale, MIN_SCALE, MAX_SCALE);
-      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
-      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
-      // Keep the content point under the pinch midpoint fixed on screen.
-      const contentX = (midX - g.startTx) / g.startScale;
-      const contentY = (midY - g.startTy) / g.startScale;
-      const [nextTx, nextTy] = clampTranslate(
-        newScale,
-        midX - newScale * contentX,
-        midY - newScale * contentY
-      );
-      setScale(newScale);
-      setTx(nextTx);
-      setTy(nextTy);
-      suppressClick.current = true;
-    } else if (g.mode === "pan" && e.touches.length === 1) {
-      const dx = e.touches[0].clientX - g.startX;
-      const dy = e.touches[0].clientY - g.startY;
-      if (suppressClick.current || Math.hypot(dx, dy) > PAN_THRESHOLD_PX) {
-        e.preventDefault();
-        suppressClick.current = true;
-        const [nextTx, nextTy] = clampTranslate(scale, g.startTx + dx, g.startTy + dy);
-        setTx(nextTx);
-        setTy(nextTy);
-      }
-    }
-  }
-
-  function onTouchEnd() {
-    gesture.current = { mode: "idle" };
-  }
-
-  // Capture phase: swallow the click that follows an actual pinch/pan so it
-  // doesn't also toggle a muscle's selection or deselect the background.
-  function onClickCapture(e: MouseEvent<HTMLDivElement>) {
-    if (suppressClick.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      suppressClick.current = false;
-    }
-  }
-
-  return {
-    containerRef,
-    scale,
-    tx,
-    ty,
-    reset,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    onClickCapture,
-  };
-}
-
 export function BodyMap({
   sex,
   heat,
@@ -316,70 +178,55 @@ export function BodyMap({
     [onSelect, selected]
   );
 
-  const {
-    containerRef,
-    scale,
-    tx,
-    ty,
-    reset,
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    onClickCapture,
-  } = useBodyMapZoom();
+  // Zooming shows a single side, enlarged and centred, so individual muscles
+  // are easier to tap; the other side is hidden until reset.
+  const [zoomed, setZoomed] = useState<"front" | "back" | null>(null);
 
-  const isDefault = scale === 1 && tx === 0 && ty === 0;
-  const showReset = !isDefault || selected !== null;
+  // Reset only undoes the zoom — deselecting a muscle is done by tapping the
+  // blank space around the diagram.
+  const showReset = zoomed !== null;
 
   function handleReset() {
-    reset();
-    onSelect(null);
+    setZoomed(null);
   }
 
   return (
     <div className={`relative ${className ?? ""}`}>
       <div
-        ref={containerRef}
-        className="overflow-hidden"
+        className="flex items-start justify-center gap-1"
         onClick={() => onSelect(null)}
-        onClickCapture={onClickCapture}
-        onTouchStart={onTouchStart}
-        onTouchMove={onTouchMove}
-        onTouchEnd={onTouchEnd}
-        onTouchCancel={onTouchEnd}
       >
-        <div
-          className="flex items-start justify-center gap-1"
-          style={{
-            transform: `translate(${tx}px, ${ty}px) scale(${scale})`,
-            transformOrigin: "0 0",
-            transition: isDefault ? "transform 250ms ease" : "none",
-          }}
-        >
-          <div className="min-w-0 flex-1">
-            <BodySide
-              sex={sex}
-              side="front"
-              heat={heat}
-              selected={selected}
-              onSelect={handleSelect}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <BodySide
-              sex={sex}
-              side="back"
-              heat={heat}
-              selected={selected}
-              onSelect={handleSelect}
-            />
-          </div>
-        </div>
+        {(["front", "back"] as const).map((side) => {
+          if (zoomed && zoomed !== side) return null;
+          return (
+            <div key={side} className={zoomed ? "relative w-[72%]" : "relative min-w-0 flex-1"}>
+              {!zoomed && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomed(side);
+                  }}
+                  aria-label={`Zoom in on ${side} view`}
+                  className="absolute top-1 left-1 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+              )}
+              <BodySide
+                sex={sex}
+                side={side}
+                heat={heat}
+                selected={selected}
+                onSelect={handleSelect}
+              />
+            </div>
+          );
+        })}
       </div>
       {showReset && (
         <button
           onClick={handleReset}
-          aria-label="Reset zoom and selection"
+          aria-label="Reset zoom"
           className="absolute top-1 right-1 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
         >
           <RotateCcw className="h-3.5 w-3.5" />

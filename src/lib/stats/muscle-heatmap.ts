@@ -1,5 +1,5 @@
 // Aggregates set data into per-body-region heat for the dashboard body map,
-// plus muscle-group freshness ("needs attention") and category activity rows.
+// plus category activity rows.
 // Pure functions — caller passes fetched rows and the user's muscle taxonomy.
 //
 // Muscle keys resolve to SVG regions in three tiers:
@@ -21,6 +21,7 @@ const r = (region: BodyRegionSlug, factor = 1): RegionTarget => ({ region, facto
 // reduced factor so a group-level tag reads as diffuse heat, not a hotspot.
 const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
   // shoulders
+  // neck is a child of shoulders but only shades when tagged specifically
   shoulders: [r("deltoids")],
   "front delts": [r("deltoids")],
   "side delts": [r("deltoids")],
@@ -30,8 +31,8 @@ const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
   chest: [r("chest")],
   "upper chest": [r("chest")],
   "lower chest": [r("chest")],
-  // upper back
-  "upper back": [r("upper-back"), r("trapezius", 0.5)],
+  // upper back (rear delts are a child of this group, hence the deltoids spread)
+  "upper back": [r("upper-back"), r("trapezius", 0.5), r("deltoids", 0.5)],
   lats: [r("upper-back")],
   traps: [r("trapezius")],
   // legacy/custom alias: one user has a custom 'back' group
@@ -48,7 +49,11 @@ const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
   obliques: [r("obliques")],
   "lower back": [r("lower-back")],
   // legs
-  legs: [r("quadriceps", 0.5), r("hamstring", 0.5), r("gluteal", 0.5), r("calves", 0.5)],
+  // ankles are a child of legs but only shade when tagged specifically
+  legs: [
+    r("quadriceps", 0.5), r("hamstring", 0.5), r("gluteal", 0.5), r("calves", 0.5),
+    r("adductors", 0.5), r("tibialis", 0.5),
+  ],
   quads: [r("quadriceps")],
   hamstrings: [r("hamstring")],
   glutes: [r("gluteal")],
@@ -166,7 +171,7 @@ export type MuscleHeatmapStats = {
   unmappedLabels: string[];
 };
 
-const SECONDARY_WEIGHT = 0.5;
+const SECONDARY_WEIGHT = 0.3;
 
 // Heat is relative to the most-trained muscle in the window, so the full
 // grey→red range is used every period regardless of training volume — that's
@@ -180,6 +185,19 @@ export function computeMuscleHeatmap(
   muscleGroups: MuscleGroupNode[]
 ): MuscleHeatmapStats {
   const { resolve, unmapped } = buildMuscleResolver(muscleGroups);
+
+  // When an exercise tags both a group and one of its specific children, the
+  // child wins: drop the group key so heat lands only on the tagged muscle
+  // instead of smearing across the whole group. A group tagged with no
+  // children still spreads across all of its regions.
+  const groupChildren = new Map<string, string[]>(
+    muscleGroups.map((g) => [g.key, g.children.map((c) => c.key)])
+  );
+  const dropGroupsWithTaggedChild = (keys: string[], tagged: Set<string>): string[] =>
+    keys.filter((k) => {
+      const children = groupChildren.get(k);
+      return !children || !children.some((c) => c !== k && tagged.has(c));
+    });
 
   type Acc = {
     weightedSets: number;
@@ -212,8 +230,12 @@ export function computeMuscleHeatmap(
 
     // Per set, collect the strongest factor per region across the exercise's
     // primary and secondary muscles so overlapping tags don't double-count.
+    const tagged = new Set([
+      ...(row.exercise.muscles ?? []),
+      ...(row.exercise.secondaryMuscles ?? []),
+    ]);
     const hits = new Map<BodyRegionSlug, { weight: number; primary: boolean }>();
-    for (const m of row.exercise.muscles ?? []) {
+    for (const m of dropGroupsWithTaggedChild(row.exercise.muscles ?? [], tagged)) {
       for (const t of resolve(m)) {
         const prev = hits.get(t.region);
         if (!prev || prev.weight < t.factor) {
@@ -221,7 +243,7 @@ export function computeMuscleHeatmap(
         }
       }
     }
-    for (const m of row.exercise.secondaryMuscles ?? []) {
+    for (const m of dropGroupsWithTaggedChild(row.exercise.secondaryMuscles ?? [], tagged)) {
       for (const t of resolve(m)) {
         const w = t.factor * SECONDARY_WEIGHT;
         const prev = hits.get(t.region);
@@ -237,7 +259,8 @@ export function computeMuscleHeatmap(
       if (hit.primary) a.primarySets += 1;
       a.reps += reps;
       a.volumeKg += volume;
-      if (a.lastTrained === null || row.performedOn > a.lastTrained) {
+      // "Last trained" only counts sets where the region was a primary muscle.
+      if (hit.primary && (a.lastTrained === null || row.performedOn > a.lastTrained)) {
         a.lastTrained = row.performedOn;
       }
       a.exerciseSets.set(row.exercise.name, (a.exerciseSets.get(row.exercise.name) ?? 0) + 1);
@@ -280,81 +303,6 @@ export function computeMuscleHeatmap(
     totalVolumeKg,
     unmappedLabels: [...unmapped].sort(),
   };
-}
-
-// --- Muscle-group freshness (drives the "needs attention" list) -------------
-
-export type GroupFreshnessRow = {
-  id: string;
-  label: string;
-  weightedSets: number; // within the selected window
-  lastTrained: string | null; // all-time
-  daysSince: number | null; // null = never trained
-};
-
-export function computeGroupFreshness(
-  allRows: SetWithExerciseRow[],
-  windowRows: SetWithExerciseRow[],
-  muscleGroups: MuscleGroupNode[],
-  today: Date
-): GroupFreshnessRow[] {
-  const childToGroups = new Map<string, string[]>();
-  const groupKeys = new Set(muscleGroups.map((g) => g.key));
-  for (const g of muscleGroups) {
-    for (const c of g.children) {
-      const arr = childToGroups.get(c.key) ?? [];
-      arr.push(g.key);
-      childToGroups.set(c.key, arr);
-    }
-  }
-  const toGroups = (m: string): string[] =>
-    groupKeys.has(m) ? [m] : childToGroups.get(m) ?? [];
-
-  const lastTrained = new Map<string, string>();
-  for (const row of allRows) {
-    for (const m of [...(row.exercise.muscles ?? []), ...(row.exercise.secondaryMuscles ?? [])]) {
-      for (const g of toGroups(m)) {
-        const prev = lastTrained.get(g);
-        if (!prev || row.performedOn > prev) lastTrained.set(g, row.performedOn);
-      }
-    }
-  }
-
-  const weighted = new Map<string, number>();
-  for (const row of windowRows) {
-    const hits = new Map<string, number>();
-    for (const m of row.exercise.muscles ?? []) {
-      for (const g of toGroups(m)) hits.set(g, Math.max(hits.get(g) ?? 0, 1));
-    }
-    for (const m of row.exercise.secondaryMuscles ?? []) {
-      for (const g of toGroups(m)) {
-        hits.set(g, Math.max(hits.get(g) ?? 0, SECONDARY_WEIGHT));
-      }
-    }
-    for (const [g, w] of hits) weighted.set(g, (weighted.get(g) ?? 0) + w);
-  }
-
-  const midnight = new Date(today);
-  midnight.setHours(0, 0, 0, 0);
-
-  return muscleGroups.map((g) => {
-    const last = lastTrained.get(g.key) ?? null;
-    let daysSince: number | null = null;
-    if (last) {
-      const [y, mo, d] = last.split("-").map(Number);
-      daysSince = Math.max(
-        0,
-        Math.round((midnight.getTime() - new Date(y, mo - 1, d).getTime()) / 86_400_000)
-      );
-    }
-    return {
-      id: g.key,
-      label: g.label,
-      weightedSets: weighted.get(g.key) ?? 0,
-      lastTrained: last,
-      daysSince,
-    };
-  });
 }
 
 // --- Category activity -------------------------------------------------------
