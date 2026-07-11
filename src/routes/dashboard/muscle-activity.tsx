@@ -1,5 +1,5 @@
 // Dashboard "Muscle activity" hub: interactive body heatmap with per-region
-// drill-down, muscle-group freshness bars, and session-mix category tiles.
+// drill-down, and session-mix category tiles.
 // Replaces the old TrainingBreakdown panels on the dashboard.
 
 import { useMemo, useState } from "react";
