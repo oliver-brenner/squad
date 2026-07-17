@@ -111,10 +111,17 @@ export function MuscleActivity() {
 
   // Every trainable region is tappable; cold ones sit at 0 heat.
   const heat = useMemo(() => {
-    const m = new Map<BodyRegionSlug, number>();
-    for (const region of TRAINABLE_REGIONS) m.set(region, 0);
-    for (const [region, stats] of heatmap.regions) m.set(region, stats.intensity);
-    return m;
+    const front = new Map<BodyRegionSlug, number>();
+    const back = new Map<BodyRegionSlug, number>();
+    for (const region of TRAINABLE_REGIONS) {
+      front.set(region, 0);
+      back.set(region, 0);
+    }
+    for (const [region, stats] of heatmap.regions) {
+      front.set(region, stats.intensityFront);
+      back.set(region, stats.intensityBack);
+    }
+    return { front, back };
   }, [heatmap]);
 
   const ranked = useMemo(
