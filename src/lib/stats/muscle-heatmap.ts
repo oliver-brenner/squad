@@ -13,36 +13,43 @@ import type { SetWithExerciseRow } from "@/lib/db/types";
 import type { FieldOption, MuscleGroupNode } from "@/lib/user-field-options";
 import type { BodyRegionSlug } from "@/components/body-map/body-data";
 
-export type RegionTarget = { region: BodyRegionSlug; factor: number };
+export type RegionSide = "front" | "back";
+// side undefined → shades the region on both views
+export type RegionTarget = { region: BodyRegionSlug; factor: number; side?: RegionSide };
 
-const r = (region: BodyRegionSlug, factor = 1): RegionTarget => ({ region, factor });
+const r = (region: BodyRegionSlug, factor = 1, side?: RegionSide): RegionTarget => ({
+  region,
+  factor,
+  side,
+});
 
 // Canonical key → SVG region(s). Group keys spread across their regions at
 // reduced factor so a group-level tag reads as diffuse heat, not a hotspot.
 const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
-  // shoulders
+  // shoulders — the deltoid polygons exist on both views, so front/side delts
+  // shade only the front silhouette and rear delts only the back
   // neck is a child of shoulders but only shades when tagged specifically
   shoulders: [r("deltoids")],
-  "front delts": [r("deltoids")],
-  "side delts": [r("deltoids")],
-  "rear delts": [r("deltoids")],
+  "front delts": [r("deltoids", 1, "front")],
+  "side delts": [r("deltoids", 1, "front")],
+  "rear delts": [r("deltoids", 1, "back")],
   neck: [r("neck")],
   // chest
   chest: [r("chest")],
   "upper chest": [r("chest")],
   "lower chest": [r("chest")],
   // upper back (rear delts are a child of this group, hence the deltoids spread)
-  "upper back": [r("upper-back"), r("trapezius", 0.5), r("deltoids", 0.5)],
+  "upper back": [r("upper-back"), r("trapezius", 0.5), r("deltoids", 0.5, "back")],
   lats: [r("upper-back")],
   traps: [r("trapezius")],
   // legacy/custom alias: one user has a custom 'back' group
   back: [r("upper-back"), r("trapezius", 0.5)],
   // arms
-  arms: [r("biceps", 0.5), r("triceps", 0.5), r("forearm", 0.5)],
+  arms: [r("biceps", 0.5), r("triceps", 0.5), r("forearm", 0.5), r("hands", 0.5)],
   biceps: [r("biceps")],
   triceps: [r("triceps")],
   forearms: [r("forearm")],
-  grip: [r("forearm", 0.5)],
+  grip: [r("hands")],
   // core
   core: [r("abs", 0.5), r("obliques", 0.5), r("lower-back", 0.5)],
   abs: [r("abs")],
@@ -58,7 +65,9 @@ const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
   hamstrings: [r("hamstring")],
   glutes: [r("gluteal")],
   calves: [r("calves")],
-  "hip flexors": [r("quadriceps", 0.5), r("adductors", 0.5)],
+  // no dedicated iliopsoas polygon; the front adductor region is the closest
+  // visible area to the hip flexors, at reduced weight
+  "hip flexors": [r("adductors", 0.5, "front")],
   adductors: [r("adductors")],
   groin: [r("adductors")], // legacy key, renamed 2026-07 but may linger offline
   tibialis: [r("tibialis")],
@@ -68,7 +77,7 @@ const KEY_TO_REGIONS: Record<string, RegionTarget[]> = {
 // Regions users can actually train — cosmetic silhouette parts excluded.
 export const TRAINABLE_REGIONS: BodyRegionSlug[] = [
   "neck", "deltoids", "chest", "trapezius", "upper-back", "lower-back",
-  "abs", "obliques", "biceps", "triceps", "forearm", "gluteal",
+  "abs", "obliques", "biceps", "triceps", "forearm", "hands", "gluteal",
   "adductors", "quadriceps", "hamstring", "calves", "tibialis", "ankles",
 ];
 
@@ -84,6 +93,7 @@ export const REGION_LABELS: Record<string, string> = {
   biceps: "Biceps",
   triceps: "Triceps",
   forearm: "Forearms",
+  hands: "Grip",
   gluteal: "Glutes",
   adductors: "Adductors",
   quadriceps: "Quads",
@@ -133,13 +143,17 @@ export function buildMuscleResolver(muscleGroups: MuscleGroupNode[]): MuscleReso
     if (out.length === 0) {
       const children = groupChildren.get(key);
       if (children) {
-        const merged = new Map<BodyRegionSlug, number>();
+        const merged = new Map<string, RegionTarget>();
         for (const c of children) {
           for (const t of KEY_TO_REGIONS[c] ?? []) {
-            merged.set(t.region, Math.max(merged.get(t.region) ?? 0, t.factor * 0.5));
+            const k = `${t.region}|${t.side ?? "both"}`;
+            const prev = merged.get(k);
+            if (!prev || prev.factor < t.factor * 0.5) {
+              merged.set(k, { ...t, factor: t.factor * 0.5 });
+            }
           }
         }
-        out = [...merged.entries()].map(([region, factor]) => ({ region, factor }));
+        out = [...merged.values()];
       }
     }
     if (out.length === 0) unmapped.add(labelByKey.get(key) ?? key);
@@ -160,8 +174,9 @@ export type RegionStats = {
   volumeKg: number;
   lastTrained: string | null; // performed_on ISO date
   topExercises: { name: string; sets: number }[];
-  /** 0..1 heat used for shading */
-  intensity: number;
+  /** 0..1 heat used for shading, per silhouette view */
+  intensityFront: number;
+  intensityBack: number;
 };
 
 export type MuscleHeatmapStats = {
@@ -201,6 +216,8 @@ export function computeMuscleHeatmap(
 
   type Acc = {
     weightedSets: number;
+    weightedFront: number;
+    weightedBack: number;
     sets: number;
     primarySets: number;
     reps: number;
@@ -214,7 +231,8 @@ export function computeMuscleHeatmap(
     let a = acc.get(region);
     if (!a) {
       a = {
-        weightedSets: 0, sets: 0, primarySets: 0, reps: 0, volumeKg: 0,
+        weightedSets: 0, weightedFront: 0, weightedBack: 0,
+        sets: 0, primarySets: 0, reps: 0, volumeKg: 0,
         lastTrained: null, exerciseSets: new Map(), exerciseLastPerformed: new Map(),
       };
       acc.set(region, a);
@@ -228,39 +246,54 @@ export function computeMuscleHeatmap(
     const volume = reps * (row.set.weightKg ?? 0);
     totalVolumeKg += volume;
 
-    // Per set, collect the strongest factor per region across the exercise's
-    // primary and secondary muscles so overlapping tags don't double-count.
+    // Per set, collect the strongest factor per region and view side across
+    // the exercise's primary and secondary muscles so overlapping tags don't
+    // double-count. A target with no side hits both views.
     const tagged = new Set([
       ...(row.exercise.muscles ?? []),
       ...(row.exercise.secondaryMuscles ?? []),
     ]);
-    const hits = new Map<BodyRegionSlug, { weight: number; primary: boolean }>();
+    type SideHit = { weight: number; primary: boolean };
+    const hits = new Map<BodyRegionSlug, { front?: SideHit; back?: SideHit }>();
+    const sidesOf = (t: RegionTarget): RegionSide[] =>
+      t.side ? [t.side] : ["front", "back"];
     for (const m of dropGroupsWithTaggedChild(row.exercise.muscles ?? [], tagged)) {
       for (const t of resolve(m)) {
-        const prev = hits.get(t.region);
-        if (!prev || prev.weight < t.factor) {
-          hits.set(t.region, { weight: t.factor, primary: true });
+        let h = hits.get(t.region);
+        if (!h) hits.set(t.region, (h = {}));
+        for (const s of sidesOf(t)) {
+          const prev = h[s];
+          if (!prev || prev.weight < t.factor) h[s] = { weight: t.factor, primary: true };
         }
       }
     }
     for (const m of dropGroupsWithTaggedChild(row.exercise.secondaryMuscles ?? [], tagged)) {
       for (const t of resolve(m)) {
         const w = t.factor * SECONDARY_WEIGHT;
-        const prev = hits.get(t.region);
-        if (!prev) hits.set(t.region, { weight: w, primary: false });
-        else if (prev.weight < w) hits.set(t.region, { weight: w, primary: prev.primary });
+        let h = hits.get(t.region);
+        if (!h) hits.set(t.region, (h = {}));
+        for (const s of sidesOf(t)) {
+          const prev = h[s];
+          if (!prev) h[s] = { weight: w, primary: false };
+          else if (prev.weight < w) h[s] = { weight: w, primary: prev.primary };
+        }
       }
     }
 
     for (const [region, hit] of hits) {
       const a = get(region);
-      a.weightedSets += hit.weight;
+      const wf = hit.front?.weight ?? 0;
+      const wb = hit.back?.weight ?? 0;
+      a.weightedFront += wf;
+      a.weightedBack += wb;
+      a.weightedSets += Math.max(wf, wb);
+      const primary = (hit.front?.primary || hit.back?.primary) ?? false;
       a.sets += 1;
-      if (hit.primary) a.primarySets += 1;
+      if (primary) a.primarySets += 1;
       a.reps += reps;
       a.volumeKg += volume;
       // "Last trained" only counts sets where the region was a primary muscle.
-      if (hit.primary && (a.lastTrained === null || row.performedOn > a.lastTrained)) {
+      if (primary && (a.lastTrained === null || row.performedOn > a.lastTrained)) {
         a.lastTrained = row.performedOn;
       }
       a.exerciseSets.set(row.exercise.name, (a.exerciseSets.get(row.exercise.name) ?? 0) + 1);
@@ -271,7 +304,10 @@ export function computeMuscleHeatmap(
     }
   }
 
-  const maxWeighted = Math.max(1, ...[...acc.values()].map((a) => a.weightedSets));
+  const maxWeighted = Math.max(
+    1,
+    ...[...acc.values()].map((a) => Math.max(a.weightedFront, a.weightedBack))
+  );
 
   const regions = new Map<BodyRegionSlug, RegionStats>();
   for (const [region, a] of acc) {
@@ -293,7 +329,8 @@ export function computeMuscleHeatmap(
         )
         .slice(0, 10)
         .map(([name, sets]) => ({ name, sets })),
-      intensity: Math.pow(Math.min(1, a.weightedSets / maxWeighted), HEAT_GAMMA),
+      intensityFront: Math.pow(Math.min(1, a.weightedFront / maxWeighted), HEAT_GAMMA),
+      intensityBack: Math.pow(Math.min(1, a.weightedBack / maxWeighted), HEAT_GAMMA),
     });
   }
 

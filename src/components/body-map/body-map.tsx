@@ -166,7 +166,8 @@ export function BodyMap({
   className,
 }: {
   sex: "male" | "female";
-  heat: Map<BodyRegionSlug, number>;
+  /** per-view heat so e.g. front delts shade only the front silhouette */
+  heat: { front: Map<BodyRegionSlug, number>; back: Map<BodyRegionSlug, number> };
   selected: BodyRegionSlug | null;
   onSelect: (region: BodyRegionSlug | null) => void;
   className?: string;
@@ -215,7 +216,7 @@ export function BodyMap({
               <BodySide
                 sex={sex}
                 side={side}
-                heat={heat}
+                heat={heat[side]}
                 selected={selected}
                 onSelect={handleSelect}
               />
