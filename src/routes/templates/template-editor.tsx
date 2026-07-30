@@ -151,22 +151,15 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
   const [menuOpen, setMenuOpen] = useState(false);
   const scrollToBottomRef = useRef(false);
 
-  const stats = useMemo(() => {
-    let exerciseCount = 0;
-    let setCount = 0;
-    for (const item of items) {
-      if (isCircuitGroup(item)) {
-        for (const eg of item.exercises) {
-          exerciseCount++;
-          setCount += eg.sets.length;
-        }
-      } else {
-        exerciseCount++;
-        setCount += item.sets.length;
-      }
-    }
-    return { exerciseCount, setCount };
-  }, [items]);
+  // Exercises only — a template holds no sets to count.
+  const exerciseCount = useMemo(
+    () =>
+      items.reduce(
+        (total, item) => total + (isCircuitGroup(item) ? item.exercises.length : 1),
+        0
+      ),
+    [items]
+  );
 
   useEffect(() => {
     if (!picking && !pickingForCircuit && scrollToBottomRef.current) {
@@ -469,7 +462,7 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
       <p className="text-sm text-muted-foreground">
         A reusable template.
         <br />
-        Add exercises and optionally pre-fill sets.
+        Build the list of exercises — sets get logged in the session.
       </p>
 
       <div className="grid grid-cols-4 rounded-2xl border border-border overflow-hidden">
@@ -493,18 +486,10 @@ function TemplateEditor({ template, initialSets, exercises: initialExercises }: 
 
       {items.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { value: stats.exerciseCount, label: "exercises" },
-            { value: stats.setCount, label: "sets" },
-          ].map(({ value, label }) => (
-            <span
-              key={label}
-              className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
-            >
-              <span className="font-semibold tabular-nums text-foreground/60">{value}</span>
-              {label}
-            </span>
-          ))}
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70">
+            <span className="font-semibold tabular-nums text-foreground/60">{exerciseCount}</span>
+            {exerciseCount === 1 ? "exercise" : "exercises"}
+          </span>
         </div>
       )}
 

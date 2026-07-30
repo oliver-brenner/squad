@@ -133,6 +133,9 @@ export function CircuitRows({
   });
 
   function openSetTray(exIdx: number) {
+    // A template is an exercise list only — nothing to log against a circuit
+    // exercise until it becomes a session (see SetRows' `displaySets`).
+    if (isTemplate) return;
     const eg = circuit.exercises[exIdx];
     const existing = eg.sets[0];
     const draft: DraftSet = existing ? { ...existing } : makeEmptyDraft(eg.exerciseId);
@@ -475,7 +478,9 @@ function CircuitExerciseRow({
     const all = computePBsInOrder(combined, exGroup.exercise);
     return all[all.length - 1] ?? [];
   }, [priorSetsAsc, set, exGroup.exercise]);
-  const hasData = !!set && !isBlankSet(set);
+  // Templates carry no set values (legacy ones may still hold some until the
+  // template is next saved — they're ignored here and by applyTemplate).
+  const hasData = !isTemplate && !!set && !isBlankSet(set);
   // Before anything is logged, show the previous session's set as a greyed
   // ghost the user taps to harden. None in templates or without history.
   const showGhost =

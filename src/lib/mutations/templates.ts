@@ -8,26 +8,18 @@ import { copyExerciseInTx } from "@/lib/mutations/exercises";
 
 const sessionTypeSchema = z.enum(["workout", "stretch", "sport", "lifestyle"]);
 
-// A template's skeleton set. Mirrors saveWorkout's setInputSchema minus the
-// workout-bound fields (no performedOn) — templates carry no date.
+// A template's skeleton row. A template is an ordered list of exercises, not a
+// pre-filled session: a row carries only the exercise, where it sits, and how
+// it's grouped. Every metric column is written NULL, so applying a template
+// hands each exercise to the session on a blank anchor set — which is what the
+// live-logging ghost suggestion keys off (see workout-editor's showGhostFor).
+//
+// Metric fields sent by the editor (it shares flattenItems with the workout
+// editor, whose DraftSets carry them) are dropped: zod strips unknown keys.
 const templateSetInputSchema = z.object({
   id: z.string().uuid().optional(),
   exerciseId: z.string().uuid(),
   position: z.number().int().min(0),
-  reps: z.number().int().min(0).max(10_000).nullable(),
-  // Negative weight is assistance — see saveWorkout's setInputSchema. Templates
-  // carry no bodyweight: it belongs to the session that's actually performed.
-  weightKg: z.number().min(-2000).max(2000).nullable(),
-  distanceKm: z.number().min(0).max(1000).nullable(),
-  durationSec: z.number().int().min(0).max(86400).nullable(),
-  resistance: z.number().int().min(0).max(100).nullable(),
-  speedMs: z.number().min(0).max(100).nullable(),
-  inclinePct: z.number().min(-50).max(50).nullable(),
-  restSec: z.number().int().min(0).max(3600).nullable(),
-  calories: z.number().int().min(0).max(100_000).nullable(),
-  rpe: z.number().int().min(0).nullable(),
-  steps: z.number().int().min(0).max(1_000_000).nullable(),
-  heightM: z.number().min(0).max(100).nullable(),
   circuitId: z.string().uuid().nullable().optional(),
   circuitRounds: z.number().int().min(0).max(999).nullable().optional(),
   circuitName: z.string().trim().max(80).nullable().optional(),
@@ -47,25 +39,13 @@ async function insertTemplateSetsInTx(
         reps, weight_kg, distance_km, duration_sec,
         resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
         circuit_id, circuit_rounds, circuit_name, variation
-      ) VALUES (?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?,  NULL, NULL, NULL, NULL,  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  ?, ?, ?, ?)`,
       [
         s.id ?? uuid(),
         templateId,
         userId,
         s.exerciseId,
         s.position,
-        s.reps,
-        s.weightKg,
-        s.distanceKm,
-        s.durationSec,
-        s.resistance,
-        s.speedMs,
-        s.inclinePct,
-        s.restSec,
-        s.calories ?? null,
-        s.rpe ?? null,
-        s.steps,
-        s.heightM,
         s.circuitId ?? null,
         s.circuitRounds ?? null,
         s.circuitName ?? null,
@@ -441,6 +421,13 @@ export async function applyTemplate(
       }
     }
 
+    // Each template row becomes a blank anchor set: the exercise, its position
+    // and its circuit grouping, with no metrics. That's what makes the session
+    // read as "nothing logged yet", so every exercise shows its greyed ghost
+    // suggestion from the last time it was actually performed — the same state
+    // an exercise added by hand starts in. Metric columns on legacy template
+    // rows (written before templates became exercise-lists) are ignored rather
+    // than migrated, so an old template behaves like a new one.
     for (const s of templateSets) {
       const circuitId = s.circuit_id ? circuitIdMap.get(s.circuit_id) ?? null : null;
       await tx.execute(
@@ -449,7 +436,7 @@ export async function applyTemplate(
           reps, weight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  NULL, NULL, NULL, NULL,  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,  ?, ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -457,18 +444,6 @@ export async function applyTemplate(
           workoutId,
           s.exercise_id,
           s.position,
-          s.reps,
-          s.weight_kg,
-          s.distance_km,
-          s.duration_sec,
-          s.resistance,
-          s.speed_ms,
-          s.incline_pct,
-          s.rest_sec,
-          s.calories,
-          s.rpe,
-          s.steps,
-          s.height_m,
           circuitId,
           s.circuit_rounds,
           s.circuit_name,

@@ -170,10 +170,17 @@ export function SetRows({
   }, [group.exerciseId, workoutId]);
 
   // The logged (hardened) sets. In a live session the not-yet-logged "anchor"
-  // set is hidden and replaced by the ghost row; templates keep every set
-  // (including intentionally-blank skeleton sets) visible and editable.
+  // set is hidden and replaced by the ghost row.
+  //
+  // A template is just an ordered list of exercises — it carries no set values
+  // at all (its rows exist only to hold the exercise, its position and its
+  // circuit grouping), so there's nothing to show or edit here. Sets get logged
+  // once the template is turned into a session, where every exercise starts on
+  // its blank anchor and gets a ghost suggestion. Legacy templates may still
+  // hold values until they're next saved; they're not rendered either, and
+  // applyTemplate ignores them.
   const displaySets = useMemo(
-    () => (isTemplate ? group.sets : group.sets.filter((s) => !isBlankSet(s))),
+    () => (isTemplate ? [] : group.sets.filter((s) => !isBlankSet(s))),
     [group.sets, isTemplate]
   );
 
@@ -196,7 +203,7 @@ export function SetRows({
       return rest;
     }
     const hist = lastLogged?.[0];
-    return hist ? { ...hist } : null;
+    return hist && !isBlankSet(hist) ? { ...hist } : null;
   }, [isTemplate, displaySets, lastLogged]);
 
   function hardenGhost() {
@@ -243,9 +250,8 @@ export function SetRows({
     const isNewSet = tray.setIndex === -1;
     if (isNewSet) {
       // Manual entry takes priority over the ghost: drop the blank anchor (if
-      // present) so the typed set becomes the first real one. Templates keep
-      // every set, so append there.
-      const base = isTemplate ? group.sets : group.sets.filter((s) => !isBlankSet(s));
+      // present) so the typed set becomes the first real one.
+      const base = group.sets.filter((s) => !isBlankSet(s));
       onUpdate({ ...group, sets: [...base, draft] });
     } else {
       const next = group.sets.map((s, i) => (i === tray.setIndex ? { ...s, ...draft } : s));
@@ -313,33 +319,35 @@ export function SetRows({
             </span>
           </div>
 
-          <div className="px-3 pb-3 flex flex-col gap-0.5">
-            {displaySets.map((s, i) => (
-              <SetSummaryRow
-                key={s.id ?? `new-${i}`}
-                index={i + 1}
-                set={s}
-                exercise={ex}
-                distanceUnit={distanceUnit}
-                pbs={pbsByCurrentSetIndex[i] ?? []}
-                onClick={() => openEditTray(s)}
-                onRemove={() => removeSet(s)}
-              />
-            ))}
-            {showGhost && ghostSuggestion && (
-              <GhostSetRow
-                index={displaySets.length + 1}
-                set={ghostSuggestion}
-                exercise={ex}
-                distanceUnit={distanceUnit}
-                onClick={hardenGhost}
-              />
-            )}
-            <div className="flex items-center mt-1">
-              <Button variant="ghost" size="sm" onClick={openAddTray} className="flex-1">
-                <Plus className="h-4 w-4" /> Add set
-              </Button>
-              {!isTemplate && (
+          {/* Templates stop at the header: exercise name, tags and the options
+              menu. No set list, no "Add set" — see `displaySets`. */}
+          {!isTemplate && (
+            <div className="px-3 pb-3 flex flex-col gap-0.5">
+              {displaySets.map((s, i) => (
+                <SetSummaryRow
+                  key={s.id ?? `new-${i}`}
+                  index={i + 1}
+                  set={s}
+                  exercise={ex}
+                  distanceUnit={distanceUnit}
+                  pbs={pbsByCurrentSetIndex[i] ?? []}
+                  onClick={() => openEditTray(s)}
+                  onRemove={() => removeSet(s)}
+                />
+              ))}
+              {showGhost && ghostSuggestion && (
+                <GhostSetRow
+                  index={displaySets.length + 1}
+                  set={ghostSuggestion}
+                  exercise={ex}
+                  distanceUnit={distanceUnit}
+                  onClick={hardenGhost}
+                />
+              )}
+              <div className="flex items-center mt-1">
+                <Button variant="ghost" size="sm" onClick={openAddTray} className="flex-1">
+                  <Plus className="h-4 w-4" /> Add set
+                </Button>
                 <Button
                   size="icon"
                   variant="ghost"
@@ -353,9 +361,9 @@ export function SetRows({
                     <ChevronDown className="h-4 w-4" />
                   )}
                 </Button>
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           {!isTemplate && historyOpen && (
             <div className="border-t border-border flex flex-col">

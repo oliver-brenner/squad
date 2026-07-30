@@ -304,6 +304,31 @@ export async function getLastSetsForExercise(
 // span sessions — this gives a clean "what I did last time" snapshot, so the
 // caller can map set i to the i-th set of the previous session (set 0 = the
 // first set of that session). Empty if the exercise has no prior history.
+//
+// Metric-less sets are skipped, both as rows and when picking the session:
+// applying a template writes its skeleton sets into `sets` verbatim, so a
+// template with intentionally-blank sets leaves rows carrying no data at all.
+// Those would otherwise be served as "what I did last time" and seed an empty
+// greyed ghost. Mirrors isBlankSet in the workout editor (bodyweight_kg is
+// context carried onto a set, not something the user logged).
+const NON_BLANK_SET_SQL = (alias: string) =>
+  [
+    "reps",
+    "weight_kg",
+    "distance_km",
+    "duration_sec",
+    "resistance",
+    "speed_ms",
+    "incline_pct",
+    "rest_sec",
+    "calories",
+    "rpe",
+    "steps",
+    "height_m",
+  ]
+    .map((c) => `${alias}.${c} IS NOT NULL`)
+    .join(" OR ");
+
 export async function getLastSessionSetsForExercise(
   exerciseId: string,
   excludeWorkoutId?: string
@@ -320,11 +345,13 @@ export async function getLastSessionSetsForExercise(
      FROM sets s
      INNER JOIN workouts w ON s.workout_id = w.id
      WHERE s.exercise_id = ? AND w.user_id = ?${exclusion}
+       AND (${NON_BLANK_SET_SQL("s")})
        AND s.workout_id = (
          SELECT s2.workout_id
          FROM sets s2
          INNER JOIN workouts w2 ON s2.workout_id = w2.id
          WHERE s2.exercise_id = ? AND w2.user_id = ?${subExclusion}
+           AND (${NON_BLANK_SET_SQL("s2")})
          ORDER BY w2.performed_on DESC, w2.created_at DESC
          LIMIT 1
        )
