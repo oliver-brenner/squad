@@ -1,7 +1,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { ExerciseMetaTags } from "@/components/exercise-meta";
+import { Dot, ExerciseMetaTags, exerciseHasMetaTags } from "@/components/exercise-meta";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import type { PBType } from "@/lib/stats/set-pbs";
@@ -142,9 +142,12 @@ export function SessionReadOnlyItems({
 }
 
 // Resolves the variation key carried on a session's sets to its label using the
-// exercise's own variations (key + label). Renders nothing when no variation
-// was attached or the key is unknown.
-function VariationBadge({
+// exercise's own variations (key + label), and renders it as a lowercased tag
+// at the end of the meta line — matching how the personal log editor shows a
+// selected variation (see VariationTag in variation-control.tsx), just without
+// the click-to-change behavior since this view is read-only. Renders nothing
+// when no variation was attached or the key is unknown.
+function VariationMetaTag({
   exercise,
   sets,
 }: {
@@ -156,9 +159,14 @@ function VariationBadge({
   const label = (exercise.variations ?? []).find((v) => v.key === key)?.label;
   if (!label) return null;
   return (
-    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-      {label}
-    </span>
+    <>
+      {exerciseHasMetaTags(exercise) && (
+        <span className="inline-flex items-center mx-1">
+          <Dot />
+        </span>
+      )}
+      <span className="whitespace-nowrap">{label.toLowerCase()}</span>
+    </>
   );
 }
 
@@ -178,11 +186,11 @@ function ExerciseCard({
         <div className="min-w-0 flex-1 flex flex-col gap-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{ex?.name ?? "Unknown exercise"}</span>
-            {ex && <VariationBadge exercise={ex} sets={item.sets} />}
           </div>
           {ex && (
             <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
               <ExerciseMetaTags e={ex} />
+              <VariationMetaTag exercise={ex} sets={item.sets} />
             </span>
           )}
         </div>
@@ -283,11 +291,11 @@ function CircuitExerciseRow({
           <span className="text-sm font-medium">
             {eg.exercise?.name ?? "Unknown exercise"}
           </span>
-          {eg.exercise && <VariationBadge exercise={eg.exercise} sets={eg.sets} />}
         </div>
         {eg.exercise && (
           <span className="text-xs text-muted-foreground inline-flex flex-wrap items-center gap-0.5">
             <ExerciseMetaTags e={eg.exercise} />
+            <VariationMetaTag exercise={eg.exercise} sets={eg.sets} />
           </span>
         )}
         {hasData && eg.exercise && (
