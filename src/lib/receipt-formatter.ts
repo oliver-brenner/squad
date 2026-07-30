@@ -145,8 +145,10 @@ function exerciseBlock(ex: SessionExportExercise, indent = ""): string {
   if (ex.categories && ex.categories.length > 0)
     tagParts.push(ex.categories.map((t) => t.toLowerCase()).join(", "));
   if (ex.equipment) tagParts.push(ex.equipment.toLowerCase());
-  const allMuscles = [...(ex.muscles ?? []), ...(ex.secondaryMuscles ?? [])];
-  if (allMuscles.length > 0) tagParts.push(allMuscles.map((t) => t.toLowerCase()).join(", "));
+  if (ex.muscles && ex.muscles.length > 0)
+    tagParts.push(ex.muscles.map((t) => t.toLowerCase()).join(", "));
+  if (ex.secondaryMuscles && ex.secondaryMuscles.length > 0)
+    tagParts.push(ex.secondaryMuscles.map((t) => t.toLowerCase()).join(", "));
   if (ex.doubleReps) tagParts.push("x2");
   const tagLine = tagParts.length > 0 ? wrapTagLine(`[${tagParts.join(" · ")}]`, indent) : "";
   return `${indent}${ex.name.toUpperCase()}\n${tagLine}${buildSetTable(ex.sets, indent, ex.defaultWeightKg)}`;
