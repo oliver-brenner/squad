@@ -575,6 +575,35 @@ export async function getProfileBodyweightKg(userId: string): Promise<number> {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+// Current profile bodyweight for each of the given users, omitting anyone with
+// none set. Used to resolve the display bodyweight of OTHER people's legacy
+// sets: your own NULL rows are filled in on boot (see backfill.ts), but a
+// followee's rows aren't yours to write, so theirs is resolved at read time
+// from whatever they currently have set — the same rule
+// FEED_SET_BODYWEIGHT_SQL already applies to feed volume totals.
+async function getBodyweightByUser(userIds: string[]): Promise<Map<string, number>> {
+  const byUser = new Map<string, number>();
+  const ids = [...new Set(userIds.filter((id) => !!id))];
+  if (ids.length === 0) return byUser;
+  const rows = await powersync.getAll<{ id: string; bodyweight_kg: number | null }>(
+    `SELECT id, bodyweight_kg FROM profiles WHERE id IN (${ids.map(() => "?").join(",")})`,
+    ids
+  );
+  for (const r of rows) {
+    const v = r.bodyweight_kg;
+    if (typeof v === "number" && Number.isFinite(v) && v > 0) byUser.set(r.id, v);
+  }
+  return byUser;
+}
+
+// Gives a set the author's current bodyweight when it carries no snapshot of
+// its own. A set that HAS one keeps it untouched — that value is what the lifter
+// actually weighed at the time, and it must not drift with their profile.
+function withAuthorBodyweight(set: WorkoutSet, fallbackKg: number | undefined): WorkoutSet {
+  if (set.bodyweightKg != null || fallbackKg == null) return set;
+  return { ...set, bodyweightKg: fallbackKg };
+}
+
 // The bodyweight a set counts toward volume: its own snapshot, falling back to
 // the profile value for pre-column sets so historical totals don't shift. `?`
 // binds the fallback. Volume guards elsewhere keep a negative net load (heavy
@@ -907,6 +936,9 @@ export async function getFeedSessions(
     `SELECT * FROM sets WHERE workout_id IN (${placeholders})`,
     workoutIds
   );
+  // Display bodyweight for each author's legacy sets — the feed mixes authors,
+  // so the fallback is per-author rather than a single value.
+  const bodyweightByUser = await getBodyweightByUser(workoutRows.map((w) => w.user_id));
   const exerciseIds = [
     ...new Set(candidateSetRows.map((r) => r.exercise_id).filter((v): v is string => !!v)),
   ];
@@ -1012,7 +1044,7 @@ export async function getFeedSessions(
         for (const t of kept) if (!pbTypes.includes(t)) pbTypes.push(t);
         totalPBs += kept.length;
         pbSetLabel = formatSetSummary(
-          decodeSet(r),
+          withAuthorBodyweight(decodeSet(r), bodyweightByUser.get(w.user_id)),
           exercise,
           (exercise.distanceUnit ?? "km") as DistanceUnit
         );
@@ -1084,9 +1116,18 @@ export async function getFriendSessionDetail(workoutId: string): Promise<
     [workoutRow.user_id]
   );
 
+  // The author's own legacy sets can't be backfilled (they're not our rows to
+  // write), so their bodyweight is resolved here from the profile we just read.
+  const authorBodyweightKg =
+    typeof profileRow?.bodyweight_kg === "number" &&
+    Number.isFinite(profileRow.bodyweight_kg) &&
+    profileRow.bodyweight_kg > 0
+      ? profileRow.bodyweight_kg
+      : undefined;
+
   return {
     workout: decodeWorkout(workoutRow),
-    sets: setRows.map(decodeSet),
+    sets: setRows.map((r) => withAuthorBodyweight(decodeSet(r), authorBodyweightKg)),
     author: profileRow ? decodeProfile(profileRow) : null,
   };
 }

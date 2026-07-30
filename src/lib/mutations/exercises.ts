@@ -168,6 +168,72 @@ export async function countSetsForExercise(id: string): Promise<number> {
   return row.count;
 }
 
+// What the default-weight confirmation tray needs to know about an exercise's
+// history: how many of the user's own sets carry an ENTERED weight (reps-only
+// sets have nothing to shift, so they're excluded and left untouched), plus the
+// most recently logged weight — used for the one concrete example in the tray
+// copy. `latestWeightKg` is a single real set rather than a summary, so it
+// stays truthful when the past sets all have different values.
+export type WeightedSetHistory = {
+  count: number;
+  latestWeightKg: number | null;
+};
+
+export async function getWeightedSetHistory(
+  exerciseId: string
+): Promise<WeightedSetHistory> {
+  const userId = await getCurrentUserId();
+  const row = await powersync.get<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM sets
+     WHERE exercise_id = ? AND user_id = ? AND weight_kg IS NOT NULL`,
+    [exerciseId, userId]
+  );
+  const latest = await powersync.getOptional<{ weight_kg: number | null }>(
+    `SELECT s.weight_kg FROM sets s
+     WHERE s.exercise_id = ? AND s.user_id = ? AND s.weight_kg IS NOT NULL
+     ORDER BY s.performed_on DESC, s.position DESC
+     LIMIT 1`,
+    [exerciseId, userId]
+  );
+  return { count: row.count, latestWeightKg: latest?.weight_kg ?? null };
+}
+
+// Re-expresses historical sets after an exercise's default weight changed.
+//
+// A set's total load is `weight_kg + default_weight_kg` (see set-format), so
+// switching a 20 kg default on would silently re-read every past set as 20 kg
+// heavier than it was — those sets were entered as the TOTAL, because there was
+// no default to add. Subtracting the delta from each entered weight restores
+// the original total: a logged 100 becomes 80+20. Removing the default adds it
+// back, so the two directions are exact inverses and PBs/volume don't move
+// (records score on weight_kg + default too — see recordLoadKg).
+//
+// `deltaKg` is (new default − old default). Reps-only sets are skipped. A
+// result may legitimately go negative: 15 kg logged against a new 20 kg default
+// becomes -5+20, which is exactly the assistance convention weight_kg already
+// uses. template_sets carry weight_kg against an exercise as well, so they
+// shift in the same transaction — otherwise templates would keep seeding new
+// sessions in the old convention.
+export async function adjustSetWeightsForDefaultChange(
+  exerciseId: string,
+  deltaKg: number
+): Promise<void> {
+  if (!Number.isFinite(deltaKg) || deltaKg === 0) return;
+  const userId = await getCurrentUserId();
+  await powersync.writeTransaction(async (tx) => {
+    await tx.execute(
+      `UPDATE sets SET weight_kg = ROUND(weight_kg - ?, 2)
+       WHERE exercise_id = ? AND user_id = ? AND weight_kg IS NOT NULL`,
+      [deltaKg, exerciseId, userId]
+    );
+    await tx.execute(
+      `UPDATE template_sets SET weight_kg = ROUND(weight_kg - ?, 2)
+       WHERE exercise_id = ? AND user_id = ? AND weight_kg IS NOT NULL`,
+      [deltaKg, exerciseId, userId]
+    );
+  });
+}
+
 // Hard delete. Sets referencing this exercise are removed first so the
 // exercise vanishes from past sessions too — matches the user-confirmed
 // "disappears from those sessions and the exercise list" behaviour.
