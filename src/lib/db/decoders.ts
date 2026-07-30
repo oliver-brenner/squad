@@ -34,6 +34,7 @@ export function decodeProfile(r: ProfileRow): Profile {
     avatarUrl: r.avatar_url,
     bodyweightKg: r.bodyweight_kg,
     calorieTrackingEnabled: bool(r.calorie_tracking_enabled),
+    durationTrackingEnabled: bool(r.duration_tracking_enabled),
     sex: r.sex === "female" ? "female" : "male",
     createdAt: r.created_at ?? "",
   };
@@ -83,6 +84,7 @@ export function decodeWorkout(r: WorkoutRow): Workout {
     // Public by default: a missing flag (older rows) reads as public.
     notesPublic: r.notes_public == null ? true : bool(r.notes_public),
     calories: r.calories,
+    durationSec: r.duration_sec,
     createdAt: r.created_at ?? "",
     updatedAt: r.updated_at ?? "",
   };

@@ -136,6 +136,19 @@ export function formatDuration(totalSec: number): string {
   return parts.length > 0 ? parts.join(" ") : "0s";
 }
 
+// Session totals are entered as whole hours + minutes (no seconds), so they
+// render as "2h 15m", dropping a zero component rather than showing "0h 15m".
+// Still stored as seconds like every other duration; anything sub-minute rounds
+// to the nearest minute.
+export function formatSessionDuration(totalSec: number): string {
+  const totalMin = Math.max(0, Math.round(totalSec / 60));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 // Editable h/m/s breakdown used by the set tray. A zero component is null so
 // its input renders empty rather than "0".
 export type TimeParts = { h: number | null; m: number | null; s: number | null };

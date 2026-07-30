@@ -58,3 +58,11 @@ export async function updateCalorieTrackingEnabled(enabled: boolean): Promise<vo
     [enabled ? 1 : 0, userId]
   );
 }
+
+export async function updateDurationTrackingEnabled(enabled: boolean): Promise<void> {
+  const userId = await getCurrentUserId();
+  await powersync.execute(
+    `UPDATE profiles SET duration_tracking_enabled = ? WHERE id = ?`,
+    [enabled ? 1 : 0, userId]
+  );
+}

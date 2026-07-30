@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { startOfWeek, addDays } from "date-fns";
 import { Card } from "@/components/ui/card";
 import { LineChart, type LineChartPoint } from "@/components/charts/line-chart";
+import { formatSessionDuration } from "@/lib/set-format";
 import type { UserSessionAggregate } from "@/lib/db/queries";
 
 
-type MetricKey = "exercises" | "sets" | "reps" | "volume" | "workouts" | "calories";
+type MetricKey = "exercises" | "sets" | "reps" | "volume" | "workouts" | "calories" | "time";
 
 type WindowKey = "7d" | "30d" | "all";
 
@@ -54,6 +55,12 @@ function bucketWeekly(dates: string[]): LineChartPoint[] {
   return points;
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+  return rows;
+}
+
 function withCommas(v: number): string {
   return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -70,13 +77,18 @@ function compactAxis(v: number): string {
 function buildMetrics(
   sessions: UserSessionAggregate[],
   workoutDates: string[],
-  calorieTrackingEnabled: boolean
+  calorieTrackingEnabled: boolean,
+  durationTrackingEnabled: boolean
 ): Metric[] {
   const exercises: LineChartPoint[] = [];
   const sets: LineChartPoint[] = [];
   const reps: LineChartPoint[] = [];
   const volume: LineChartPoint[] = [];
   const calories: LineChartPoint[] = [];
+  // Session time is plotted in minutes — seconds make for an unreadable axis.
+  // Anything under a minute still gets a point (clamped to 1) rather than being
+  // dropped by the > 0 filter the other series use.
+  const time: LineChartPoint[] = [];
 
   for (const s of sessions) {
     if (s.totalExercises > 0) exercises.push({ date: s.performedOn, value: s.totalExercises });
@@ -86,6 +98,8 @@ function buildMetrics(
       volume.push({ date: s.performedOn, value: Math.round(s.totalVolumeKg) });
     if (s.calories != null && s.calories > 0)
       calories.push({ date: s.performedOn, value: s.calories });
+    if (s.durationSec != null && s.durationSec > 0)
+      time.push({ date: s.performedOn, value: Math.max(1, Math.round(s.durationSec / 60)) });
   }
 
   return [
@@ -140,6 +154,20 @@ function buildMetrics(
           },
         ]
       : []),
+    // Same gating as calories, on the session-time setting.
+    ...(durationTrackingEnabled
+      ? [
+          {
+            key: "time" as const,
+            label: "Time",
+            points: time,
+            // Values are minutes; hover reads back as "2h 15m".
+            formatY: (v: number) => formatSessionDuration(Math.round(v) * 60),
+            formatYAxis: withCommas,
+            yUnit: "minutes",
+          },
+        ]
+      : []),
   ];
 }
 
@@ -147,12 +175,18 @@ interface Props {
   sessions: UserSessionAggregate[];
   workoutDates: string[];
   calorieTrackingEnabled?: boolean;
+  durationTrackingEnabled?: boolean;
 }
 
-export function ProfileStatsCharts({ sessions, workoutDates, calorieTrackingEnabled = false }: Props) {
+export function ProfileStatsCharts({
+  sessions,
+  workoutDates,
+  calorieTrackingEnabled = false,
+  durationTrackingEnabled = false,
+}: Props) {
   const metrics = useMemo(
-    () => buildMetrics(sessions, workoutDates, calorieTrackingEnabled),
-    [sessions, workoutDates, calorieTrackingEnabled]
+    () => buildMetrics(sessions, workoutDates, calorieTrackingEnabled, durationTrackingEnabled),
+    [sessions, workoutDates, calorieTrackingEnabled, durationTrackingEnabled]
   );
 
   const [activeKey, setActiveKey] = useState<MetricKey>(() => {
@@ -182,19 +216,31 @@ export function ProfileStatsCharts({ sessions, workoutDates, calorieTrackingEnab
 
   return (
     <Card className="pl-2 pr-4 pt-4 pb-2 flex flex-col gap-3">
-      <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
-        {metrics.map((m) => (
-          <button
-            key={m.key}
-            onClick={() => setActiveKey(m.key)}
-            className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
-              m.key === activeKey
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {m.label}
-          </button>
+      {/* Three per row, wrapping into as many rows as the metric count needs —
+          a 6th (Calories) or 7th (Time) entry starts a new row rather than
+          squeezing the existing ones. A short final row is centred so a lone
+          button doesn't sit off to one side. */}
+      <div className="flex flex-col gap-1 rounded-lg bg-muted p-1">
+        {chunk(metrics, 3).map((row, i) => (
+          <div key={i} className="grid grid-cols-3 gap-1">
+            {row.map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setActiveKey(m.key)}
+                className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                  m.key === activeKey
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                } ${
+                  // A lone trailing button (7 metrics → 3/3/1) is centred
+                  // instead of hugging the left edge.
+                  row.length === 1 ? "col-start-2" : ""
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
         ))}
       </div>
       <div className="-mb-1 flex items-center justify-between gap-2 pl-2">

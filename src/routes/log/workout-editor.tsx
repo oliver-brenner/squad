@@ -45,6 +45,8 @@ import { ExercisePicker } from "./exercise-picker";
 import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
 import { CalorieTray } from "./calorie-tray";
+import { DurationTray } from "./duration-tray";
+import { formatSessionDuration } from "@/lib/set-format";
 import {
   groupHasLoggedSet,
   isBlankSet,
@@ -229,6 +231,11 @@ function WorkoutEditor({
   const sex = profile?.sex ?? "male";
   const [calories, setCalories] = useState(workout.calories);
   const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
+  // Session-level total time. Same shape as calories: gated on its own
+  // "Enable session time tracking" setting and saved outside the set autosave.
+  const durationTrackingEnabled = profile?.durationTrackingEnabled ?? false;
+  const [durationSec, setDurationSec] = useState(workout.durationSec);
+  const [durationTrayOpen, setDurationTrayOpen] = useState(false);
   // When enabled, newly added exercises/circuits are inserted at the top of
   // the list instead of the bottom, and the add buttons move up directly
   // below the session-type bar. Existing entries (e.g. loaded from a
@@ -724,6 +731,26 @@ function WorkoutEditor({
                 + add cals
               </button>
             ))}
+          {durationTrackingEnabled &&
+            (durationSec != null ? (
+              <button
+                type="button"
+                onClick={() => setDurationTrayOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70"
+              >
+                <span className="font-semibold tabular-nums text-foreground/60">
+                  {formatSessionDuration(durationSec)}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setDurationTrayOpen(true)}
+                className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground/70 hover:bg-muted/60"
+              >
+                + add time
+              </button>
+            ))}
         </div>
       )}
 
@@ -854,6 +881,18 @@ function WorkoutEditor({
           onSaved={(value) => {
             setCalories(value);
             setCalorieTrayOpen(false);
+          }}
+        />
+      )}
+
+      {durationTrayOpen && (
+        <DurationTray
+          workoutId={workout.id}
+          current={durationSec}
+          onClose={() => setDurationTrayOpen(false)}
+          onSaved={(value) => {
+            setDurationSec(value);
+            setDurationTrayOpen(false);
           }}
         />
       )}

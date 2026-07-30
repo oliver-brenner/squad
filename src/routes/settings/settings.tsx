@@ -13,6 +13,7 @@ import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
 import {
   updateCalorieTrackingEnabled,
+  updateDurationTrackingEnabled,
   updateSex,
   updateUsername,
   validateUsername,
@@ -67,6 +68,8 @@ export function Settings() {
       <SexSection current={profile?.sex ?? "male"} />
 
       <CalorieTrackingSection enabled={profile?.calorieTrackingEnabled ?? false} />
+
+      <DurationTrackingSection enabled={profile?.durationTrackingEnabled ?? false} />
 
       <Card className="mt-4 p-0">
         <Link
@@ -271,6 +274,34 @@ function CalorieTrackingSection({ enabled }: { enabled: boolean }) {
           <div className="font-medium">Enable calorie tracking</div>
           <div className="text-sm text-muted-foreground">
             Log calories burned on each session
+          </div>
+        </div>
+        <Switch checked={enabled} onCheckedChange={toggle} disabled={pending} />
+      </div>
+    </Card>
+  );
+}
+
+function DurationTrackingSection({ enabled }: { enabled: boolean }) {
+  const [pending, startTransition] = useTransition();
+
+  function toggle(next: boolean) {
+    startTransition(async () => {
+      try {
+        await updateDurationTrackingEnabled(next);
+      } catch (err) {
+        console.error("[settings] updateDurationTrackingEnabled failed:", err);
+      }
+    });
+  }
+
+  return (
+    <Card className="mt-4 p-0">
+      <div className="flex items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">Enable session time tracking</div>
+          <div className="text-sm text-muted-foreground">
+            Log the total time each session took
           </div>
         </div>
         <Switch checked={enabled} onCheckedChange={toggle} disabled={pending} />

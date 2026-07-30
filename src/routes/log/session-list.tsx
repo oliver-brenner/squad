@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { MoreHorizontal } from "lucide-react";
 import { deleteWorkout } from "@/lib/mutations/workouts";
 import { sessionTypeColor } from "@/lib/session-type-color";
+import { formatSessionDuration } from "@/lib/set-format";
 import { SessionReceiptSheet } from "@/components/session-receipt-sheet";
 import { SessionGuests } from "@/components/session-guests";
 
@@ -16,6 +17,7 @@ interface SessionItem {
   totalSets: number;
   totalReps: number;
   calories: number | null;
+  durationSec: number | null;
 }
 
 function SessionMenu({
@@ -159,7 +161,7 @@ function SessionRow({
         <div className="text-xs text-muted-foreground">
           {session.exerciseNames.map((n) => n.toLowerCase()).join(" · ")}
         </div>
-        {(showPills || session.calories != null) && (
+        {(showPills || session.calories != null || session.durationSec != null) && (
           <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
             {showPills &&
               [
@@ -181,6 +183,13 @@ function SessionRow({
                   {session.calories}
                 </span>
                 cals
+              </span>
+            )}
+            {session.durationSec != null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground/70">
+                <span className="font-semibold tabular-nums text-foreground/60">
+                  {formatSessionDuration(session.durationSec)}
+                </span>
               </span>
             )}
           </div>

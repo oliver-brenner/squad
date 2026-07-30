@@ -17,6 +17,7 @@ export type Profile = {
   avatarUrl: string | null;
   bodyweightKg: number | null;
   calorieTrackingEnabled: boolean;
+  durationTrackingEnabled: boolean;
   sex: "male" | "female";
   createdAt: string;
 };
@@ -61,6 +62,8 @@ export type Workout = {
   notes: string | null;
   notesPublic: boolean;
   calories: number | null;
+  // Total session time in seconds (hand-entered), independent of set durations.
+  durationSec: number | null;
   createdAt: string;
   updatedAt: string;
 };
