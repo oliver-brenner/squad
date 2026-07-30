@@ -12,7 +12,6 @@ import { powersync } from "@/lib/db/client";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
 import {
-  updateBodyweightKg,
   updateCalorieTrackingEnabled,
   updateSex,
   updateUsername,
@@ -61,7 +60,9 @@ export function Settings() {
 
       <UsernameSection currentUsername={profile?.username ?? null} />
 
-      <BodyweightSection currentBodyweightKg={profile?.bodyweightKg ?? null} />
+      {/* Bodyweight is no longer entered here — it's logged per set in the log
+          tray (for exercises with "Include bodyweight"), so it tracks over time
+          instead of retroactively rewriting past sessions. */}
 
       <SexSection current={profile?.sex ?? "male"} />
 
@@ -273,105 +274,6 @@ function CalorieTrackingSection({ enabled }: { enabled: boolean }) {
           </div>
         </div>
         <Switch checked={enabled} onCheckedChange={toggle} disabled={pending} />
-      </div>
-    </Card>
-  );
-}
-
-function BodyweightSection({
-  currentBodyweightKg,
-}: {
-  currentBodyweightKg: number | null;
-}) {
-  const [draft, setDraft] = useState(
-    currentBodyweightKg !== null ? String(currentBodyweightKg) : ""
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [focused, setFocused] = useState(false);
-  const [pending, startTransition] = useTransition();
-
-  useEffect(() => {
-    if (!focused) {
-      setDraft(currentBodyweightKg !== null ? String(currentBodyweightKg) : "");
-    }
-  }, [currentBodyweightKg, focused]);
-
-  function commit() {
-    const trimmed = draft.trim();
-    if (trimmed === "") {
-      if (currentBodyweightKg === null) {
-        setError(null);
-        return;
-      }
-      startTransition(async () => {
-        try {
-          await updateBodyweightKg(null);
-          setError(null);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Couldn't clear bodyweight");
-        }
-      });
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setError("Enter a positive number");
-      return;
-    }
-    if (parsed === currentBodyweightKg) {
-      setError(null);
-      return;
-    }
-    startTransition(async () => {
-      try {
-        await updateBodyweightKg(parsed);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't save bodyweight");
-      }
-    });
-  }
-
-  return (
-    <Card className="mt-4 p-0">
-      <div className="p-4">
-        <div className="font-medium">Enter bodyweight</div>
-        <label className="mt-1 flex items-baseline gap-1 text-sm text-muted-foreground">
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.1"
-            min="0"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              if (error) setError(null);
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => {
-              setFocused(false);
-              commit();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                (e.currentTarget as HTMLInputElement).blur();
-              } else if (e.key === "Escape") {
-                setDraft(
-                  currentBodyweightKg !== null ? String(currentBodyweightKg) : ""
-                );
-                setError(null);
-                (e.currentTarget as HTMLInputElement).blur();
-              }
-            }}
-            placeholder="0"
-            disabled={pending}
-            style={{ width: `${Math.max(draft.length, 1)}ch` }}
-            className="bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 disabled:opacity-60 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          <span>kg</span>
-        </label>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
     </Card>
   );

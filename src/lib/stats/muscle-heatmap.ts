@@ -243,7 +243,10 @@ export function computeMuscleHeatmap(
   let totalVolumeKg = 0;
   for (const row of rows) {
     const reps = row.set.reps ?? 0;
-    const volume = reps * (row.set.weightKg ?? 0);
+    // Raw entered weight (this heatmap has always ignored default weight and
+    // bodyweight — it only needs relative intensity between regions). Clamped
+    // at zero so assisted sets, which log negative weight, don't subtract.
+    const volume = reps * Math.max(0, row.set.weightKg ?? 0);
     totalVolumeKg += volume;
 
     // Per set, collect the strongest factor per region and view side across
@@ -383,7 +386,7 @@ export function computeCategoryActivity(
       a.sets += 1;
       a.seconds += row.set.durationSec ?? 0;
       a.distanceKm += row.set.distanceKm ?? 0;
-      a.volumeKg += (row.set.reps ?? 0) * (row.set.weightKg ?? 0);
+      a.volumeKg += (row.set.reps ?? 0) * Math.max(0, row.set.weightKg ?? 0);
     }
   }
 

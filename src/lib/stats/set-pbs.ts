@@ -1,4 +1,5 @@
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
+import { effectiveLoadKg, recordLoadKg } from "@/lib/set-format";
 
 export type PBType = "RM" | "Volume" | "Distance" | "Time" | "Speed";
 
@@ -12,7 +13,7 @@ export const PB_LABEL: Record<PBType, string> = {
 
 type PBInputSet = Pick<
   WorkoutSet,
-  "reps" | "weightKg" | "distanceKm" | "durationSec" | "speedMs"
+  "reps" | "weightKg" | "bodyweightKg" | "distanceKm" | "durationSec" | "speedMs"
 >;
 
 function effectiveReps(s: PBInputSet, ex: Exercise): number | null {
@@ -20,16 +21,22 @@ function effectiveReps(s: PBInputSet, ex: Exercise): number | null {
   return ex.doubleReps ? s.reps * 2 : s.reps;
 }
 
+// Records score on the weight the lifter added, not the total load: shedding
+// assistance (−20 → −10) is a new rep max, and bodyweight is left out so the
+// scale doesn't move when they do. See recordLoadKg.
 function effectiveWeightKg(s: PBInputSet, ex: Exercise): number | null {
-  if (ex.isBodyweight) return null;
-  if (s.weightKg == null) return null;
-  return s.weightKg + (ex.defaultWeightKg ?? 0);
+  return recordLoadKg(s, ex);
 }
 
+// Volume is work done, not a weight to beat, so it counts the TOTAL load —
+// bodyweight included — unlike the rep max above (see recordLoadKg). This keeps
+// the Volume badge on the same scale as the session and profile volume totals.
 export function setVolumeKg(s: PBInputSet, ex: Exercise): number | null {
-  const w = effectiveWeightKg(s, ex);
+  const w = effectiveLoadKg(s, ex);
   const r = effectiveReps(s, ex);
-  if (w == null || r == null) return null;
+  // A net-negative load (assistance exceeding what it offsets) moved nothing,
+  // so it has no volume rather than a negative one.
+  if (w == null || w <= 0 || r == null) return null;
   return w * r;
 }
 
@@ -45,6 +52,8 @@ export function computeHistoricalPBs<T extends PBInputSet>(
 ): PBType[][] {
   // Use the actual tracking flags rather than user-defined `categories`, since
   // a "resistance" tag isn't required for an exercise to be weight + reps.
+  // Including bodyweight does NOT make an exercise strength-scored — only a
+  // weight metric does (recordLoadKg explains why).
   const isStrength = exercise.trackReps && !exercise.isBodyweight;
   const tracksDistance = !!exercise.distanceUnit;
   const tracksTime = exercise.trackTime;
@@ -106,7 +115,9 @@ export function computeHistoricalPBs<T extends PBInputSet>(
     // earns an RM too: with no weight, max reps IS the rep max. This catches
     // pullups/pushups, but also weight-tracking exercises where the user just
     // logged reps without weight — the running max only competes across
-    // pure-rep sets, so weighted sets don't poison the comparison.
+    // pure-rep sets, so weighted sets don't poison the comparison. This is also
+    // where a bodyweight exercise that includes bodyweight lands: its recorded
+    // bodyweight feeds volume and the charts, but never the record.
     if (exercise.trackReps) {
       const r = effectiveReps(s, exercise);
       const setIsPureReps =

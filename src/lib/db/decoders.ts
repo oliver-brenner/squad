@@ -98,6 +98,7 @@ export function decodeSet(r: WorkoutSetRow): WorkoutSet {
     position: r.position ?? 0,
     reps: r.reps,
     weightKg: r.weight_kg,
+    bodyweightKg: r.bodyweight_kg,
     distanceKm: r.distance_km,
     durationSec: r.duration_sec,
     resistance: r.resistance,

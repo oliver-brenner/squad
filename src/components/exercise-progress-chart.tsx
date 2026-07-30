@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import type { Exercise, ExerciseHistoryEntry } from "@/lib/db/types";
 import { Card } from "@/components/ui/card";
 import { LineChart, type LineChartPoint as DataPoint } from "@/components/charts/line-chart";
+import { effectiveLoadKg, recordLoadKg } from "@/lib/set-format";
 
 type Series = {
   key: string;
@@ -23,17 +24,23 @@ function strengthSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Se
   const volPts: DataPoint[] = [];
 
   for (const entry of [...history].reverse()) {
-    let bestWeight = 0;
+    // The two lines measure different things and so use different scales:
+    // best-weight is a record (added weight only, bodyweight-free — see
+    // recordLoadKg), volume is work done (total load, bodyweight included).
+    // Best weight can be negative on an assisted exercise, and rising toward
+    // zero is exactly the progress line the user wants there.
+    let bestWeight: number | null = null;
     let totalVol = 0;
     for (const s of entry.sets) {
-      const w = (s.weightKg ?? 0) + exercise.defaultWeightKg;
       const r = s.reps;
-      if (!w || !r || r < 1) continue;
+      if (!r || r < 1) continue;
       const eff = exercise.doubleReps ? r * 2 : r;
-      if (w > bestWeight) bestWeight = w;
-      totalVol += eff * w * setRounds(s);
+      const added = recordLoadKg(s, exercise);
+      if (added != null && (bestWeight == null || added > bestWeight)) bestWeight = added;
+      const load = effectiveLoadKg(s, exercise) ?? 0;
+      if (load > 0) totalVol += eff * load * setRounds(s);
     }
-    if (bestWeight > 0) ormPts.push({ date: entry.performedOn, value: bestWeight });
+    if (bestWeight != null) ormPts.push({ date: entry.performedOn, value: bestWeight });
     if (totalVol > 0) volPts.push({ date: entry.performedOn, value: Math.round(totalVol) });
   }
 
@@ -45,20 +52,28 @@ function strengthSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Se
 
 function bodyweightSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Series[] {
   const bestPts: DataPoint[] = [];
-  const volPts: DataPoint[] = [];
+  const repVolPts: DataPoint[] = [];
+  const kgVolPts: DataPoint[] = [];
   for (const entry of [...history].reverse()) {
     let maxReps = 0;
     let totalReps = 0;
+    let totalKg = 0;
     for (const s of entry.sets) {
       const r = s.reps ?? 0;
       const eff = exercise.doubleReps ? r * 2 : r;
       if (eff > maxReps) maxReps = eff;
       totalReps += eff * setRounds(s);
+      // Bodyweight exercises have a kg load too once bodyweight is recorded
+      // against the set — reps × bodyweight, same volume rule as a weighted
+      // exercise. A non-positive load moved nothing, so it adds nothing.
+      const load = effectiveLoadKg(s, exercise) ?? 0;
+      if (load > 0) totalKg += eff * load * setRounds(s);
     }
     if (maxReps > 0) bestPts.push({ date: entry.performedOn, value: maxReps });
-    if (totalReps > 0) volPts.push({ date: entry.performedOn, value: totalReps });
+    if (totalReps > 0) repVolPts.push({ date: entry.performedOn, value: totalReps });
+    if (totalKg > 0) kgVolPts.push({ date: entry.performedOn, value: Math.round(totalKg) });
   }
-  return [
+  const series: Series[] = [
     {
       key: "best",
       label: "Best Set",
@@ -68,14 +83,28 @@ function bodyweightSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): 
       yUnit: "reps",
     },
     {
-      key: "volume",
-      label: "Volume",
-      points: volPts,
+      // "Reps", not "Volume": kg volume sits alongside it now, and Volume means
+      // kg everywhere else in the app.
+      key: "repVolume",
+      label: "Reps",
+      points: repVolPts,
       formatY: (v) => `${Math.round(v)} reps`,
       formatYAxis: (v) => `${Math.round(v)}`,
       yUnit: "reps",
     },
   ];
+  // Only offered when there's load to plot — an exercise without "Include
+  // bodyweight" (or with no bodyweight logged yet) has no kg data at all.
+  if (kgVolPts.length > 0) {
+    series.push({
+      key: "volume",
+      label: "Volume",
+      points: kgVolPts,
+      formatY: (v) => `${v}kg`,
+      yUnit: "kg",
+    });
+  }
+  return series;
 }
 
 function cardioSeries(exercise: Exercise, history: ExerciseHistoryEntry[]): Series[] {

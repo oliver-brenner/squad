@@ -5,6 +5,7 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
 import { ExerciseProgressChart } from "@/components/exercise-progress-chart";
 import { Card } from "@/components/ui/card";
+import { recordLoadKg } from "@/lib/set-format";
 import { estimateOneRepMax } from "@/lib/stats/one-rep-max";
 import { getExerciseById, getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, ExerciseHistoryEntry } from "@/lib/db/types";
@@ -30,9 +31,13 @@ function computeWeightStats(
 
   for (const entry of history) {
     for (const set of entry.sets) {
-      const weight = (set.weightKg ?? 0) + exercise.defaultWeightKg;
+      // These are all records, so they use the bodyweight-free added-weight
+      // scale (see recordLoadKg) — the same one the PB badges use, so the two
+      // can't disagree on the same screen. A 1RM estimate needs real weight on
+      // the bar, so net-assisted sets are skipped.
+      const weight = recordLoadKg(set, exercise) ?? 0;
       const rawReps = set.reps;
-      if (!weight || rawReps == null || rawReps < 1) continue;
+      if (weight <= 0 || rawReps == null || rawReps < 1) continue;
 
       const effectiveReps = exercise.doubleReps ? rawReps * 2 : rawReps;
       const volume = effectiveReps * weight;

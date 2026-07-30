@@ -1,0 +1,11 @@
+-- Per-set bodyweight snapshot.
+--
+-- Bodyweight used to live only on `profiles.bodyweight_kg`, so changing it
+-- retroactively rewrote the volume of every set ever logged against an
+-- `include_bodyweight` exercise. It's now captured on the set itself (entered
+-- in the set tray), which freezes history and lets bodyweight drift over time.
+--
+-- `profiles.bodyweight_kg` stays: it's the remembered "current" value the tray
+-- pre-fills from, and the fallback for sets logged before this column existed
+-- (so historical volume totals don't change).
+ALTER TABLE sets ADD COLUMN IF NOT EXISTS bodyweight_kg real;

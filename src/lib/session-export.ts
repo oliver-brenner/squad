@@ -5,6 +5,7 @@
 import { getCurrentUserId } from "@/lib/auth/current-user";
 import { powersync } from "@/lib/db/client";
 import { decodeExercise, decodeWorkout } from "@/lib/db/decoders";
+import { getProfileBodyweightKg } from "@/lib/db/queries";
 import type {
   ExerciseRow,
   WorkoutRow,
@@ -16,6 +17,9 @@ import { MUSCLE_LABELS } from "@/lib/exercise-options";
 export type SessionExportSet = {
   reps: number | null;
   weightKg: number | null;
+  // Only populated when the exercise includes bodyweight; the receipt folds it
+  // into the printed weight so the totals match the app.
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;
@@ -75,6 +79,9 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
   const placeholders = exerciseIds.map(() => "?").join(",");
 
   const userId = await getCurrentUserId();
+  // Fallback bodyweight for sets logged before per-set bodyweight existed —
+  // same rule the volume aggregates use.
+  const profileBodyweightKg = await getProfileBodyweightKg(userId);
   const [exerciseRows, optionRows] = await Promise.all([
     powersync.getAll<ExerciseRow>(
       `SELECT * FROM exercises WHERE id IN (${placeholders})`,
@@ -134,6 +141,7 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
     const setData: SessionExportSet = {
       reps: s.reps,
       weightKg: s.weight_kg,
+      bodyweightKg: ex.includeBodyweight ? s.bodyweight_kg ?? profileBodyweightKg : null,
       distanceKm: s.distance_km,
       durationSec: s.duration_sec,
       resistance: s.resistance,

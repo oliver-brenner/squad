@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
+import { formatDuration, formatWeightPart, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { PBBadges } from "@/components/pb-badge";
 
 function formatDate(iso: string): string {
@@ -17,10 +17,8 @@ function formatDate(iso: string): string {
 function formatSet(s: WorkoutSet, ex: Exercise): string {
   const parts: string[] = [];
   const distanceUnit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
-  if (!ex.isBodyweight && s.weightKg != null) {
-    const dw = ex.defaultWeightKg ?? 0;
-    parts.push(dw > 0 ? `${s.weightKg}+${dw} kg` : `${s.weightKg} kg`);
-  }
+  const weightPart = formatWeightPart(s, ex);
+  if (weightPart) parts.push(weightPart);
   if (ex.trackReps && s.reps != null)
     parts.push(`${s.reps} reps${ex.doubleReps ? " x2" : ""}`);
   if (ex.trackTime && s.durationSec != null) parts.push(formatDuration(s.durationSec));
@@ -62,6 +60,7 @@ function toDisplayDist(km: number, unit: "m" | "km" | "yd"): number {
 type FutureSet = {
   reps: number | null;
   weightKg: number | null;
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   speedMs: number | null;

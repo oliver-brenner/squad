@@ -10,7 +10,10 @@ const setInputSchema = z.object({
   exerciseId: z.string().uuid(),
   position: z.number().int().min(0),
   reps: z.number().int().min(0).max(10_000).nullable(),
-  weightKg: z.number().min(0).max(2000).nullable(),
+  // Negative weight is assistance (assisted pull-up/dip machines), so the
+  // lower bound mirrors the upper one.
+  weightKg: z.number().min(-2000).max(2000).nullable(),
+  bodyweightKg: z.number().min(0).max(1000).nullable().optional(),
   distanceKm: z.number().min(0).max(1000).nullable(),
   durationSec: z.number().int().min(0).max(86400).nullable(),
   resistance: z.number().int().min(0).max(100).nullable(),
@@ -83,10 +86,10 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
       await tx.execute(
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
-          reps, weight_kg, distance_km, duration_sec,
+          reps, weight_kg, bodyweight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           s.id ?? uuid(),
           userId,
@@ -96,6 +99,7 @@ export async function saveWorkout(input: z.infer<typeof workoutInputSchema>): Pr
           s.position,
           s.reps,
           s.weightKg,
+          s.bodyweightKg ?? null,
           s.distanceKm,
           s.durationSec,
           s.resistance,
@@ -302,6 +306,7 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
       position: number;
       reps: number | null;
       weight_kg: number | null;
+      bodyweight_kg: number | null;
       distance_km: number | null;
       duration_sec: number | null;
       resistance: number | null;
@@ -322,10 +327,10 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
       await tx.execute(
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,
-          reps, weight_kg, distance_km, duration_sec,
+          reps, weight_kg, bodyweight_kg, distance_km, duration_sec,
           resistance, speed_ms, incline_pct, rest_sec, calories, rpe, steps, height_m,
           circuit_id, circuit_rounds, circuit_name, variation
-        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?,  ?, ?, ?, ?, ?, ?, ?, ?,  ?, ?, ?, ?)`,
         [
           uuid(),
           userId,
@@ -335,6 +340,7 @@ export async function copyWorkout(input: z.infer<typeof copyWorkoutSchema>): Pro
           s.position,
           s.reps,
           s.weight_kg,
+          s.bodyweight_kg,
           s.distance_km,
           s.duration_sec,
           s.resistance,
@@ -470,6 +476,8 @@ export async function copyFriendSession(
         ? friendToMineCircuitId.get(s.circuit_id) ?? null
         : null;
 
+      // bodyweight_kg is deliberately NOT copied — it's the friend's bodyweight,
+      // not mine. Left NULL, so my own profile value applies instead.
       await tx.execute(
         `INSERT INTO sets (
           id, user_id, performed_on, workout_id, exercise_id, position,

@@ -73,7 +73,11 @@ export type WorkoutSet = {
   exerciseId: string;
   position: number;
   reps: number | null;
+  // Negative for an assisted exercise — the assistance subtracts from the load.
   weightKg: number | null;
+  // Bodyweight snapshot for this set (see schema). Null for sets logged before
+  // per-set bodyweight, and for exercises that don't include bodyweight.
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;

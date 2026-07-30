@@ -22,10 +22,12 @@ function SessionMenu({
   session,
   onClose,
   onExport,
+  onDeleted,
 }: {
   session: SessionItem;
   onClose: () => void;
   onExport: () => void;
+  onDeleted: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const [visible, setVisible] = useState(false);
@@ -82,6 +84,7 @@ function SessionMenu({
               onClose();
               startTransition(async () => {
                 await deleteWorkout(session.id);
+                onDeleted(session.id);
               });
             }}
             className="w-full py-4 text-center text-base font-medium rounded-xl text-red-500 hover:bg-muted/50"
@@ -102,14 +105,22 @@ type SessionListProps = {
   // Whether to render the "···" menu (Edit / Copy / Export / Delete). Off on
   // friend profiles since none of those actions apply to someone else's session.
   showMenu?: boolean;
+  // Called after a session is deleted so the caller can remove it from its list.
+  onDeleted?: (id: string) => void;
 };
 
-export function SessionList({ sessions, linkHref, showMenu = true }: SessionListProps) {
+export function SessionList({ sessions, linkHref, showMenu = true, onDeleted }: SessionListProps) {
   const href = linkHref ?? ((id: string) => `/log/${id}`);
   return (
     <ul className="flex flex-col gap-2">
       {sessions.map((s) => (
-        <SessionRow key={s.id} session={s} href={href(s.id)} showMenu={showMenu} />
+        <SessionRow
+          key={s.id}
+          session={s}
+          href={href(s.id)}
+          showMenu={showMenu}
+          onDeleted={onDeleted}
+        />
       ))}
     </ul>
   );
@@ -119,10 +130,12 @@ function SessionRow({
   session,
   href,
   showMenu,
+  onDeleted,
 }: {
   session: SessionItem;
   href: string;
   showMenu: boolean;
+  onDeleted?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -191,6 +204,7 @@ function SessionRow({
               session={session}
               onClose={() => setOpen(false)}
               onExport={() => setReceiptOpen(true)}
+              onDeleted={(id) => onDeleted?.(id)}
             />
           )}
           {receiptOpen && (

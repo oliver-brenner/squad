@@ -1,4 +1,5 @@
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
+import { recordLoadKg } from "@/lib/set-format";
 import { estimateOneRepMax } from "./one-rep-max";
 import { averagePaceSecPerKm } from "./pace";
 
@@ -30,10 +31,12 @@ function effectiveReps(set: SetWithContext): number | null {
   return set.exercise.doubleReps ? set.reps * 2 : set.reps;
 }
 
+// Total load, assistance and bodyweight included — but only for exercises that
+// track weight (see recordLoadKg). Sets whose net load isn't positive can't set
+// a strength record: an over-assisted set moved nothing.
 function effectiveWeight(set: SetWithContext): number | null {
-  if (set.exercise.isBodyweight) return null;
-  if (set.weightKg == null) return null;
-  return set.weightKg + set.exercise.defaultWeightKg;
+  const load = recordLoadKg(set, set.exercise);
+  return load != null && load > 0 ? load : null;
 }
 
 export function computeStrengthPBs(sets: SetWithContext[]): Map<string, StrengthPB> {

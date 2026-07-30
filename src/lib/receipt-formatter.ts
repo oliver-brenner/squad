@@ -46,8 +46,10 @@ function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : Number(n.toFixed(2)).toString();
 }
 
-function formatWeight(kg: number, defaultKg = 0): string {
-  return `${fmt(kg + defaultKg)} kg`;
+// The receipt prints one combined number: entered weight (negative when
+// assisted) + the exercise's default weight + the set's bodyweight.
+function formatWeight(kg: number, defaultKg = 0, bodyweightKg: number | null = null): string {
+  return `${fmt(kg + defaultKg + (bodyweightKg ?? 0))} kg`;
 }
 
 function wrapTagLine(tagStr: string, indent: string): string {
@@ -120,7 +122,10 @@ function buildSetTable(sets: SessionExportSet[], extraIndent = "", defaultWeight
   for (let i = 0; i < sets.length; i++) {
     const s = sets[i];
     const row: string[] = [String(i + 1) + "."];
-    if (hasWeight) row.push(s.weightKg !== null ? formatWeight(s.weightKg, defaultWeightKg) : "—");
+    if (hasWeight)
+      row.push(
+        s.weightKg !== null ? formatWeight(s.weightKg, defaultWeightKg, s.bodyweightKg) : "—"
+      );
     if (hasReps) row.push(s.reps !== null ? `${s.reps} reps` : "—");
     if (hasDist) row.push(s.distanceKm !== null ? formatDistance(s.distanceKm) : "—");
     if (hasDuration) row.push(s.durationSec !== null ? formatDuration(s.durationSec) : "—");
@@ -140,8 +145,10 @@ function exerciseBlock(ex: SessionExportExercise, indent = ""): string {
   if (ex.categories && ex.categories.length > 0)
     tagParts.push(ex.categories.map((t) => t.toLowerCase()).join(", "));
   if (ex.equipment) tagParts.push(ex.equipment.toLowerCase());
-  const allMuscles = [...(ex.muscles ?? []), ...(ex.secondaryMuscles ?? [])];
-  if (allMuscles.length > 0) tagParts.push(allMuscles.map((t) => t.toLowerCase()).join(", "));
+  if (ex.muscles && ex.muscles.length > 0)
+    tagParts.push(ex.muscles.map((t) => t.toLowerCase()).join(", "));
+  if (ex.secondaryMuscles && ex.secondaryMuscles.length > 0)
+    tagParts.push(ex.secondaryMuscles.map((t) => t.toLowerCase()).join(", "));
   if (ex.doubleReps) tagParts.push("x2");
   const tagLine = tagParts.length > 0 ? wrapTagLine(`[${tagParts.join(" · ")}]`, indent) : "";
   return `${indent}${ex.name.toUpperCase()}\n${tagLine}${buildSetTable(ex.sets, indent, ex.defaultWeightKg)}`;

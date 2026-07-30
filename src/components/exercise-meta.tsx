@@ -94,7 +94,6 @@ export function ExerciseMetaTags({ e }: { e: ExerciseMeta }) {
   const sortedSecondary = filterParents([...new Set(secondaryMuscles)], muscleSet)
     .filter((m) => !sortedPrimary.includes(m))
     .sort((a, b) => orderedMuscleKeys.indexOf(a) - orderedMuscleKeys.indexOf(b));
-  const sortedMuscles = [...sortedPrimary, ...sortedSecondary];
 
   const categoryLabels = [...new Set(e.categories ?? [])].map((k) =>
     (categories.find((c) => c.key === k)?.label ?? k).toLowerCase()
@@ -119,15 +118,26 @@ export function ExerciseMetaTags({ e }: { e: ExerciseMeta }) {
           <span className="whitespace-nowrap">{p}</span>
         </React.Fragment>
       ))}
-      {sortedMuscles.length > 0 && headerParts.length > 0 && (
+      {(sortedPrimary.length > 0 || sortedSecondary.length > 0) && headerParts.length > 0 && (
         <span className="inline-flex items-center mx-1">
           <Dot />
         </span>
       )}
-      {sortedMuscles.map((m, i) => (
+      {sortedPrimary.map((m, i) => (
         <span key={m} className="whitespace-nowrap">
           {(muscleLabels.get(m) ?? m).toLowerCase()}
-          {i < sortedMuscles.length - 1 ? ", " : ""}
+          {i < sortedPrimary.length - 1 ? ", " : ""}
+        </span>
+      ))}
+      {sortedPrimary.length > 0 && sortedSecondary.length > 0 && (
+        <span className="inline-flex items-center mx-1">
+          <Dot />
+        </span>
+      )}
+      {sortedSecondary.map((m, i) => (
+        <span key={m} className="whitespace-nowrap">
+          {(muscleLabels.get(m) ?? m).toLowerCase()}
+          {i < sortedSecondary.length - 1 ? ", " : ""}
         </span>
       ))}
       {e.defaultWeightKg > 0 && (

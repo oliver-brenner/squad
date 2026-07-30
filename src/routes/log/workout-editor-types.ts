@@ -5,6 +5,9 @@ export type DraftSet = {
   exerciseId: string;
   reps: number | null;
   weightKg: number | null;
+  // Bodyweight captured against this set. Only edited for exercises with
+  // `includeBodyweight`; ignored by templates (a skeleton has no weigh-in).
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;
@@ -20,6 +23,10 @@ export type DraftSet = {
 // A set with no logged metric of any kind. Newly-added exercises carry one
 // such "anchor" set so the exercise persists before anything is logged; the
 // editor hides it and shows a greyed "ghost" suggestion in its place instead.
+//
+// `bodyweightKg` is intentionally not a metric here: it's context carried onto
+// the set (pre-filled from the last value), not something the user logged, so a
+// set holding only a bodyweight is still blank.
 export function isBlankSet(s: DraftSet): boolean {
   return (
     s.reps == null &&
@@ -58,6 +65,16 @@ export type WorkoutItem = ExerciseGroup | CircuitGroup;
 
 export function isCircuitGroup(item: WorkoutItem): item is CircuitGroup {
   return "exercises" in item && !("exerciseId" in item);
+}
+
+// Whether any set logged against this item (or, for a circuit, any of its
+// exercises) has real data — as opposed to still sitting on its blank anchor
+// set. Drives where the live-logging "ghost" boundary sits.
+export function groupHasLoggedSet(item: WorkoutItem): boolean {
+  if (isCircuitGroup(item)) {
+    return item.exercises.some((eg) => eg.sets.some((s) => !isBlankSet(s)));
+  }
+  return item.sets.some((s) => !isBlankSet(s));
 }
 
 export const CIRCUIT_BODY_PREFIX = "circuit-body-";
