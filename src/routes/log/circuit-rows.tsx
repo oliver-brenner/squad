@@ -15,7 +15,7 @@ import { SetTray } from "./set-rows";
 import { useTimer } from "@/components/providers/timer-provider";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
 import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
-import { formatDuration, mToHeight, type HeightUnit } from "@/lib/set-format";
+import { formatDuration, formatWeightPart, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { VariationControl, VariationTag } from "./variation-control";
 
 interface Props {
@@ -90,6 +90,7 @@ export function CircuitRows({
           exerciseId: r.exerciseId,
           reps: r.set.reps,
           weightKg: r.set.weightKg,
+          bodyweightKg: r.set.bodyweightKg,
           distanceKm: r.set.distanceKm,
           durationSec: r.set.durationSec,
           resistance: r.set.resistance,
@@ -326,6 +327,7 @@ export function CircuitRows({
             circuit.exercises[activeTray.exIdx].sets.length === 0 ||
             !circuit.exercises[activeTray.exIdx].sets[0]?.id
           }
+          isTemplate={isTemplate}
           onConfirm={confirmSetTray}
           onClose={() => setActiveTray(null)}
         />
@@ -643,7 +645,8 @@ function CircuitExerciseRow({
 function formatCircuitSetSummary(set: DraftSet, eg: ExerciseGroup): string {
   const ex = eg.exercise;
   const parts: string[] = [];
-  if (!ex.isBodyweight && set.weightKg != null) parts.push(`${set.weightKg} kg`);
+  const weightPart = formatWeightPart(set, ex);
+  if (weightPart) parts.push(weightPart);
   if (ex.trackReps && set.reps != null)
     parts.push(`${set.reps} reps${ex.doubleReps ? " x2" : ""}`);
   if (ex.trackTime && set.durationSec != null) parts.push(formatDuration(set.durationSec));
@@ -777,6 +780,7 @@ function makeEmptyDraft(exerciseId: string): DraftSet {
     exerciseId,
     reps: null,
     weightKg: null,
+    bodyweightKg: null,
     distanceKm: null,
     durationSec: null,
     resistance: null,

@@ -46,8 +46,10 @@ function fmt(n: number): string {
   return n % 1 === 0 ? String(n) : Number(n.toFixed(2)).toString();
 }
 
-function formatWeight(kg: number, defaultKg = 0): string {
-  return `${fmt(kg + defaultKg)} kg`;
+// The receipt prints one combined number: entered weight (negative when
+// assisted) + the exercise's default weight + the set's bodyweight.
+function formatWeight(kg: number, defaultKg = 0, bodyweightKg: number | null = null): string {
+  return `${fmt(kg + defaultKg + (bodyweightKg ?? 0))} kg`;
 }
 
 function wrapTagLine(tagStr: string, indent: string): string {
@@ -120,7 +122,10 @@ function buildSetTable(sets: SessionExportSet[], extraIndent = "", defaultWeight
   for (let i = 0; i < sets.length; i++) {
     const s = sets[i];
     const row: string[] = [String(i + 1) + "."];
-    if (hasWeight) row.push(s.weightKg !== null ? formatWeight(s.weightKg, defaultWeightKg) : "—");
+    if (hasWeight)
+      row.push(
+        s.weightKg !== null ? formatWeight(s.weightKg, defaultWeightKg, s.bodyweightKg) : "—"
+      );
     if (hasReps) row.push(s.reps !== null ? `${s.reps} reps` : "—");
     if (hasDist) row.push(s.distanceKm !== null ? formatDistance(s.distanceKm) : "—");
     if (hasDuration) row.push(s.durationSec !== null ? formatDuration(s.durationSec) : "—");

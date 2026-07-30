@@ -83,6 +83,7 @@ export function emptySet(ex: Exercise): DraftSet {
     exerciseId: ex.id,
     reps: null,
     weightKg: null,
+    bodyweightKg: null,
     distanceKm: null,
     durationSec: null,
     resistance: null,
@@ -103,6 +104,8 @@ export type SkeletonSet = {
   exerciseId: string;
   reps: number | null;
   weightKg: number | null;
+  // Optional: WorkoutSet carries it, TemplateSet has no such column.
+  bodyweightKg?: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;
@@ -128,6 +131,8 @@ export type FlatSet = {
   position: number;
   reps: number | null;
   weightKg: number | null;
+  // Dropped by the template writer's schema — templates have no bodyweight.
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;
@@ -162,6 +167,7 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
       exerciseId: s.exerciseId,
       reps: s.reps,
       weightKg: s.weightKg,
+      bodyweightKg: s.bodyweightKg ?? null,
       distanceKm: s.distanceKm,
       durationSec: s.durationSec,
       resistance: s.resistance,
@@ -227,6 +233,7 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
           position: itemIndex * 1000 + exIdx * 10 + si,
           reps: s.reps,
           weightKg: s.weightKg,
+          bodyweightKg: s.bodyweightKg ?? null,
           distanceKm: s.distanceKm,
           durationSec: s.durationSec,
           resistance: s.resistance,
@@ -250,6 +257,7 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
       position: itemIndex * 1000 + si,
       reps: s.reps,
       weightKg: s.weightKg,
+      bodyweightKg: s.bodyweightKg ?? null,
       distanceKm: s.distanceKm,
       durationSec: s.durationSec,
       resistance: s.resistance,

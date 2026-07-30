@@ -18,6 +18,7 @@ type SetExerciseJoinRow = WorkoutSetRow & {
   ex_categories: string | null;
   ex_equipment: string | null;
   ex_is_bodyweight: number | null;
+  ex_include_bodyweight: number | null;
   ex_track_reps: number | null;
   ex_default_weight_kg: number | null;
   ex_double_reps: number | null;
@@ -43,7 +44,7 @@ function buildExerciseRow(r: SetExerciseJoinRow): ExerciseRow {
     categories: r.ex_categories,
     equipment: r.ex_equipment,
     is_bodyweight: r.ex_is_bodyweight,
-    include_bodyweight: null,
+    include_bodyweight: r.ex_include_bodyweight,
     track_reps: r.ex_track_reps,
     default_weight_kg: r.ex_default_weight_kg,
     double_reps: r.ex_double_reps,
@@ -76,7 +77,8 @@ export function useSetExerciseRows(): SetWithExerciseRow[] {
     `SELECT s.*, w.performed_on AS performed_on, w.id AS workout_id_alias,
             e.id AS ex_id, e.user_id AS ex_user_id, e.name AS ex_name,
             e.categories AS ex_categories, e.equipment AS ex_equipment,
-            e.is_bodyweight AS ex_is_bodyweight, e.track_reps AS ex_track_reps,
+            e.is_bodyweight AS ex_is_bodyweight,
+            e.include_bodyweight AS ex_include_bodyweight, e.track_reps AS ex_track_reps,
             e.default_weight_kg AS ex_default_weight_kg, e.double_reps AS ex_double_reps,
             e.distance_unit AS ex_distance_unit, e.track_time AS ex_track_time,
             e.time_unit AS ex_time_unit, e.track_resistance AS ex_track_resistance,

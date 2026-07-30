@@ -931,6 +931,7 @@ function toWorkoutSet(
     position: 0,
     reps: s.reps,
     weightKg: s.weightKg,
+    bodyweightKg: s.bodyweightKg,
     distanceKm: s.distanceKm,
     durationSec: s.durationSec,
     resistance: s.resistance,

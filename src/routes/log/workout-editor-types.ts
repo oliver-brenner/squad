@@ -5,6 +5,9 @@ export type DraftSet = {
   exerciseId: string;
   reps: number | null;
   weightKg: number | null;
+  // Bodyweight captured against this set. Only edited for exercises with
+  // `includeBodyweight`; ignored by templates (a skeleton has no weigh-in).
+  bodyweightKg: number | null;
   distanceKm: number | null;
   durationSec: number | null;
   resistance: number | null;
@@ -20,6 +23,10 @@ export type DraftSet = {
 // A set with no logged metric of any kind. Newly-added exercises carry one
 // such "anchor" set so the exercise persists before anything is logged; the
 // editor hides it and shows a greyed "ghost" suggestion in its place instead.
+//
+// `bodyweightKg` is intentionally not a metric here: it's context carried onto
+// the set (pre-filled from the last value), not something the user logged, so a
+// set holding only a bodyweight is still blank.
 export function isBlankSet(s: DraftSet): boolean {
   return (
     s.reps == null &&

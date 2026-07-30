@@ -146,7 +146,7 @@ bucket_definitions:
     data:
       - >-
         SELECT id, user_id, performed_on, workout_id, exercise_id, position,
-        reps, weight_kg, distance_km, duration_sec, resistance, speed_ms,
+        reps, weight_kg, bodyweight_kg, distance_km, duration_sec, resistance, speed_ms,
         incline_pct, rest_sec, rpe, steps, height_m, circuit_id, circuit_rounds,
         circuit_name, variation, notes_for_followers as notes
         FROM sets WHERE user_id = bucket.user_id

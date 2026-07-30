@@ -18,6 +18,7 @@ import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
 import { useTimer } from "@/components/providers/timer-provider";
 import {
   formatDuration,
+  formatWeightPart,
   secToTimeParts,
   timePartsToSec,
   mToHeight,
@@ -25,6 +26,9 @@ import {
   type TimeParts,
   type HeightUnit,
 } from "@/lib/set-format";
+import { getProfileBodyweightKg } from "@/lib/db/queries";
+import { getCurrentUserId } from "@/lib/auth/current-user";
+import { updateBodyweightKg } from "@/lib/mutations/profile";
 import { VariationControl, VariationTag } from "./variation-control";
 
 interface Props {
@@ -119,6 +123,7 @@ export function SetRows({
             exerciseId: group.exerciseId,
             reps: s.reps,
             weightKg: s.weightKg,
+            bodyweightKg: s.bodyweightKg,
             distanceKm: s.distanceKm,
             durationSec: s.durationSec,
             resistance: s.resistance,
@@ -213,6 +218,7 @@ export function SetRows({
         exerciseId: group.exerciseId,
         reps: null,
         weightKg: null,
+        bodyweightKg: null,
         distanceKm: null,
         durationSec: null,
         resistance: null,
@@ -380,6 +386,7 @@ export function SetRows({
           draft={tray.draft}
           suggestion={tray.suggestion}
           isNew={tray.setIndex === -1}
+          isTemplate={isTemplate}
           onConfirm={confirmTray}
           onClose={() => setTray(null)}
         />
@@ -445,10 +452,8 @@ function formatSetSummaryParts(
   distanceUnit: "m" | "km" | "yd"
 ): string[] {
   const parts: string[] = [];
-  if (!ex.isBodyweight && s.weightKg != null) {
-    const dw = ex.defaultWeightKg ?? 0;
-    parts.push(dw > 0 ? `${s.weightKg}+${dw} kg` : `${s.weightKg} kg`);
-  }
+  const weightPart = formatWeightPart(s, ex);
+  if (weightPart) parts.push(weightPart);
   if (ex.trackReps && s.reps != null)
     parts.push(`${s.reps} reps${ex.doubleReps ? " x2" : ""}`);
   if (ex.trackTime && s.durationSec != null) parts.push(formatDuration(s.durationSec));
@@ -660,6 +665,7 @@ export function SetTray({
   draft: initialDraft,
   suggestion,
   isNew,
+  isTemplate = false,
   onConfirm,
   onClose,
 }: {
@@ -667,10 +673,43 @@ export function SetTray({
   draft: DraftSet;
   suggestion?: DraftSet | null;
   isNew: boolean;
+  // Templates are skeletons with no date, so they carry no bodyweight.
+  isTemplate?: boolean;
   onConfirm: (draft: DraftSet) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<DraftSet>(initialDraft);
+  const showBodyweight = exercise.includeBodyweight && !isTemplate;
+  // The last bodyweight the user entered (profiles.bodyweight_kg). It seeds the
+  // field so bodyweight carries forward across sessions without re-typing, and
+  // re-typing it here is what updates the remembered value.
+  const [rememberedBodyweight, setRememberedBodyweight] = useState<number | null>(null);
+  useEffect(() => {
+    if (!showBodyweight) return;
+    let cancelled = false;
+    getCurrentUserId()
+      .then(getProfileBodyweightKg)
+      .then((kg) => {
+        if (cancelled) return;
+        const remembered = kg > 0 ? kg : null;
+        setRememberedBodyweight(remembered);
+        // Only seed a set that has no bodyweight of its own — an existing set
+        // keeps the weight it was logged at.
+        setDraft((prev) =>
+          prev.bodyweightKg == null
+            ? { ...prev, bodyweightKg: suggestion?.bodyweightKg ?? remembered }
+            : prev
+        );
+      })
+      .catch((err) => {
+        console.error("[set-rows] failed to load bodyweight:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `suggestion` is fixed for the lifetime of an open tray.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBodyweight]);
   // Time is edited as separate h/m/s inputs but still stored as total seconds
   // on the draft, so we hold the editable breakdown locally and recombine on
   // every change.
@@ -695,11 +734,20 @@ export function SetTray({
   }
 
   function handleConfirm() {
+    // A new bodyweight typed here becomes the remembered one, so the next
+    // session pre-fills it. Fire-and-forget: it's a profile-level convenience,
+    // not part of the set being logged.
+    if (showBodyweight && draft.bodyweightKg != null && draft.bodyweightKg !== rememberedBodyweight) {
+      void updateBodyweightKg(draft.bodyweightKg).catch((err) => {
+        console.error("[set-rows] failed to remember bodyweight:", err);
+      });
+    }
     if (isNew && suggestion) {
       onConfirm({
         ...draft,
         reps: draft.reps ?? suggestion.reps,
         weightKg: draft.weightKg ?? suggestion.weightKg,
+        bodyweightKg: draft.bodyweightKg ?? suggestion.bodyweightKg,
         distanceKm: draft.distanceKm ?? suggestion.distanceKm,
         durationSec: draft.durationSec ?? suggestion.durationSec,
         resistance: draft.resistance ?? suggestion.resistance,
@@ -718,6 +766,10 @@ export function SetTray({
 
   const ex = exercise;
   const showWeight = !ex.isBodyweight;
+  // The default weight is a fixed addition the user doesn't re-enter, so it's
+  // surfaced on the label. Bodyweight gets its own field below, so it isn't.
+  const weightLabel =
+    (ex.defaultWeightKg ?? 0) > 0 ? `Weight (+${ex.defaultWeightKg} kg)` : "Weight";
   const showReps = ex.trackReps;
   const showTime = ex.trackTime;
   const showSpeed = ex.trackSpeed;
@@ -759,15 +811,25 @@ export function SetTray({
 
         <div className="px-4 pb-4 grid grid-cols-2 gap-x-4 gap-y-4">
           {showWeight && (
-            <TrayField
-              label={(ex.defaultWeightKg ?? 0) > 0 ? `Weight (+${ex.defaultWeightKg} kg)` : "Weight"}
-              unit="kg"
-            >
+            <TrayField label={weightLabel} unit="kg">
               <NumInput
                 value={draft.weightKg}
                 onChange={(v) => patch({ weightKg: v })}
                 step={0.5}
                 placeholder={sg?.weightKg != null ? String(sg.weightKg) : "60"}
+                className="w-full"
+                // Assisted exercises log the assistance as negative weight.
+                allowNegative
+              />
+            </TrayField>
+          )}
+          {showBodyweight && (
+            <TrayField label="Bodyweight" unit="kg">
+              <NumInput
+                value={draft.bodyweightKg}
+                onChange={(v) => patch({ bodyweightKg: v })}
+                step={0.1}
+                placeholder={rememberedBodyweight != null ? String(rememberedBodyweight) : "80"}
                 className="w-full"
               />
             </TrayField>
@@ -996,6 +1058,7 @@ function NumInput({
   className = "w-24",
   format,
   parse,
+  allowNegative = false,
 }: {
   value: number | null;
   onChange: (v: number | null) => void;
@@ -1004,13 +1067,27 @@ function NumInput({
   className?: string;
   format?: (v: number) => string;
   parse?: (s: string) => number | null;
+  // Drops the min=0 floor and adds a −/+ toggle, since the numeric soft
+  // keyboard on iOS has no minus key.
+  allowNegative?: boolean;
 }) {
   const [text, setText] = useState(() => (value != null && format ? format(value) : ""));
   const isFormatted = !!format && !!parse;
+  // Latched sign for the −/+ toggle, so it can be flipped BEFORE a number is
+  // typed (tap −, type 20, get −20) as well as after. Kept in step with the
+  // value's own sign, which the user can also type directly on a keyboard.
+  const [negative, setNegative] = useState(() => (value ?? 0) < 0);
 
   useEffect(() => {
     if (isFormatted) setText(value != null ? format!(value) : "");
   }, [value, isFormatted, format]);
+
+  useEffect(() => {
+    if (value != null && value !== 0) setNegative(value < 0);
+  }, [value]);
+
+  const signed = (n: number | null, neg: boolean): number | null =>
+    n == null ? null : neg ? -Math.abs(n) : Math.abs(n);
 
   if (isFormatted) {
     return (
@@ -1046,7 +1123,7 @@ function NumInput({
         type="number"
         inputMode="decimal"
         step={step}
-        min={0}
+        {...(allowNegative ? {} : { min: 0 })}
         value={value ?? ""}
         placeholder={placeholder}
         onChange={(e) => {
@@ -1054,11 +1131,30 @@ function NumInput({
           if (raw === "") onChange(null);
           else {
             const n = Number(raw);
-            if (!Number.isNaN(n)) onChange(n);
+            if (!Number.isNaN(n)) onChange(allowNegative ? signed(n, negative) : n);
           }
         }}
-        className="h-10 w-full rounded-md border border-border bg-background px-2 text-center text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`h-10 w-full rounded-md border border-border bg-background text-center text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          allowNegative ? "pl-8 pr-2" : "px-2"
+        }`}
       />
+      {allowNegative && (
+        <button
+          type="button"
+          onClick={() => {
+            const next = !negative;
+            setNegative(next);
+            onChange(signed(value, next));
+          }}
+          aria-pressed={negative}
+          aria-label={negative ? "Weight is assistance — make it added" : "Make weight assistance (negative)"}
+          className={`absolute left-0 top-0 flex h-10 w-8 items-center justify-center rounded-l-md text-base hover:bg-muted ${
+            negative ? "text-foreground font-medium" : "text-muted-foreground"
+          }`}
+        >
+          {negative ? "−" : "±"}
+        </button>
+      )}
     </div>
   );
 }

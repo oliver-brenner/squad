@@ -15,7 +15,9 @@ const templateSetInputSchema = z.object({
   exerciseId: z.string().uuid(),
   position: z.number().int().min(0),
   reps: z.number().int().min(0).max(10_000).nullable(),
-  weightKg: z.number().min(0).max(2000).nullable(),
+  // Negative weight is assistance — see saveWorkout's setInputSchema. Templates
+  // carry no bodyweight: it belongs to the session that's actually performed.
+  weightKg: z.number().min(-2000).max(2000).nullable(),
   distanceKm: z.number().min(0).max(1000).nullable(),
   durationSec: z.number().int().min(0).max(86400).nullable(),
   resistance: z.number().int().min(0).max(100).nullable(),

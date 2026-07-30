@@ -536,7 +536,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                 <div className="flex flex-col">
                   <Label htmlFor="ex-default-toggle">Set default weight</Label>
                   <span className="text-xs text-muted-foreground">
-                    Added to every set automatically (e.g. 20kg barbell).
+                    Added to every set automatically (e.g. 20kg barbell). Enter a negative
+                    weight on a set for an assisted exercise.
                   </span>
                 </div>
                 <Switch
@@ -576,7 +577,8 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
             <div className="flex flex-col">
               <Label htmlFor="ex-include-bw">Include bodyweight</Label>
               <span className="text-xs text-muted-foreground">
-                If bodyweight is included in stats calculations. Enter bodyweight in Settings.
+                If bodyweight counts toward the load. You'll enter it with each set, so it
+                tracks over time.
               </span>
             </div>
             <Switch

@@ -101,7 +101,15 @@ const sets = new Table(
     exercise_id: column.text,
     position: column.integer,
     reps: column.integer,
+    // The weight added to the exercise, which may be NEGATIVE for an assisted
+    // exercise (e.g. -20 on an assisted pull-up machine).
     weight_kg: column.real,
+    // The lifter's bodyweight at the time this set was logged. Only meaningful
+    // for exercises with include_bodyweight; entered in the set tray so it
+    // freezes with the set rather than moving with the profile. NULL on sets
+    // logged before per-set bodyweight existed — readers fall back to
+    // profiles.bodyweight_kg for those.
+    bodyweight_kg: column.real,
     distance_km: column.real,
     duration_sec: column.integer,
     resistance: column.integer,

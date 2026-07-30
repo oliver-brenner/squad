@@ -562,7 +562,11 @@ export type UserSessionAggregate = {
   calories: number | null;
 };
 
-async function getProfileBodyweightKg(userId: string): Promise<number> {
+// The user's remembered ("current") bodyweight. Bodyweight is captured per set
+// in the log tray now; this profile value is what the tray pre-fills from, and
+// the fallback for sets logged before `sets.bodyweight_kg` existed. Returns 0
+// when unset, so callers can add it unconditionally.
+export async function getProfileBodyweightKg(userId: string): Promise<number> {
   const row = await powersync.getOptional<{ bodyweight_kg: number | null }>(
     `SELECT bodyweight_kg FROM profiles WHERE id = ? LIMIT 1`,
     [userId]
@@ -570,6 +574,18 @@ async function getProfileBodyweightKg(userId: string): Promise<number> {
   const v = row?.bodyweight_kg;
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
 }
+
+// The bodyweight a set counts toward volume: its own snapshot, falling back to
+// the profile value for pre-column sets so historical totals don't shift. `?`
+// binds the fallback. Volume guards elsewhere keep a negative net load (heavy
+// assistance) from subtracting from the total.
+const SET_BODYWEIGHT_SQL = `CASE WHEN e.include_bodyweight = 1
+    THEN COALESCE(s.bodyweight_kg, ?) ELSE 0 END`;
+
+// Same rule for multi-author queries, where the pre-column fallback comes from
+// each author's own profile row via the `profiles p` join rather than a bind.
+const FEED_SET_BODYWEIGHT_SQL = `CASE WHEN e.include_bodyweight = 1
+    THEN COALESCE(s.bodyweight_kg, p.bodyweight_kg, 0) ELSE 0 END`;
 
 export async function getUserSessionAggregates(userId: string): Promise<UserSessionAggregate[]> {
   const bodyweightKg = await getProfileBodyweightKg(userId);
@@ -597,10 +613,10 @@ export async function getUserSessionAggregates(userId: string): Promise<UserSess
          CASE
            WHEN s.reps IS NOT NULL AND s.reps > 0
                 AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                     + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END) > 0
+                     + ${SET_BODYWEIGHT_SQL}) > 0
            THEN s.reps
                 * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                   + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END)
+                   + ${SET_BODYWEIGHT_SQL})
                 * COALESCE(s.circuit_rounds, 1)
                 * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
            ELSE 0
@@ -659,10 +675,10 @@ export async function getUserProfileStats(userId: string): Promise<UserProfileSt
          CASE
            WHEN s.reps IS NOT NULL AND s.reps > 0
                 AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                     + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END) > 0
+                     + ${SET_BODYWEIGHT_SQL}) > 0
            THEN s.reps
                 * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                   + CASE WHEN e.include_bodyweight = 1 THEN ? ELSE 0 END)
+                   + ${SET_BODYWEIGHT_SQL})
                 * COALESCE(s.circuit_rounds, 1)
                 * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
            ELSE 0
@@ -807,10 +823,10 @@ export async function getFeedSessions(
          CASE
            WHEN s.reps IS NOT NULL AND s.reps > 0
                 AND (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                     + CASE WHEN e.include_bodyweight = 1 THEN COALESCE(p.bodyweight_kg, 0) ELSE 0 END) > 0
+                     + ${FEED_SET_BODYWEIGHT_SQL}) > 0
            THEN s.reps
                 * (COALESCE(s.weight_kg, 0) + COALESCE(e.default_weight_kg, 0)
-                   + CASE WHEN e.include_bodyweight = 1 THEN COALESCE(p.bodyweight_kg, 0) ELSE 0 END)
+                   + ${FEED_SET_BODYWEIGHT_SQL})
                 * COALESCE(s.circuit_rounds, 1)
                 * CASE WHEN e.double_reps = 1 THEN 2 ELSE 1 END
            ELSE 0
