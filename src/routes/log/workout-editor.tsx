@@ -22,7 +22,8 @@ import { computeSessionStats, type StatItem } from "@/lib/session-stats";
 import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import { useTimer } from "@/components/providers/timer-provider";
-import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
+import { MuscleLegend } from "@/components/stats/training-breakdown";
+import { SessionMuscleActivity } from "@/components/stats/session-muscle-activity";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import { sanitizeReturnHref } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -222,8 +223,10 @@ function WorkoutEditor({
     `SELECT * FROM profiles WHERE id = ? LIMIT 1`,
     [user?.id ?? ""]
   );
-  const calorieTrackingEnabled =
-    profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
+  const profile = profileRows[0] ? decodeProfile(profileRows[0]) : null;
+  const calorieTrackingEnabled = profile?.calorieTrackingEnabled ?? false;
+  // Silhouette for the muscle-activity map.
+  const sex = profile?.sex ?? "male";
   const [calories, setCalories] = useState(workout.calories);
   const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
   // When enabled, newly added exercises/circuits are inserted at the top of
@@ -282,7 +285,7 @@ function WorkoutEditor({
       if (!timerRef.current.running) timerRef.current.dismiss();
     };
   }, []);
-  const breakdown = useMemo(() => {
+  const breakdownRows = useMemo(() => {
     const rows: SetWithExerciseRow[] = [];
     for (const item of items) {
       if (isCircuitGroup(item)) {
@@ -309,8 +312,13 @@ function WorkoutEditor({
         }
       }
     }
-    return computeExerciseBreakdown(rows, muscleGroups);
-  }, [items, muscleGroups, workout.id, workout.performedOn]);
+    return rows;
+  }, [items, workout.id, workout.userId, workout.performedOn]);
+
+  const breakdown = useMemo(
+    () => computeExerciseBreakdown(breakdownRows, muscleGroups),
+    [breakdownRows, muscleGroups]
+  );
 
   const renameInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLButtonElement>(null);
@@ -728,7 +736,7 @@ function WorkoutEditor({
             aria-expanded={breakdownOpen}
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Muscle groups
+              Muscle Activity
             </span>
             <div className="flex items-center gap-3">
               {breakdownOpen && <MuscleLegend size="sm" />}
@@ -741,7 +749,12 @@ function WorkoutEditor({
           </button>
           {breakdownOpen && (
             <div className="px-4 pb-4">
-              <MuscleGroupsBody data={breakdown} />
+              <SessionMuscleActivity
+                rows={breakdownRows}
+                breakdown={breakdown}
+                muscleGroups={muscleGroups}
+                sex={sex}
+              />
             </div>
           )}
         </div>
