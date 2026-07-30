@@ -45,6 +45,7 @@ import { SetRows } from "./set-rows";
 import { CircuitRows } from "./circuit-rows";
 import { CalorieTray } from "./calorie-tray";
 import {
+  groupHasLoggedSet,
   isBlankSet,
   isCircuitGroup,
   type DraftSet,
@@ -225,9 +226,12 @@ function WorkoutEditor({
     profileRows[0] ? decodeProfile(profileRows[0]).calorieTrackingEnabled : false;
   const [calories, setCalories] = useState(workout.calories);
   const [calorieTrayOpen, setCalorieTrayOpen] = useState(false);
-  // When enabled, the exercise list is shown bottom-to-top and the add buttons
-  // move up directly below the session-type bar. Persisted device-wide so the
-  // preference carries across every session until toggled off.
+  // When enabled, newly added exercises/circuits are inserted at the top of
+  // the list instead of the bottom, and the add buttons move up directly
+  // below the session-type bar. Existing entries (e.g. loaded from a
+  // template) keep their original order regardless of this setting.
+  // Persisted device-wide so the preference carries across every session
+  // until toggled off.
   const [reversed, setReversed] = useState(() => {
     try {
       return localStorage.getItem(REVERSE_ORDER_KEY) === "1";
@@ -420,29 +424,25 @@ function WorkoutEditor({
   function addExercise(ex: Exercise) {
     scrollToBottomRef.current = true;
     setExercises((prev) => (prev.some((e) => e.id === ex.id) ? prev : [ex, ...prev]));
-    setItems((prev) => [
-      ...prev,
-      {
-        groupKey: crypto.randomUUID(),
-        exerciseId: ex.id,
-        exercise: ex,
-        sets: [emptySet(ex)],
-        variation: null,
-      },
-    ]);
+    const newItem: WorkoutItem = {
+      groupKey: crypto.randomUUID(),
+      exerciseId: ex.id,
+      exercise: ex,
+      sets: [emptySet(ex)],
+      variation: null,
+    };
+    setItems((prev) => (reversed ? [newItem, ...prev] : [...prev, newItem]));
     setPicking(false);
   }
 
   function addCircuit() {
-    setItems((prev) => [
-      ...prev,
-      {
-        groupKey: crypto.randomUUID(),
-        name: "Circuit",
-        rounds: 0,
-        exercises: [],
-      },
-    ]);
+    const newCircuit: WorkoutItem = {
+      groupKey: crypto.randomUUID(),
+      name: "Circuit",
+      rounds: 0,
+      exercises: [],
+    };
+    setItems((prev) => (reversed ? [newCircuit, ...prev] : [...prev, newCircuit]));
   }
 
   function addExerciseToCircuit(circuitKey: string, ex: Exercise) {
@@ -565,13 +565,26 @@ function WorkoutEditor({
     );
   }
 
-  const displayItems = reversed ? [...items].reverse() : items;
-
-  // The greyed "ghost set" is a live-logging aid, so it appears only on the
-  // session currently being logged (the most recent one) and only on the last
-  // entry — the one you're working on. Earlier entries don't get a ghost.
-  const activeGroupKey =
-    isMostRecent && items.length > 0 ? items[items.length - 1].groupKey : null;
+  // The greyed "ghost set" is a live-logging aid, so it only appears in the
+  // session currently being logged (the most recent one). An exercise counts
+  // as "finished" once a real set has been logged on some later exercise —
+  // until then it (and everything after it, template-loaded or not) is still
+  // fair game for a ghost suggestion. Position here is always the true,
+  // unreversed order (see `reversed`, which only affects where new entries
+  // get inserted, not this ordering).
+  //
+  // Logging out of order (e.g. skipping exercise 2 to log exercise 5) doesn't
+  // mark the skipped exercise as finished — it still hasn't had any sets
+  // filled in, so its ghost stays regardless of where the boundary has moved.
+  const lastTouchedIndex = (() => {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (groupHasLoggedSet(items[i])) return i;
+    }
+    return -1;
+  })();
+  const ghostStartIndex = Math.max(lastTouchedIndex, 0);
+  const showGhostFor = (item: WorkoutItem, index: number) =>
+    isMostRecent && (index >= ghostStartIndex || !groupHasLoggedSet(item));
 
   const addButtons = (
     <div className="flex gap-2">
@@ -770,17 +783,18 @@ function WorkoutEditor({
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={displayItems.map((g) => g.groupKey)}
+          items={items.map((g) => g.groupKey)}
           strategy={verticalListSortingStrategy}
         >
-          {displayItems.map((item) => {
+          {items.map((item, index) => {
+            const showGhost = showGhostFor(item, index);
             if (isCircuitGroup(item)) {
               return (
                 <CircuitRows
                   key={item.groupKey}
                   circuit={item}
                   workoutId={workout.id}
-                  showGhost={item.groupKey === activeGroupKey}
+                  showGhost={showGhost}
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
                   onDuplicate={() => duplicateItem(item.groupKey)}
@@ -800,7 +814,7 @@ function WorkoutEditor({
                 key={item.groupKey}
                 group={item as ExerciseGroup}
                 workoutId={workout.id}
-                showGhost={item.groupKey === activeGroupKey}
+                showGhost={showGhost}
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
                 onDuplicate={() => duplicateItem(item.groupKey)}

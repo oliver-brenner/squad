@@ -67,6 +67,16 @@ export function isCircuitGroup(item: WorkoutItem): item is CircuitGroup {
   return "exercises" in item && !("exerciseId" in item);
 }
 
+// Whether any set logged against this item (or, for a circuit, any of its
+// exercises) has real data — as opposed to still sitting on its blank anchor
+// set. Drives where the live-logging "ghost" boundary sits.
+export function groupHasLoggedSet(item: WorkoutItem): boolean {
+  if (isCircuitGroup(item)) {
+    return item.exercises.some((eg) => eg.sets.some((s) => !isBlankSet(s)));
+  }
+  return item.sets.some((s) => !isBlankSet(s));
+}
+
 export const CIRCUIT_BODY_PREFIX = "circuit-body-";
 
 export function circuitBodyId(circuitKey: string): string {
