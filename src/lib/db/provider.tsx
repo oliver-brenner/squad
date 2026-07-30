@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { powersync, powerSyncReady } from "./client";
 import { SupabaseConnector } from "./connector";
 import { bootstrapIfNeeded } from "./bootstrap";
+import { backfillLegacySetBodyweight } from "./backfill";
 
 // localStorage key for the last-connected PowerSync user. We only wipe the
 // local DB when this changes — *not* on every user→null transition, because
@@ -118,6 +119,23 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
         await bootstrapIfNeeded(user);
         if (cancelled) return;
       }
+
+      // Legacy sets logged before `sets.bodyweight_kg` existed get the profile
+      // bodyweight filled in, so they show it against the set like new ones do
+      // instead of reading as reps-only. Fire-and-forget behind first sync:
+      // it's idempotent, so re-running it on a later launch is how sets that
+      // stream down after this point get picked up.
+      void (async () => {
+        try {
+          await powersync.waitForFirstSync();
+          const filled = await backfillLegacySetBodyweight(user.id);
+          if (filled > 0) {
+            console.info(`[powersync] filled bodyweight on ${filled} legacy sets`);
+          }
+        } catch (err) {
+          console.warn("[powersync] bodyweight backfill failed:", err);
+        }
+      })();
 
       writeLastUser(user.id);
     };

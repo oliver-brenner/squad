@@ -7,8 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { createExercise, updateExercise } from "@/lib/mutations/exercises";
+import {
+  adjustSetWeightsForDefaultChange,
+  createExercise,
+  getWeightedSetHistory,
+  updateExercise,
+  type WeightedSetHistory,
+} from "@/lib/mutations/exercises";
 import { getExerciseById } from "@/lib/db/queries";
+import { DefaultWeightSheet } from "./default-weight-sheet";
 import { useUserFieldOptions } from "@/components/providers/user-field-options-provider";
 import { useHideTimer } from "@/components/providers/timer-provider";
 import { VariationsEditor } from "./variations-editor";
@@ -156,6 +163,73 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
   );
   const [error, setError] = useState<string | null>(null);
 
+  // ----- Default-weight history decision -----
+  // Changing the default weight changes how every PAST set reads, because a
+  // set's total load is `weight_kg + default_weight_kg` (see set-format). The
+  // tray asks once, the moment the toggle moves, and the answer is remembered
+  // until Save — nothing is written to history before then, and Cancel drops
+  // the decision along with the rest of the edit.
+
+  // The exercise's weighted history, loaded up front so moving the toggle can
+  // open the tray immediately instead of awaiting a query mid-interaction.
+  const [weightedHistory, setWeightedHistory] = useState<WeightedSetHistory | null>(null);
+  useEffect(() => {
+    if (!exercise) return;
+    let cancelled = false;
+    getWeightedSetHistory(exercise.id)
+      .then((h) => {
+        if (!cancelled) setWeightedHistory(h);
+      })
+      .catch((err) => {
+        // Non-fatal: without it we simply don't offer the retro-adjust.
+        console.warn("[exercise-form] weighted history lookup failed:", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [exercise]);
+
+  // null until the user has answered. Applied by `commit` on Save.
+  const [applyToHistory, setApplyToHistory] = useState<boolean | null>(null);
+  // The open tray. `deltaKg` is null when the amount isn't known yet — toggling
+  // the default ON happens before any figure has been typed, so the copy drops
+  // the magnitude rather than guessing at it. `fromSave` marks the tray as
+  // blocking a save that's already in flight, so answering resumes it.
+  const [prompt, setPrompt] = useState<{
+    deltaKg: number | null;
+    newDefaultKg: number | null;
+    fromSave: boolean;
+  } | null>(null);
+
+  const hasWeightedHistory = (weightedHistory?.count ?? 0) > 0;
+
+  // How far the form's default has moved from the SAVED one — history is always
+  // expressed in terms of the saved value, so that's the reference point. Zero
+  // means past sets read the same either way and there's nothing to decide.
+  const pendingDefaultKg =
+    hasDefaultWeight && metrics.has("weight") ? Number(defaultWeightKg) || 0 : 0;
+  const pendingDeltaKg = exercise ? pendingDefaultKg - (exercise.defaultWeightKg ?? 0) : 0;
+
+  // Moving the toggle is the moment the user's intent is clear, so that's where
+  // the question goes. Turning it OFF gives back the whole saved default (a
+  // known amount); turning it ON has no amount yet.
+  function handleDefaultWeightToggle(next: boolean) {
+    setHasDefaultWeight(next);
+    if (!exercise || !hasWeightedHistory) return;
+    const savedDefaultKg = exercise.defaultWeightKg ?? 0;
+    if (!next && savedDefaultKg === 0) {
+      // Switching off a default that was never saved — the form is back where
+      // it started, so there's nothing to ask and no answer worth keeping.
+      setApplyToHistory(null);
+      return;
+    }
+    setPrompt(
+      next
+        ? { deltaKg: null, newDefaultKg: null, fromSave: false }
+        : { deltaKg: -savedDefaultKg, newDefaultKg: 0, fromSave: false }
+    );
+  }
+
   function toggleMetric(m: Metric) {
     setMetrics((prev) => {
       const next = new Set(prev);
@@ -166,15 +240,21 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
 
   function save() {
     setError(null);
-    const trimmed = name.trim();
-    if (!trimmed) {
+    if (!name.trim()) {
       setError("Name is required");
       return;
     }
+    commit(applyToHistory);
+  }
+
+  // Writes the exercise, then applies the remembered history decision. Split
+  // from `save` so the tray can resume a save it interrupted, passing the answer
+  // directly rather than waiting for the state update to land.
+  function commit(historyChoice: boolean | null) {
     startTransition(async () => {
       try {
         const input = {
-          name: trimmed,
+          name: name.trim(),
           categories: selectedCategories.size > 0 ? Array.from(selectedCategories) : null,
           equipment,
           trackReps: metrics.has("reps"),
@@ -214,11 +294,29 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
           variations: variations.length > 0 ? variations : null,
         };
         if (exercise) {
-          await updateExercise(exercise.id, input);
-          if (onUpdated) {
-            const updated = await getExerciseById(exercise.id);
-            if (updated) onUpdated(updated);
+          const deltaKg = input.defaultWeightKg - (exercise.defaultWeightKg ?? 0);
+          // Only relevant while the exercise still tracks weight — dropping the
+          // weight metric zeroes the default as a side effect, and re-expressing
+          // weights nobody will see is just noise.
+          const historyAtStake =
+            deltaKg !== 0 && metrics.has("weight") && hasWeightedHistory;
+          // Reachable when the default weight's VALUE was edited without the
+          // toggle moving, so no answer was captured. Same tray, asked here
+          // instead — nothing has been written yet, so answering resumes cleanly.
+          if (historyAtStake && historyChoice === null) {
+            setPrompt({
+              deltaKg,
+              newDefaultKg: input.defaultWeightKg,
+              fromSave: true,
+            });
+            return;
           }
+          await updateExercise(exercise.id, input);
+          if (historyAtStake && historyChoice) {
+            await adjustSetWeightsForDefaultChange(exercise.id, deltaKg);
+          }
+          const updated = await getExerciseById(exercise.id);
+          if (onUpdated && updated) onUpdated(updated);
           onClose();
         } else {
           const newId = await createExercise(input);
@@ -234,6 +332,15 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
         setError(e instanceof Error ? e.message : "Failed to save");
       }
     });
+  }
+
+  // Records the answer and closes the tray. Nothing is written here — the
+  // decision just rides along until Save, or resumes the save it interrupted.
+  function answerPrompt(apply: boolean) {
+    const resumeSave = prompt?.fromSave ?? false;
+    setApplyToHistory(apply);
+    setPrompt(null);
+    if (resumeSave) commit(apply);
   }
 
   return (
@@ -543,7 +650,7 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                 <Switch
                   id="ex-default-toggle"
                   checked={hasDefaultWeight}
-                  onCheckedChange={setHasDefaultWeight}
+                  onCheckedChange={handleDefaultWeightToggle}
                 />
               </div>
               {hasDefaultWeight && (
@@ -557,6 +664,26 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
                   onChange={(e) => setDefaultWeightKg(Number(e.target.value) || 0)}
                   placeholder="kg"
                 />
+              )}
+              {/* The tray's answer is held until Save, so say what's queued up.
+                  Hidden again if the value lands back on the saved default,
+                  where the answer would make no difference. */}
+              {applyToHistory !== null && hasWeightedHistory && pendingDeltaKg !== 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPrompt({
+                      deltaKg: pendingDeltaKg,
+                      newDefaultKg: pendingDefaultKg,
+                      fromSave: false,
+                    })
+                  }
+                  className="self-start text-xs text-muted-foreground underline underline-offset-2"
+                >
+                  {applyToHistory
+                    ? `Past sets will be adjusted when you save. Change`
+                    : `Past sets will be left as they are. Change`}
+                </button>
               )}
             </div>
           )}
@@ -614,6 +741,18 @@ export function ExerciseForm({ exercise, onClose, onCreated, onUpdated }: Props)
         </div>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
+
+      {prompt && exercise && weightedHistory && (
+        <DefaultWeightSheet
+          exerciseName={exercise.name}
+          setCount={weightedHistory.count}
+          deltaKg={prompt.deltaKg}
+          newDefaultKg={prompt.newDefaultKg}
+          latestWeightKg={weightedHistory.latestWeightKg}
+          busy={isPending}
+          onChoose={answerPrompt}
+        />
+      )}
     </div>
   );
 }

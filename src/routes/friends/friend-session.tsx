@@ -23,7 +23,8 @@ import { computePBsInOrder } from "@/lib/stats/set-pbs";
 import { computeSessionStats, type StatItem } from "@/lib/session-stats";
 import { computeExerciseBreakdown } from "@/lib/stats/exercise-breakdown";
 import { useUserFieldOptionsForUser } from "@/components/providers/user-field-options-provider";
-import { MuscleGroupsBody, MuscleLegend } from "@/components/stats/training-breakdown";
+import { MuscleLegend } from "@/components/stats/training-breakdown";
+import { SessionMuscleActivity } from "@/components/stats/session-muscle-activity";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -177,8 +178,8 @@ export function FriendSession() {
   const ownerId = data.state === "ready" ? data.workout.userId : null;
   const { muscleGroups } = useUserFieldOptionsForUser(ownerId);
 
-  const breakdown = useMemo(() => {
-    if (data.state !== "ready") return null;
+  const breakdownRows = useMemo(() => {
+    if (data.state !== "ready") return [];
     const rows: SetWithExerciseRow[] = [];
     const { workout } = data;
     for (const item of data.items) {
@@ -206,8 +207,13 @@ export function FriendSession() {
         }
       }
     }
-    return computeExerciseBreakdown(rows, muscleGroups);
-  }, [data, muscleGroups]);
+    return rows;
+  }, [data]);
+
+  const breakdown = useMemo(
+    () => computeExerciseBreakdown(breakdownRows, muscleGroups),
+    [breakdownRows, muscleGroups]
+  );
 
   useEffect(() => {
     if (!id || !UUID_RE.test(id)) {
@@ -345,7 +351,7 @@ export function FriendSession() {
         </div>
       )}
 
-      {items.length > 0 && breakdown && breakdown.totalExercises > 0 && (
+      {items.length > 0 && breakdown.totalExercises > 0 && (
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <button
             type="button"
@@ -354,7 +360,7 @@ export function FriendSession() {
             aria-expanded={breakdownOpen}
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Muscle groups
+              Muscle Activity
             </span>
             <div className="flex items-center gap-3">
               {breakdownOpen && <MuscleLegend size="sm" />}
@@ -367,7 +373,12 @@ export function FriendSession() {
           </button>
           {breakdownOpen && (
             <div className="px-4 pb-4">
-              <MuscleGroupsBody data={breakdown} />
+              <SessionMuscleActivity
+                rows={breakdownRows}
+                breakdown={breakdown}
+                muscleGroups={muscleGroups}
+                sex={author?.sex ?? "male"}
+              />
             </div>
           )}
         </div>
