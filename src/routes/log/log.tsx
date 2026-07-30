@@ -87,6 +87,7 @@ export function Log() {
             totalSets: w.totalSets,
             totalReps: w.totalReps,
             calories: w.calories,
+            durationSec: w.durationSec,
           }))}
           onDeleted={(id) =>
             setSessions((prev) => prev?.filter((s) => s.id !== id) ?? prev)

@@ -14,6 +14,7 @@ const profiles = new Table(
     avatar_url: column.text,
     bodyweight_kg: column.real,
     calorie_tracking_enabled: column.integer,
+    duration_tracking_enabled: column.integer,
     // 'male' | 'female' — which body silhouette the dashboard heatmap renders
     sex: column.text,
     created_at: column.text,
@@ -77,6 +78,10 @@ const workouts = new Table(
     // Whether the session note is visible to followers (boolean as 0/1).
     notes_public: column.integer,
     calories: column.integer,
+    // Total elapsed time for the whole session, in seconds. Entered by hand from
+    // the session header (gated on profiles.duration_tracking_enabled) — this is
+    // NOT a sum of the per-set `sets.duration_sec` values.
+    duration_sec: column.integer,
     created_at: column.text,
     updated_at: column.text,
   },

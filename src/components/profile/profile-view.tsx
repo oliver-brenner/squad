@@ -203,6 +203,7 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
                 totalSets: w.totalSets,
                 totalReps: w.totalReps,
                 calories: w.calories,
+                durationSec: w.durationSec,
               }))}
             />
           )}
@@ -220,6 +221,7 @@ export function ProfileView({ userId, backHref }: ProfileViewProps) {
               sessions={sessionAggregates}
               workoutDates={workoutDates}
               calorieTrackingEnabled={localProfile?.calorieTrackingEnabled ?? false}
+              durationTrackingEnabled={localProfile?.durationTrackingEnabled ?? false}
             />
           )}
         </section>

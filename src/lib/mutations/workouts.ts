@@ -274,6 +274,26 @@ export async function updateWorkoutCalories(
   );
 }
 
+// Session-level total time, entered as h/m/s from the session header and stored
+// as total seconds. Independent of the per-set `duration_sec` field — this is a
+// single elapsed total for the whole session. Capped at 24h.
+const updateWorkoutDurationSchema = z.object({
+  id: z.string().uuid(),
+  durationSec: z.number().int().min(0).max(86_400).nullable(),
+});
+
+export async function updateWorkoutDuration(
+  input: z.infer<typeof updateWorkoutDurationSchema>
+): Promise<void> {
+  const userId = await getCurrentUserId();
+  const parsed = updateWorkoutDurationSchema.parse(input);
+  const now = nowISO();
+  await powersync.execute(
+    `UPDATE workouts SET duration_sec = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+    [parsed.durationSec, now, parsed.id, userId]
+  );
+}
+
 const copyWorkoutSchema = z.object({
   sourceId: z.string().uuid(),
   name: z.string().trim().min(1).max(80),

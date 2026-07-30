@@ -136,7 +136,7 @@ bucket_definitions:
     data:
       - >-
         SELECT id, user_id, name, performed_on, session_type, calories,
-        created_at, updated_at, notes_for_followers as notes
+        duration_sec, created_at, updated_at, notes_for_followers as notes
         FROM workouts WHERE user_id = bucket.user_id
 
   # Followee sets — same privacy pattern as followee_workouts.
