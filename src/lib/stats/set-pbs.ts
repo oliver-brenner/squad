@@ -13,7 +13,7 @@ export const PB_LABEL: Record<PBType, string> = {
 
 type PBInputSet = Pick<
   WorkoutSet,
-  "reps" | "weightKg" | "bodyweightKg" | "distanceKm" | "durationSec" | "speedMs"
+  "reps" | "weightKg" | "bodyweightKg" | "distanceKm" | "durationSec" | "speedMs" | "variation"
 >;
 
 function effectiveReps(s: PBInputSet, ex: Exercise): number | null {
@@ -40,11 +40,39 @@ export function setVolumeKg(s: PBInputSet, ex: Exercise): number | null {
   return w * r;
 }
 
+// Running-max state for one variation (or the base exercise, key `""`). Each
+// variation is a distinct thing to beat a record on — a heavier "close grip"
+// bench doesn't touch the plain bench's rep max.
+type PBRunningState = {
+  maxWeightKg: number | null;
+  maxRepsAtMaxWeight: number | null;
+  maxVolume: number | null;
+  maxDistance: number | null;
+  maxDurationSec: number | null;
+  maxSpeedMs: number | null;
+  maxReps: number | null;
+};
+
+function createPBRunningState(): PBRunningState {
+  return {
+    maxWeightKg: null,
+    maxRepsAtMaxWeight: null,
+    maxVolume: null,
+    maxDistance: null,
+    maxDurationSec: null,
+    maxSpeedMs: null,
+    maxReps: null,
+  };
+}
+
 // Given an ordered list of sets (oldest → newest), returns a parallel array of
 // PB types where EVERY set that established a new max at its point in time is
 // flagged — even if a later set has since beaten it. Used by the feed: a PB
 // hit on a session is a historical achievement and shouldn't disappear just
 // because the user later topped it.
+//
+// Records are tracked separately PER VARIATION (`s.variation`, `""` for none)
+// — each variation competes only against its own history.
 export function computeHistoricalPBs<T extends PBInputSet>(
   sets: T[],
   exercise: Exercise,
@@ -59,13 +87,16 @@ export function computeHistoricalPBs<T extends PBInputSet>(
   const tracksTime = exercise.trackTime;
   const tracksSpeed = exercise.trackSpeed;
 
-  let maxWeightKg: number | null = null;
-  let maxRepsAtMaxWeight: number | null = null;
-  let maxVolume: number | null = null;
-  let maxDistance: number | null = null;
-  let maxDurationSec: number | null = null;
-  let maxSpeedMs: number | null = null;
-  let maxReps: number | null = null;
+  const statesByVariation = new Map<string, PBRunningState>();
+  function stateFor(s: T): PBRunningState {
+    const key = s.variation ?? "";
+    let st = statesByVariation.get(key);
+    if (!st) {
+      st = createPBRunningState();
+      statesByVariation.set(key, st);
+    }
+    return st;
+  }
 
   const beats = (a: number, b: number | null) =>
     b == null || (includeTies ? a >= b : a > b);
@@ -76,6 +107,7 @@ export function computeHistoricalPBs<T extends PBInputSet>(
   // to the most recent holder via the newest-wins pass in computePBsInOrder.
   return sets.map((s) => {
     const pbs: PBType[] = [];
+    const state = stateFor(s);
 
     // Push order mirrors the metric display order on a set row (weight → reps
     // → time → distance) so badges read left-to-right in the same direction.
@@ -86,28 +118,30 @@ export function computeHistoricalPBs<T extends PBInputSet>(
       const w = effectiveWeightKg(s, exercise);
       const r = effectiveReps(s, exercise);
       if (w != null && r != null) {
-        const heavier = maxWeightKg == null || w > maxWeightKg;
+        const heavier = state.maxWeightKg == null || w > state.maxWeightKg;
         const sameWeightMoreReps =
-          maxWeightKg != null && w === maxWeightKg && beats(r, maxRepsAtMaxWeight);
+          state.maxWeightKg != null &&
+          w === state.maxWeightKg &&
+          beats(r, state.maxRepsAtMaxWeight);
         const tie =
-          maxWeightKg != null && w === maxWeightKg && r === maxRepsAtMaxWeight;
+          state.maxWeightKg != null && w === state.maxWeightKg && r === state.maxRepsAtMaxWeight;
 
-        if (beats(w, maxWeightKg) || sameWeightMoreReps || (includeTies && tie)) {
+        if (beats(w, state.maxWeightKg) || sameWeightMoreReps || (includeTies && tie)) {
           pbs.push("RM");
         }
         // Advance the frontier: a heavier weight resets the reps record to this
         // set's reps; an equal-weight set only bumps it when reps increase.
         if (heavier) {
-          maxWeightKg = w;
-          maxRepsAtMaxWeight = r;
-        } else if (w === maxWeightKg && r > (maxRepsAtMaxWeight ?? 0)) {
-          maxRepsAtMaxWeight = r;
+          state.maxWeightKg = w;
+          state.maxRepsAtMaxWeight = r;
+        } else if (w === state.maxWeightKg && r > (state.maxRepsAtMaxWeight ?? 0)) {
+          state.maxRepsAtMaxWeight = r;
         }
       }
       const vol = setVolumeKg(s, exercise);
-      if (vol != null && beats(vol, maxVolume)) {
+      if (vol != null && beats(vol, state.maxVolume)) {
         pbs.push("Volume");
-        maxVolume = vol;
+        state.maxVolume = vol;
       }
     }
 
@@ -126,9 +160,9 @@ export function computeHistoricalPBs<T extends PBInputSet>(
         s.distanceKm == null &&
         s.durationSec == null &&
         s.speedMs == null;
-      if (setIsPureReps && beats(r, maxReps)) {
+      if (setIsPureReps && beats(r, state.maxReps)) {
         pbs.push("RM");
-        maxReps = r;
+        state.maxReps = r;
       }
     }
 
@@ -137,23 +171,23 @@ export function computeHistoricalPBs<T extends PBInputSet>(
     // — distance isn't required, so a slow long run can be a Time PB even
     // when distance was beaten on a different (faster) day.
     if (tracksTime && s.durationSec != null) {
-      if (beats(s.durationSec, maxDurationSec)) {
+      if (beats(s.durationSec, state.maxDurationSec)) {
         pbs.push("Time");
-        maxDurationSec = s.durationSec;
+        state.maxDurationSec = s.durationSec;
       }
     }
 
     if (tracksSpeed && s.speedMs != null) {
-      if (beats(s.speedMs, maxSpeedMs)) {
+      if (beats(s.speedMs, state.maxSpeedMs)) {
         pbs.push("Speed");
-        maxSpeedMs = s.speedMs;
+        state.maxSpeedMs = s.speedMs;
       }
     }
 
     if (tracksDistance && s.distanceKm != null) {
-      if (beats(s.distanceKm, maxDistance)) {
+      if (beats(s.distanceKm, state.maxDistance)) {
         pbs.push("Distance");
-        maxDistance = s.distanceKm;
+        state.maxDistance = s.distanceKm;
       }
     }
 
@@ -165,16 +199,22 @@ export function computeHistoricalPBs<T extends PBInputSet>(
 // any earlier PB whose record has since been beaten. The result marks only the
 // CURRENT PB-holder per type — used in the exercise history view and the
 // read-only session view so a badge means "this is still their record."
+//
+// Dedup keys on (variation, type): each variation holds its own record per
+// type, so a PB on one variation must not strip the flag off another
+// variation's still-standing record.
 export function computePBsInOrder<T extends PBInputSet>(
   sets: T[],
   exercise: Exercise
 ): PBType[][] {
   const awarded = computeHistoricalPBs(sets, exercise);
-  const seen = new Set<PBType>();
+  const seen = new Set<string>();
   for (let i = awarded.length - 1; i >= 0; i--) {
+    const variationKey = sets[i].variation ?? "";
     awarded[i] = awarded[i].filter((t) => {
-      if (seen.has(t)) return false;
-      seen.add(t);
+      const key = `${variationKey}::${t}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   }

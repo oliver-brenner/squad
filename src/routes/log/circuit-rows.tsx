@@ -474,10 +474,12 @@ function CircuitExerciseRow({
 
   const pbs = useMemo<PBType[]>(() => {
     if (priorSetsAsc === null || !set) return [];
-    const combined = [...priorSetsAsc, set];
+    // `set` carries no per-set variation (it's chosen once for the whole
+    // group), so stamp the group's current selection onto it before scoring.
+    const combined = [...priorSetsAsc, { ...set, variation: exGroup.variation }];
     const all = computePBsInOrder(combined, exGroup.exercise);
     return all[all.length - 1] ?? [];
-  }, [priorSetsAsc, set, exGroup.exercise]);
+  }, [priorSetsAsc, set, exGroup.exercise, exGroup.variation]);
   // Templates carry no set values (legacy ones may still hold some until the
   // template is next saved — they're ignored here and by applyTemplate).
   const hasData = !isTemplate && !!set && !isBlankSet(set);
@@ -615,7 +617,7 @@ function CircuitExerciseRow({
             exerciseId={exGroup.exerciseId}
             exercise={exGroup.exercise}
             excludeWorkoutId={workoutId}
-            futureSets={exGroup.sets}
+            futureSets={exGroup.sets.map((s) => ({ ...s, variation: exGroup.variation }))}
           />
         </div>
       )}

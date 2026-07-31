@@ -100,6 +100,7 @@ type FutureSet = {
   distanceKm: number | null;
   durationSec: number | null;
   speedMs: number | null;
+  variation: string | null;
 };
 
 interface Props {
@@ -130,10 +131,15 @@ export function ExerciseHistoryList({
     getExerciseHistory(exerciseId, excludeWorkoutId).then(setEntries);
   }, [exerciseId, excludeWorkoutId, initialEntries]);
 
-  const { pbsBySetId, currentPBs } = useMemo(() => {
+  type PBRecord = { set: WorkoutSet | FutureSet; date: string | null };
+
+  const { pbsBySetId, currentPBsByVariation } = useMemo(() => {
     const map = new Map<string, PBType[]>();
-    const current: Partial<Record<PBType, { set: FutureSet; date: string | null }>> = {};
-    if (!entries || entries.length === 0) return { pbsBySetId: map, currentPBs: current };
+    // Keyed by variation ("" = no variation attached), each holding at most
+    // one current record per type — variations don't share records with each
+    // other or with the base (no-variation) history.
+    const currentByVariation = new Map<string, Partial<Record<PBType, PBRecord>>>();
+    if (!entries || entries.length === 0) return { pbsBySetId: map, currentPBsByVariation: currentByVariation };
     // entries are newest-first; flatten in chronological order (oldest → newest)
     // so the running-max logic in computePBsInOrder marks the right sets.
     const flat: { set: WorkoutSet; date: string }[] = [];
@@ -153,38 +159,65 @@ export function ExerciseHistoryList({
     flat.forEach((f, i) => {
       if (pbs[i].length > 0) map.set(f.set.id, pbs[i]);
     });
-    // computePBsInOrder already resolves ties newest-wins, so at most one
-    // set per type survives in `pbs` — that set is the current record holder.
+    // computePBsInOrder already resolves ties newest-wins per (variation, type),
+    // so at most one set per (variation, type) survives — that set is the
+    // current record holder for that variation.
     pbs.forEach((types, i) => {
-      for (const t of types) current[t] = { set: combined[i].set, date: combined[i].date };
+      if (types.length === 0) return;
+      const variationKey = combined[i].set.variation ?? "";
+      let group = currentByVariation.get(variationKey);
+      if (!group) {
+        group = {};
+        currentByVariation.set(variationKey, group);
+      }
+      for (const t of types) group[t] = { set: combined[i].set, date: combined[i].date };
     });
-    return { pbsBySetId: map, currentPBs: current };
+    return { pbsBySetId: map, currentPBsByVariation: currentByVariation };
   }, [entries, exercise, futureSets]);
 
-  const hasSummary = PB_SUMMARY_ORDER.some((t) => currentPBs[t]);
+  // Base (no-variation) group first, then each of the exercise's variations in
+  // their configured order — so a variant-less history still shows its own
+  // section even once the exercise has variants attached.
+  const summaryGroups = [
+    { key: "", label: null as string | null },
+    ...(exercise.variations ?? []).map((v) => ({ key: v.key, label: v.label })),
+  ]
+    .map((g) => ({ ...g, pbs: currentPBsByVariation.get(g.key) }))
+    .filter((g) => g.pbs && PB_SUMMARY_ORDER.some((t) => g.pbs![t]));
+  const hasVariants = (exercise.variations ?? []).length > 0;
+  const hasSummary = summaryGroups.length > 0;
 
   return (
     <div className="flex flex-col">
       <div className="overflow-y-auto max-h-72">
         {hasSummary && (
-          <div className="px-3 py-2.5 border-b border-border flex flex-col gap-1.5">
+          <div className="px-3 py-2.5 border-b border-border flex flex-col gap-2">
             <span className="text-xs font-medium text-muted-foreground">PBs</span>
-            <div className="flex flex-col gap-1">
-              {PB_SUMMARY_ORDER.map((t) => {
-                const rec = currentPBs[t];
-                if (!rec) return null;
-                return (
-                  <div key={t} className="flex items-baseline gap-2 text-sm">
-                    <span className="text-muted-foreground text-xs w-10 shrink-0">
-                      {PB_LABEL[t]}
+            <div className="flex flex-col gap-2">
+              {summaryGroups.map((g) => (
+                <div key={g.key || "__base__"} className="flex flex-col gap-1">
+                  {hasVariants && (
+                    <span className="text-xs font-medium text-primary">
+                      {g.label ?? "No variation"}
                     </span>
-                    <span className="flex-1">{formatPBValue(t, rec.set, exercise)}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {rec.date ? formatDate(rec.date) : "This session"}
-                    </span>
-                  </div>
-                );
-              })}
+                  )}
+                  {PB_SUMMARY_ORDER.map((t) => {
+                    const rec = g.pbs![t];
+                    if (!rec) return null;
+                    return (
+                      <div key={t} className="flex items-baseline gap-2 text-sm">
+                        <span className="text-muted-foreground text-xs w-10 shrink-0">
+                          {PB_LABEL[t]}
+                        </span>
+                        <span className="flex-1">{formatPBValue(t, rec.set, exercise)}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {rec.date ? formatDate(rec.date) : "This session"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
         )}
