@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { format, parseISO, startOfWeek } from "date-fns";
 import { Plus, Trophy } from "lucide-react";
 import { PBBadges, NewBadge } from "@/components/pb-badge";
+import { SessionGuests } from "@/components/session-guests";
 import { sessionTypeColor } from "@/lib/session-type-color";
 import type { FeedSessionEntry } from "@/lib/db/queries";
 
@@ -65,7 +66,10 @@ export function FeedSessionCard({ entry, isMine }: Props) {
             </div>
           )}
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{author}</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="truncate text-sm font-medium">{author}</span>
+              <SessionGuests workoutId={entry.workoutId} variant="card" cardSize="sm" />
+            </div>
             <div className="truncate text-xs text-muted-foreground">{dateLabel}</div>
           </div>
         </Link>

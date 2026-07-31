@@ -186,10 +186,15 @@ export function SetRows({
 
   const pbsByCurrentSetIndex = useMemo<PBType[][]>(() => {
     if (priorSetsAsc === null) return displaySets.map(() => []);
-    const combined = [...priorSetsAsc, ...displaySets];
+    // displaySets carry no per-set variation (it's chosen once for the whole
+    // group), so stamp the group's current selection onto each before scoring.
+    const combined = [
+      ...priorSetsAsc,
+      ...displaySets.map((s) => ({ ...s, variation: group.variation })),
+    ];
     const all = computePBsInOrder(combined, group.exercise);
     return all.slice(priorSetsAsc.length);
-  }, [priorSetsAsc, displaySets, group.exercise]);
+  }, [priorSetsAsc, displaySets, group.exercise, group.variation]);
 
   // The greyed set shown below the logged sets, waiting to be tapped. It
   // duplicates the last logged set, or — before anything is logged — the first
@@ -381,7 +386,7 @@ export function SetRows({
                 exerciseId={group.exerciseId}
                 exercise={ex}
                 excludeWorkoutId={workoutId}
-                futureSets={displaySets}
+                futureSets={displaySets.map((s) => ({ ...s, variation: group.variation }))}
               />
             </div>
           )}

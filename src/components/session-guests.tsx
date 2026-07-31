@@ -78,9 +78,19 @@ type Props = {
   editable?: boolean;
   // Called whenever the resolved guest count changes (useful for parent layout).
   onGuestCountChange?: (count: number) => void;
+  // Card variant only: bump avatar + text size when the guest cue needs to
+  // read alongside larger surrounding text (e.g. next to a feed username).
+  cardSize?: "xs" | "sm";
 };
 
-export function SessionGuests({ workoutId, variant, backHref, editable = false, onGuestCountChange }: Props) {
+export function SessionGuests({
+  workoutId,
+  variant,
+  backHref,
+  editable = false,
+  onGuestCountChange,
+  cardSize = "xs",
+}: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [, startTransition] = useTransition();
   const { data: rows = [] } = useQuery<GuestRow>(
@@ -142,12 +152,14 @@ export function SessionGuests({ workoutId, variant, backHref, editable = false, 
 
   if (variant === "card") {
     if (guests.length === 0) return null;
+    const textCls = cardSize === "sm" ? "text-xs" : "text-[11px]";
+    const iconCls = cardSize === "sm" ? "h-3.5 w-3.5" : "h-3 w-3";
     return (
-      <div className="flex min-w-0 items-center gap-1 py-1 text-[11px] text-muted-foreground">
-        <Plus className="h-3 w-3 flex-shrink-0" />
+      <div className={`flex min-w-0 items-center gap-1 py-1 ${textCls} text-muted-foreground`}>
+        <Plus className={`${iconCls} flex-shrink-0`} />
         <div className="flex -space-x-1 flex-shrink-0">
           {guests.map((g) => (
-            <Avatar key={g.id} name={g.firstName} avatarUrl={g.avatarUrl} size="xs" ring />
+            <Avatar key={g.id} name={g.firstName} avatarUrl={g.avatarUrl} size={cardSize} ring />
           ))}
         </div>
         <span className="truncate">{guests.map((g) => g.firstName).join(", ")}</span>

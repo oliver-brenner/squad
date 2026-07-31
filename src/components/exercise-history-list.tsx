@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { getExerciseHistory } from "@/lib/db/queries";
 import type { Exercise, WorkoutSet, ExerciseHistoryEntry } from "@/lib/db/types";
-import { computePBsInOrder, type PBType } from "@/lib/stats/set-pbs";
+import { computePBsInOrder, PB_LABEL, type PBType } from "@/lib/stats/set-pbs";
 import { formatDuration, formatWeightPart, mToHeight, type HeightUnit } from "@/lib/set-format";
 import { PBBadges } from "@/components/pb-badge";
+
+// Order the summary reads in: weight-based records first, then the
+// time/distance-based ones — mirrors the metric display order elsewhere.
+const PB_SUMMARY_ORDER: PBType[] = ["RM", "Volume", "Distance", "Time", "Speed"];
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
@@ -52,6 +56,38 @@ function toDisplayDist(km: number, unit: "m" | "km" | "yd"): number {
   return km;
 }
 
+// Renders the value a PB record actually holds — separate from `formatSet`
+// since a summary line shows only the metric that earned the record, not
+// every field logged against the set.
+function formatPBValue(type: PBType, s: FutureSet, ex: Exercise): string {
+  switch (type) {
+    case "RM": {
+      const weightPart = formatWeightPart(s, ex);
+      const reps = s.reps != null ? `${s.reps} reps${ex.doubleReps ? " x2" : ""}` : null;
+      if (weightPart && reps) return `${weightPart} · ${reps}`;
+      return weightPart ?? reps ?? "—";
+    }
+    case "Volume": {
+      const weightPart = formatWeightPart(s, ex);
+      const reps = s.reps != null ? `${s.reps} reps${ex.doubleReps ? " x2" : ""}` : null;
+      if (weightPart && reps) return `${weightPart} · ${reps}`;
+      return weightPart ?? reps ?? "—";
+    }
+    case "Distance": {
+      if (s.distanceKm == null) return "—";
+      const unit = (ex.distanceUnit ?? "km") as "m" | "km" | "yd";
+      return `${toDisplayDist(s.distanceKm, unit)} ${unit}`;
+    }
+    case "Time":
+      return s.durationSec != null ? formatDuration(s.durationSec) : "—";
+    case "Speed": {
+      if (s.speedMs == null) return "—";
+      const isKmh = (ex.speedUnit ?? "kmh") === "kmh";
+      return isKmh ? `${+(s.speedMs * 3.6).toFixed(1)} km/h` : `${s.speedMs} m/s`;
+    }
+  }
+}
+
 // `futureSets` represents sets that are chronologically newer than the rows
 // rendered here (e.g. sets in the active workout, when this list is shown via
 // `excludeWorkoutId`). They aren't displayed, but they ARE folded into PB
@@ -64,6 +100,7 @@ type FutureSet = {
   distanceKm: number | null;
   durationSec: number | null;
   speedMs: number | null;
+  variation: string | null;
 };
 
 interface Props {
@@ -94,28 +131,96 @@ export function ExerciseHistoryList({
     getExerciseHistory(exerciseId, excludeWorkoutId).then(setEntries);
   }, [exerciseId, excludeWorkoutId, initialEntries]);
 
-  const pbsBySetId = useMemo(() => {
+  type PBRecord = { set: WorkoutSet | FutureSet; date: string | null };
+
+  const { pbsBySetId, currentPBsByVariation } = useMemo(() => {
     const map = new Map<string, PBType[]>();
-    if (!entries || entries.length === 0) return map;
+    // Keyed by variation ("" = no variation attached), each holding at most
+    // one current record per type — variations don't share records with each
+    // other or with the base (no-variation) history.
+    const currentByVariation = new Map<string, Partial<Record<PBType, PBRecord>>>();
+    if (!entries || entries.length === 0) return { pbsBySetId: map, currentPBsByVariation: currentByVariation };
     // entries are newest-first; flatten in chronological order (oldest → newest)
     // so the running-max logic in computePBsInOrder marks the right sets.
-    const flat: WorkoutSet[] = [];
+    const flat: { set: WorkoutSet; date: string }[] = [];
     for (let i = entries.length - 1; i >= 0; i--) {
-      for (const s of entries[i].sets) flat.push(s);
+      for (const s of entries[i].sets) flat.push({ set: s, date: entries[i].performedOn });
     }
     // Append future (e.g. active-session) sets so they can claim the latest PB
     // and supersede earlier historical holders. They don't get rendered here.
-    const combined = futureSets && futureSets.length > 0 ? [...flat, ...futureSets] : flat;
-    const pbs = computePBsInOrder(combined, exercise);
-    flat.forEach((s, i) => {
-      if (pbs[i].length > 0) map.set(s.id, pbs[i]);
+    const combined: { set: WorkoutSet | FutureSet; date: string | null }[] =
+      futureSets && futureSets.length > 0
+        ? [...flat, ...futureSets.map((s) => ({ set: s, date: null }))]
+        : flat;
+    const pbs = computePBsInOrder(
+      combined.map((c) => c.set),
+      exercise
+    );
+    flat.forEach((f, i) => {
+      if (pbs[i].length > 0) map.set(f.set.id, pbs[i]);
     });
-    return map;
+    // computePBsInOrder already resolves ties newest-wins per (variation, type),
+    // so at most one set per (variation, type) survives — that set is the
+    // current record holder for that variation.
+    pbs.forEach((types, i) => {
+      if (types.length === 0) return;
+      const variationKey = combined[i].set.variation ?? "";
+      let group = currentByVariation.get(variationKey);
+      if (!group) {
+        group = {};
+        currentByVariation.set(variationKey, group);
+      }
+      for (const t of types) group[t] = { set: combined[i].set, date: combined[i].date };
+    });
+    return { pbsBySetId: map, currentPBsByVariation: currentByVariation };
   }, [entries, exercise, futureSets]);
+
+  // Base (no-variation) group first, then each of the exercise's variations in
+  // their configured order — so a variant-less history still shows its own
+  // section even once the exercise has variants attached.
+  const summaryGroups = [
+    { key: "", label: null as string | null },
+    ...(exercise.variations ?? []).map((v) => ({ key: v.key, label: v.label })),
+  ]
+    .map((g) => ({ ...g, pbs: currentPBsByVariation.get(g.key) }))
+    .filter((g) => g.pbs && PB_SUMMARY_ORDER.some((t) => g.pbs![t]));
+  const hasVariants = (exercise.variations ?? []).length > 0;
+  const hasSummary = summaryGroups.length > 0;
 
   return (
     <div className="flex flex-col">
       <div className="overflow-y-auto max-h-72">
+        {hasSummary && (
+          <div className="px-3 py-2.5 border-b border-border flex flex-col gap-2">
+            <span className="text-xs font-medium text-muted-foreground">PBs</span>
+            <div className="flex flex-col gap-2">
+              {summaryGroups.map((g) => (
+                <div key={g.key || "__base__"} className="flex flex-col gap-1">
+                  {hasVariants && (
+                    <span className="text-xs font-medium text-primary">
+                      {g.label ?? "No variation"}
+                    </span>
+                  )}
+                  {PB_SUMMARY_ORDER.map((t) => {
+                    const rec = g.pbs![t];
+                    if (!rec) return null;
+                    return (
+                      <div key={t} className="flex items-baseline gap-2 text-sm">
+                        <span className="text-muted-foreground text-xs w-10 shrink-0">
+                          {PB_LABEL[t]}
+                        </span>
+                        <span className="flex-1">{formatPBValue(t, rec.set, exercise)}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {rec.date ? formatDate(rec.date) : "This session"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {entries === null ? (
           <p className="text-sm text-muted-foreground text-center py-6">Loading…</p>
         ) : entries.length === 0 ? (
