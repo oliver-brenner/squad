@@ -580,19 +580,34 @@ function WorkoutEditor({
   }
 
   // The greyed "ghost set" is a live-logging aid, so it only appears in the
-  // session currently being logged (the most recent one) — but within that
-  // session every exercise gets one, in the same "repeat the last set" shape.
-  //
-  // There used to be a boundary here: an exercise counted as "finished" once
-  // any of its sets held data, and only the last such exercise (plus anything
-  // after it) kept a ghost. That reads sets as a proxy for "the user logged
-  // this", which templates break — applyTemplate writes the skeleton's reps and
-  // weights straight into `sets`, so every template-loaded exercise looked
-  // already-logged and lost its ghost, while a freshly added exercise (blank
-  // anchor set) kept one. Nothing distinguishes prefilled sets from logged ones
-  // once they're in the table, so the boundary is gone and the ghost is simply
-  // always available while logging the current session.
-  const showGhostFor = () => isMostRecent;
+  // session currently being logged (the most recent one). Within that
+  // session, only one exercise is "current" at a time: the ghost shows on the
+  // current exercise and everything after it, but not on anything before —
+  // so filling in an exercise's sets doesn't hide its own ghost (that's how
+  // you log another set), but moving on to the next exercise does. The
+  // current exercise is the last standalone exercise (in session order) that
+  // already has a real (non-blank) set; before anything is logged, that's
+  // none, so every exercise counts as "current or after" and gets a ghost.
+  // Overriding that boundary: an exercise with no sets logged yet always gets
+  // a ghost regardless of position, so skipping ahead and coming back to a
+  // not-yet-started exercise still offers one.
+  // Circuits are excluded from the ghost feature entirely (see CircuitRows'
+  // `showGhost={false}` below) and from this boundary calculation, so a
+  // circuit's contents don't advance or block the standalone exercises' ghosts.
+  const standaloneGroupKeys = items
+    .filter((item): item is ExerciseGroup => !isCircuitGroup(item))
+    .map((item) => item.groupKey);
+  let ghostBoundaryIndex = -1;
+  items.forEach((item) => {
+    if (isCircuitGroup(item)) return;
+    if (item.sets.some((s) => !isBlankSet(s))) {
+      ghostBoundaryIndex = standaloneGroupKeys.indexOf(item.groupKey);
+    }
+  });
+  const showGhostFor = (item: ExerciseGroup) =>
+    isMostRecent &&
+    (standaloneGroupKeys.indexOf(item.groupKey) >= ghostBoundaryIndex ||
+      !item.sets.some((s) => !isBlankSet(s)));
 
   const addButtons = (
     <div className="flex gap-2">
@@ -820,14 +835,12 @@ function WorkoutEditor({
           strategy={verticalListSortingStrategy}
         >
           {items.map((item) => {
-            const showGhost = showGhostFor();
             if (isCircuitGroup(item)) {
               return (
                 <CircuitRows
                   key={item.groupKey}
                   circuit={item}
                   workoutId={workout.id}
-                  showGhost={showGhost}
                   onUpdate={(next) => updateItem(item.groupKey, () => next)}
                   onRemove={() => removeItem(item.groupKey)}
                   onDuplicate={() => duplicateItem(item.groupKey)}
@@ -847,7 +860,7 @@ function WorkoutEditor({
                 key={item.groupKey}
                 group={item as ExerciseGroup}
                 workoutId={workout.id}
-                showGhost={showGhost}
+                showGhost={showGhostFor(item as ExerciseGroup)}
                 onUpdate={(next) => updateItem(item.groupKey, () => next)}
                 onRemove={() => removeItem(item.groupKey)}
                 onDuplicate={() => duplicateItem(item.groupKey)}

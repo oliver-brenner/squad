@@ -28,9 +28,6 @@ interface Props {
   onEditExercise: (exercise: Exercise) => void;
   // See SetRows: "template" mode drops history-driven prefill/PBs/history list.
   mode?: "workout" | "template";
-  // Show greyed "ghost" sets on this circuit's exercises. Only true for the
-  // active entry of the most recent session.
-  showGhost?: boolean;
 }
 
 export function CircuitRows({
@@ -42,7 +39,6 @@ export function CircuitRows({
   onAddExercise,
   onEditExercise,
   mode = "workout",
-  showGhost = false,
 }: Props) {
   const isTemplate = mode === "template";
   const timer = useTimer();
@@ -53,9 +49,9 @@ export function CircuitRows({
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
   // Cache of the previous session's first set per exerciseId, populated as
-  // exercises are discovered. Drives the greyed "ghost" suggestion shown for a
-  // circuit exercise that hasn't been logged yet (tap to harden) and the
-  // suggestion placeholders when the tray is opened for manual entry. Held in a
+  // exercises are discovered. Drives the suggestion placeholders shown when
+  // the tray is opened for manual entry (circuit exercises don't get the
+  // tap-to-harden "ghost" row — see SetRows for that feature). Held in a
   // ref (fetch-dedupe by key); `cacheVersion` re-renders once values land.
   const lastByExerciseRef = useRef<Map<string, DraftSet>>(new Map());
   const [, bumpCache] = useState(0);
@@ -143,21 +139,6 @@ export function CircuitRows({
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
     setActiveTray({ exIdx, draft, suggestion: isBlankSet(draft) ? cached : null });
-  }
-
-  // One-tap harden of the greyed ghost: copy the previous session's set into
-  // this circuit exercise's single set.
-  function hardenSet(exIdx: number) {
-    const eg = circuit.exercises[exIdx];
-    const cached = lastByExerciseRef.current.get(eg.exerciseId);
-    if (!cached || isBlankSet(cached)) return;
-    const nextExercises = circuit.exercises.map((e, i) =>
-      i === exIdx ? { ...e, sets: [{ ...cached, id: undefined }] } : e
-    );
-    onUpdate({ ...circuit, exercises: nextExercises });
-    if (!isTemplate && eg.exercise.trackRest && cached.restSec != null) {
-      timer.startRest(cached.restSec);
-    }
   }
 
   function confirmSetTray(draft: DraftSet) {
@@ -295,10 +276,7 @@ export function CircuitRows({
                   exGroup={eg}
                   workoutId={workoutId}
                   mode={mode}
-                  ghostEnabled={showGhost}
-                  suggestion={lastByExerciseRef.current.get(eg.exerciseId) ?? null}
                   onClick={() => openSetTray(i)}
-                  onHarden={() => hardenSet(i)}
                   onRemove={() => removeExercise(i)}
                   onDuplicate={() => duplicateExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
@@ -402,10 +380,7 @@ function CircuitExerciseRow({
   exGroup,
   workoutId,
   mode = "workout",
-  ghostEnabled,
-  suggestion,
   onClick,
-  onHarden,
   onRemove,
   onDuplicate,
   onEdit,
@@ -414,10 +389,7 @@ function CircuitExerciseRow({
   exGroup: ExerciseGroup;
   workoutId: string;
   mode?: "workout" | "template";
-  ghostEnabled: boolean;
-  suggestion: DraftSet | null;
   onClick: () => void;
-  onHarden: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
@@ -483,10 +455,6 @@ function CircuitExerciseRow({
   // Templates carry no set values (legacy ones may still hold some until the
   // template is next saved — they're ignored here and by applyTemplate).
   const hasData = !isTemplate && !!set && !isBlankSet(set);
-  // Before anything is logged, show the previous session's set as a greyed
-  // ghost the user taps to harden. None in templates or without history.
-  const showGhost =
-    ghostEnabled && !isTemplate && !hasData && !!suggestion && !isBlankSet(suggestion);
 
   return (
     <>
@@ -557,17 +525,12 @@ function CircuitExerciseRow({
             mt-2) matches a normal card. The flex-1 wrapper is flex so its
             content has no inline line-box leading. The chevron stays centred on
             the set-detail line; when there's no set detail (a fresh exercise
-            with no data or suggestion) min-h-9 keeps the row tall enough for
-            the chevron alone. hasData and the ghost suggestion are mutually
-            exclusive (ghost requires !hasData). */}
-        {(hasData || (showGhost && suggestion) || !isTemplate) && (
-          <div
-            className={`relative flex items-center mt-2 ${
-              hasData || (showGhost && suggestion) ? "" : "min-h-9"
-            }`}
-          >
+            with no data yet) min-h-9 keeps the row tall enough for the
+            chevron alone. */}
+        {(hasData || !isTemplate) && (
+          <div className={`relative flex items-center mt-2 ${hasData ? "" : "min-h-9"}`}>
             <div className={`flex-1 min-w-0 flex ${!isTemplate ? "pr-9" : ""}`}>
-              {hasData ? (
+              {hasData && (
                 <button
                   type="button"
                   onClick={onClick}
@@ -576,19 +539,6 @@ function CircuitExerciseRow({
                   <span>{formatCircuitSetSummary(set, exGroup)}</span>
                   <PBBadges types={pbs} />
                 </button>
-              ) : (
-                showGhost &&
-                suggestion && (
-                  <button
-                    type="button"
-                    onClick={onHarden}
-                    aria-label={`Log ${exGroup.exercise.name} (repeat previous)`}
-                    className="text-left text-sm pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 opacity-45 hover:opacity-70 transition-opacity before:content-['•'] before:mr-2 before:text-muted-foreground"
-                  >
-                    <span>{formatCircuitSetSummary(suggestion, exGroup)}</span>
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                )
               )}
             </div>
             {!isTemplate && (
