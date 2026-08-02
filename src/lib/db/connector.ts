@@ -30,6 +30,34 @@ const ARRAY_COLUMNS: Record<string, readonly string[]> = {
   exercises: ["categories", "muscles", "secondary_muscles", "variations"],
 };
 
+// Last upload failure, kept in module state so the Settings → Sync panel can
+// show it without devtools. A stuck CRUD queue is invisible from the UI
+// otherwise: PowerSync retries the same failing op forever and every write
+// behind it in the FIFO queue is blocked.
+export type UploadFailure = {
+  table: string;
+  op: string;
+  message: string;
+  at: Date;
+};
+
+let lastUploadFailure: UploadFailure | null = null;
+const uploadFailureListeners = new Set<(f: UploadFailure | null) => void>();
+
+export function getLastUploadFailure(): UploadFailure | null {
+  return lastUploadFailure;
+}
+
+export function onUploadFailureChange(fn: (f: UploadFailure | null) => void): () => void {
+  uploadFailureListeners.add(fn);
+  return () => uploadFailureListeners.delete(fn);
+}
+
+function setLastUploadFailure(failure: UploadFailure | null): void {
+  lastUploadFailure = failure;
+  for (const fn of uploadFailureListeners) fn(failure);
+}
+
 function encodeForPostgres(table: string, data: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...data };
   for (const col of BOOLEAN_COLUMNS[table] ?? []) {
@@ -48,6 +76,17 @@ function encodeForPostgres(table: string, data: Record<string, unknown>): Record
     }
   }
   return out;
+}
+
+// PostgREST rejections arrive as { message, code, details, hint } rather than
+// Error instances, and the code (e.g. PGRST204 "column not found") is the part
+// that actually identifies the problem.
+function describeUploadError(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    const e = err as { message?: string; code?: string; details?: string };
+    return [e.code, e.message, e.details].filter(Boolean).join(" — ");
+  }
+  return String(err);
 }
 
 export class SupabaseConnector implements PowerSyncBackendConnector {
@@ -102,10 +141,17 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       } catch (err) {
         // Surface a clean error so PowerSync retries the whole batch.
         console.error(`[powersync] upload failed for ${op.op} on ${table}:`, err);
+        setLastUploadFailure({
+          table,
+          op: String(op.op),
+          message: describeUploadError(err),
+          at: new Date(),
+        });
         throw err;
       }
     }
 
+    setLastUploadFailure(null);
     await batch.complete();
   }
 }

@@ -175,6 +175,33 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, loading, connector, retryNonce]);
 
+  // iOS Safari freezes the tab (and the shared-sync worker's WebSocket) when
+  // the app is backgrounded or the phone locks. The socket is often dead on
+  // resume without the client noticing promptly, which shows up as a feed
+  // that's hours behind another device that stayed open. Nudge a reconnect
+  // whenever we come back to the foreground or regain the network and find
+  // ourselves disconnected — connect() is a no-op when already connected.
+  useEffect(() => {
+    if (!userId || !connector) return;
+
+    const nudge = () => {
+      if (document.visibilityState !== "visible") return;
+      if (powersync.connected) return;
+      powersync.connect(connector).catch((err) => {
+        console.warn("[powersync] reconnect nudge failed:", err);
+      });
+    };
+
+    document.addEventListener("visibilitychange", nudge);
+    window.addEventListener("online", nudge);
+    window.addEventListener("focus", nudge);
+    return () => {
+      document.removeEventListener("visibilitychange", nudge);
+      window.removeEventListener("online", nudge);
+      window.removeEventListener("focus", nudge);
+    };
+  }, [userId, connector]);
+
   if (error && !ready) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-4 p-6 text-center">
