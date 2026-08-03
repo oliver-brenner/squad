@@ -594,11 +594,20 @@ function WorkoutEditor({
   // Circuits are excluded from the ghost feature entirely (see CircuitRows'
   // `showGhost={false}` below) and from this boundary calculation, so a
   // circuit's contents don't advance or block the standalone exercises' ghosts.
-  const standaloneGroupKeys = items
+  //
+  // `items` is always in on-screen top-to-bottom order, but that's only the
+  // same as the chronological order the user works through exercises in when
+  // new entries are appended (the default). With "reverse exercise order" on,
+  // new entries are prepended (see addExercise), so the top of the list holds
+  // the most recently added exercise and session order runs bottom-to-top —
+  // walk `items` back-to-front there so the boundary still lands on the
+  // exercise actually being worked on rather than its mirror image.
+  const chronologicalItems = reversed ? [...items].reverse() : items;
+  const standaloneGroupKeys = chronologicalItems
     .filter((item): item is ExerciseGroup => !isCircuitGroup(item))
     .map((item) => item.groupKey);
   let ghostBoundaryIndex = -1;
-  items.forEach((item) => {
+  chronologicalItems.forEach((item) => {
     if (isCircuitGroup(item)) return;
     if (item.sets.some((s) => !isBlankSet(s))) {
       ghostBoundaryIndex = standaloneGroupKeys.indexOf(item.groupKey);
