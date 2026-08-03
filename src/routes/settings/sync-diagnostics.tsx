@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth/auth-context";
 import { powersync } from "@/lib/db/client";
+import { resetLocalDatabase } from "@/lib/db/reset";
 import {
   getLastUploadFailure,
   onUploadFailureChange,
@@ -72,6 +73,12 @@ export function SyncDiagnostics() {
   );
   const c = counts[0];
 
+  // A torn OPFS file (storage cleared or a tab killed mid-write) surfaces as
+  // "powersync_control: internal SQLite call returned CORRUPT" on the download
+  // path. No amount of reloading fixes it — the file has to be replaced — so
+  // name it plainly rather than showing the raw error.
+  const corrupt = /corrupt/i.test(status.dataFlowStatus.downloadError?.message ?? "");
+
   const connection = status.connected
     ? "Connected"
     : status.connecting
@@ -80,24 +87,10 @@ export function SyncDiagnostics() {
 
   async function resetLocalData() {
     setResetting(true);
-    try {
-      // Wipes local SQLite (including the CRUD queue) and re-downloads every
-      // bucket from scratch. Clearing the marker makes PowerSyncProvider treat
-      // the next load as a first sign-in, so it awaits connect + bootstrap
-      // before painting instead of rendering an empty DB.
-      await powersync.disconnectAndClear();
-      try {
-        localStorage.removeItem("squad.lastConnectedUserId.v2");
-      } catch {
-        // localStorage may be unavailable (private mode) — the reload below
-        // still re-runs the full connect path, just without the await.
-      }
-      window.location.reload();
-    } catch (err) {
-      console.error("[settings] local reset failed:", err);
-      setResetting(false);
-      setConfirmingReset(false);
-    }
+    // Wipes local SQLite (including the CRUD queue) and re-downloads every
+    // bucket on the next load. Falls back to deleting the OPFS files directly
+    // if PowerSync can't clear itself — see resetLocalDatabase.
+    await resetLocalDatabase();
   }
 
   return (
@@ -154,9 +147,13 @@ export function SyncDiagnostics() {
 
         {status.dataFlowStatus.downloadError && (
           <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-            <span className="font-medium">Download error</span>
+            <span className="font-medium">
+              {corrupt ? "Local database is corrupt" : "Download error"}
+            </span>
             <br />
-            {status.dataFlowStatus.downloadError.message}
+            {corrupt
+              ? "Nothing can be written to it, so no data will arrive until it's replaced. Re-sync from scratch below — it's a cache of the server, so there's nothing to lose."
+              : status.dataFlowStatus.downloadError.message}
           </p>
         )}
 
