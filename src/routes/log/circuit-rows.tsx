@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, ChevronUp, GripVertical, Minus, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Merge, Minus, MoreHorizontal, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ExerciseMetaTags } from "@/components/exercise-meta";
@@ -11,6 +11,16 @@ import { ExerciseHistoryList } from "@/components/exercise-history-list";
 import { PBBadges } from "@/components/pb-badge";
 import type { Exercise, WorkoutSet } from "@/lib/db/types";
 import { circuitBodyId, isBlankSet, type DraftSet, type ExerciseGroup, type CircuitGroup } from "./workout-editor-types";
+import {
+  canSplitRound,
+  expandAllRounds,
+  normalizeSegments,
+  roundValues,
+  segmentRanges,
+  segmentRounds,
+  setAllRoundValues,
+  setRoundValues,
+} from "./circuit-segments";
 import { SetTray } from "./set-rows";
 import { useTimer } from "@/components/providers/timer-provider";
 import { getExerciseHistory, getLastSessionSetsForExercise } from "@/lib/db/queries";
@@ -42,9 +52,24 @@ export function CircuitRows({
 }: Props) {
   const isTemplate = mode === "template";
   const timer = useTimer();
+  // `round` is the 0-based round the tray is editing, or null for "every round"
+  // (the default, unsplit case — see circuit-segments.ts).
   const [activeTray, setActiveTray] = useState<
-    { exIdx: number; draft: DraftSet; suggestion: DraftSet | null } | null
+    {
+      exIdx: number;
+      round: number | null;
+      draft: DraftSet;
+      suggestion: DraftSet | null;
+      // Whether this round has no logged values yet — drives the tray's
+      // "Add set" vs "Save changes" wording. Circuit sets often have no `id`
+      // even once they hold real values (ids are assigned on save, not on
+      // edit), so this can't be inferred from `draft.id` the way the
+      // non-circuit tray does.
+      isNew: boolean;
+    } | null
   >(null);
+  // Which exercise is asking "which round are you changing?" before its tray.
+  const [roundPickerFor, setRoundPickerFor] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -128,30 +153,83 @@ export function CircuitRows({
     id: circuitBodyId(circuit.groupKey),
   });
 
-  function openSetTray(exIdx: number) {
+  // Opens the set tray for one round of an exercise (null = all rounds at once).
+  function openSetTray(exIdx: number, round: number | null) {
     // A template is an exercise list only — nothing to log against a circuit
     // exercise until it becomes a session (see SetRows' `displaySets`).
     if (isTemplate) return;
     const eg = circuit.exercises[exIdx];
-    const existing = eg.sets[0];
+    const existing =
+      round == null ? eg.sets[0] : roundValues(normalizeSegments(eg.sets, circuit.rounds), round);
     const draft: DraftSet = existing ? { ...existing } : makeEmptyDraft(eg.exerciseId);
     const cached = lastByExerciseRef.current.get(eg.exerciseId) ?? null;
+    const isNew = isBlankSet(draft);
     // Only suggest when there's nothing in the draft yet — otherwise the tray
     // is editing an in-progress set.
-    setActiveTray({ exIdx, draft, suggestion: isBlankSet(draft) ? cached : null });
+    setActiveTray({ exIdx, round, draft, suggestion: isNew ? cached : null, isNew });
+  }
+
+  // Tapping a set: with a single set of values there's nothing to disambiguate,
+  // so go straight to the tray (unchanged from before per-round values). Once
+  // the rounds differ, ask which round is being changed first.
+  function selectSet(exIdx: number) {
+    if (isTemplate) return;
+    const eg = circuit.exercises[exIdx];
+    if (eg.sets.length > 1) {
+      setRoundPickerFor(exIdx);
+      return;
+    }
+    openSetTray(exIdx, null);
+  }
+
+  // "Split values" breaks the exercise straight into one set per round — all
+  // carrying its current values — so the user can then tap whichever round
+  // they want to change, rather than opening a tray up front.
+  function splitValues(exIdx: number) {
+    if (isTemplate) return;
+    const eg = circuit.exercises[exIdx];
+    const nextSets = expandAllRounds(eg.sets, circuit.rounds);
+    const nextExercises = circuit.exercises.map((e, i) =>
+      i === exIdx ? { ...e, sets: nextSets } : e
+    );
+    onUpdate({ ...circuit, exercises: nextExercises });
+  }
+
+  // "Consolidate values" is the reverse: collapse every round back to one set
+  // of values, the same as picking "Every round the same" in the round picker.
+  function consolidateValues(exIdx: number) {
+    if (isTemplate) return;
+    openSetTray(exIdx, null);
   }
 
   function confirmSetTray(draft: DraftSet) {
     if (!activeTray) return;
     const eg = circuit.exercises[activeTray.exIdx];
+    const nextSets =
+      activeTray.round == null
+        ? setAllRoundValues(eg.sets, circuit.rounds, draft)
+        : setRoundValues(normalizeSegments(eg.sets, circuit.rounds), activeTray.round, draft);
     const nextExercises = circuit.exercises.map((e, i) =>
-      i === activeTray.exIdx ? { ...e, sets: [{ ...e.sets[0], ...draft }] } : e
+      i === activeTray.exIdx ? { ...e, sets: nextSets } : e
     );
     onUpdate({ ...circuit, exercises: nextExercises });
     if (!isTemplate && eg.exercise.trackRest && draft.restSec != null) {
       timer.startRest(draft.restSec);
     }
     setActiveTray(null);
+  }
+
+  // Changing the round count re-fits every exercise's segments to it, so the
+  // "×N"s always add up to the number of rounds shown at the top of the card.
+  function changeRounds(rounds: number) {
+    onUpdate({
+      ...circuit,
+      rounds,
+      exercises: circuit.exercises.map((eg) => ({
+        ...eg,
+        sets: normalizeSegments(eg.sets, rounds),
+      })),
+    });
   }
 
   function removeExercise(exIdx: number) {
@@ -259,10 +337,7 @@ export function CircuitRows({
           >
             {/* In the same gap-4 flex column as the exercises, so the counter→
                 first-exercise spacing matches the spacing between exercises. */}
-            <RoundsControl
-              rounds={circuit.rounds}
-              onChange={(rounds) => onUpdate({ ...circuit, rounds })}
-            />
+            <RoundsControl rounds={circuit.rounds} onChange={changeRounds} />
             <SortableContext
               items={circuit.exercises.map((eg) => eg.groupKey)}
               strategy={verticalListSortingStrategy}
@@ -274,9 +349,13 @@ export function CircuitRows({
                 <CircuitExerciseRow
                   key={eg.groupKey}
                   exGroup={eg}
+                  rounds={circuit.rounds}
                   workoutId={workoutId}
                   mode={mode}
-                  onClick={() => openSetTray(i)}
+                  onClick={() => selectSet(i)}
+                  onEditRound={(round) => openSetTray(i, round)}
+                  onSplitValues={() => splitValues(i)}
+                  onConsolidateValues={() => consolidateValues(i)}
                   onRemove={() => removeExercise(i)}
                   onDuplicate={() => duplicateExercise(i)}
                   onEdit={() => onEditExercise(eg.exercise)}
@@ -299,15 +378,25 @@ export function CircuitRows({
         </Card>
       </div>
 
+      {roundPickerFor != null && (
+        <RoundPickerTray
+          exGroup={circuit.exercises[roundPickerFor]}
+          rounds={circuit.rounds}
+          onPick={(round) => {
+            const exIdx = roundPickerFor;
+            setRoundPickerFor(null);
+            openSetTray(exIdx, round);
+          }}
+          onClose={() => setRoundPickerFor(null)}
+        />
+      )}
+
       {activeTray && (
         <SetTray
           exercise={circuit.exercises[activeTray.exIdx].exercise}
           draft={activeTray.draft}
           suggestion={activeTray.suggestion}
-          isNew={
-            circuit.exercises[activeTray.exIdx].sets.length === 0 ||
-            !circuit.exercises[activeTray.exIdx].sets[0]?.id
-          }
+          isNew={activeTray.isNew}
           isTemplate={isTemplate}
           onConfirm={confirmSetTray}
           onClose={() => setActiveTray(null)}
@@ -378,18 +467,27 @@ function RoundsControl({
 
 function CircuitExerciseRow({
   exGroup,
+  rounds,
   workoutId,
   mode = "workout",
   onClick,
+  onEditRound,
+  onSplitValues,
+  onConsolidateValues,
   onRemove,
   onDuplicate,
   onEdit,
   onChangeVariation,
 }: {
   exGroup: ExerciseGroup;
+  rounds: number;
   workoutId: string;
   mode?: "workout" | "template";
   onClick: () => void;
+  // Opens the set tray for one round (0-based) of this exercise.
+  onEditRound: (round: number) => void;
+  onSplitValues: () => void;
+  onConsolidateValues: () => void;
   onRemove: () => void;
   onDuplicate: () => void;
   onEdit: () => void;
@@ -442,19 +540,39 @@ function CircuitExerciseRow({
     opacity: isDragging ? 0.5 : undefined,
   };
 
-  const set = exGroup.sets[0];
+  // The exercise's round segments: one entry per distinct set of values, each
+  // covering `rounds` consecutive rounds of the circuit.
+  const segments = useMemo(
+    () => normalizeSegments(exGroup.sets, rounds),
+    [exGroup.sets, rounds]
+  );
 
-  const pbs = useMemo<PBType[]>(() => {
-    if (priorSetsAsc === null || !set) return [];
-    // `set` carries no per-set variation (it's chosen once for the whole
-    // group), so stamp the group's current selection onto it before scoring.
-    const combined = [...priorSetsAsc, { ...set, variation: exGroup.variation }];
+  const pbs = useMemo<PBType[][]>(() => {
+    if (priorSetsAsc === null || segments.length === 0) return [];
+    // The sets carry no per-set variation (it's chosen once for the whole
+    // group), so stamp the group's current selection onto them before scoring.
+    const combined = [
+      ...priorSetsAsc,
+      ...segments.map((s) => ({ ...s, variation: exGroup.variation })),
+    ];
     const all = computePBsInOrder(combined, exGroup.exercise);
-    return all[all.length - 1] ?? [];
-  }, [priorSetsAsc, set, exGroup.exercise, exGroup.variation]);
+    return segments.map((_, i) => all[priorSetsAsc.length + i] ?? []);
+  }, [priorSetsAsc, segments, exGroup.exercise, exGroup.variation]);
   // Templates carry no set values (legacy ones may still hold some until the
   // template is next saved — they're ignored here and by applyTemplate).
-  const hasData = !isTemplate && !!set && !isBlankSet(set);
+  const loggedSegments = isTemplate ? [] : segments.filter((s) => !isBlankSet(s));
+  const hasData = loggedSegments.length > 0;
+  // While every round shares the same values there's one summary line, as
+  // before. As soon as one round differs the rounds are listed out
+  // individually — numbered like a normal exercise's sets — so it's clear
+  // which round is which.
+  const perRound = segments.length > 1;
+  const roundRows = useMemo(() => {
+    if (!perRound) return [];
+    return segments.flatMap((s, segIdx) =>
+      Array.from({ length: segmentRounds(s) }, () => ({ set: s, segIdx }))
+    );
+  }, [perRound, segments]);
 
   return (
     <>
@@ -518,45 +636,100 @@ function CircuitExerciseRow({
             <VariationTag group={exGroup} onChange={onChangeVariation} />
           </span>
         </button>
-        {/* Set detail row. The history chevron is absolutely positioned (out
-            of flow) so — like the title's controls — it doesn't stretch the
-            row and push the set detail down. The row's height is just the
-            set-detail line, so the tags→set-detail gap (flex-col gap-1.5 +
-            mt-2) matches a normal card. The flex-1 wrapper is flex so its
-            content has no inline line-box leading. The chevron stays centred on
-            the set-detail line; when there's no set detail (a fresh exercise
-            with no data yet) min-h-9 keeps the row tall enough for the
-            chevron alone. */}
-        {(hasData || !isTemplate) && (
-          <div className={`relative flex items-center mt-2 ${hasData ? "" : "min-h-9"}`}>
-            <div className={`flex-1 min-w-0 flex ${!isTemplate ? "pr-9" : ""}`}>
-              {hasData && (
+        {/* Set detail. One bulleted line while every round shares the same
+            values; once a round differs, every round gets its own numbered row
+            (see circuit-segments.ts) and tapping one edits that round. */}
+        {!isTemplate && hasData && !perRound && (
+          <div className="mt-2 flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={onClick}
+              className="text-left text-sm pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground"
+            >
+              <span>{formatCircuitSetSummary(segments[0], exGroup)}</span>
+              <PBBadges types={pbs[0] ?? []} />
+            </button>
+          </div>
+        )}
+        {!isTemplate && hasData && perRound && (
+          <div className="mt-2 flex flex-col gap-0.5">
+            {roundRows.map((r, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded-md px-1 py-0.5 hover:bg-muted/50"
+              >
+                <span className="text-sm text-muted-foreground w-6 shrink-0 text-center">
+                  {i + 1}
+                </span>
                 <button
                   type="button"
-                  onClick={onClick}
-                  className="text-left text-sm pl-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 before:content-['•'] before:mr-2 before:text-muted-foreground"
+                  onClick={() => onEditRound(i)}
+                  className="flex-1 text-left text-sm py-0.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1"
                 >
-                  <span>{formatCircuitSetSummary(set, exGroup)}</span>
-                  <PBBadges types={pbs} />
-                </button>
-              )}
-            </div>
-            {!isTemplate && (
-              <div className="absolute right-0 top-1/2 flex -translate-y-1/2 shrink-0 items-center">
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((o) => !o)}
-                  aria-label={historyOpen ? "Hide history" : "Show history"}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  {historyOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
+                  <span>
+                    {isBlankSet(r.set) ? "—" : formatCircuitSetSummary(r.set, exGroup)}
+                  </span>
+                  <PBBadges types={pbs[r.segIdx] ?? []} />
                 </button>
               </div>
+            ))}
+          </div>
+        )}
+        {/* Bottom row: a button that's always labelled — "Split values" to break
+            the exercise into one set per round, ready to edit whichever round
+            changes, or "Consolidate values" to collapse a split exercise back
+            to one set of values — alongside the
+            history chevron, so the two share a row instead of the chevron
+            floating beside the set lines above. mt-3 (on top of the parent's
+            gap-1.5) opens up extra room above this row so it doesn't read as
+            part of the set-detail block. */}
+        {!isTemplate && (
+          <div className={`flex items-center justify-between ${hasData ? "" : "mt-2 min-h-9"}`}>
+            {hasData ? (
+              perRound ? (
+                <button
+                  type="button"
+                  onClick={onConsolidateValues}
+                  className="inline-flex items-center gap-1 pl-3 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Merge className="h-3 w-3" /> Consolidate values
+                </button>
+              ) : canSplitRound(segments, rounds) ? (
+                <button
+                  type="button"
+                  onClick={onSplitValues}
+                  className="inline-flex items-center gap-1 pl-3 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Plus className="h-3 w-3" /> Split values
+                </button>
+              ) : (
+                <span />
+              )
+            ) : (
+              // A freshly-added exercise has no data yet — `onClick` is the same
+              // handler the title/tags use, which opens the tray pre-filled with
+              // the same suggestion logic as every other "Add set" in the app
+              // (see openSetTray).
+              <button
+                type="button"
+                onClick={onClick}
+                className="inline-flex items-center gap-1 pl-3 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="h-3 w-3" /> Add set
+              </button>
             )}
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((o) => !o)}
+              aria-label={historyOpen ? "Hide history" : "Show history"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {historyOpen ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
           </div>
         )}
       </div>
@@ -595,6 +768,76 @@ function CircuitExerciseRow({
           onClose={() => setMenuOpen(false)}
         />
       )}
+    </>
+  );
+}
+
+// Asked before the set tray when an exercise's rounds don't all share the same
+// values: which round is being changed? Picking "every round" collapses them
+// back to one set of values.
+function RoundPickerTray({
+  exGroup,
+  rounds,
+  onPick,
+  onClose,
+}: {
+  exGroup: ExerciseGroup;
+  rounds: number;
+  // null = every round.
+  onPick: (round: number | null) => void;
+  onClose: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const segments = normalizeSegments(exGroup.sets, rounds);
+  const ranges = segmentRanges(segments);
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-background border-t border-border shadow-xl transition-transform duration-300 ease-out ${
+          visible ? "translate-y-0" : "translate-y-full"
+        }`}
+      >
+        <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-muted" />
+        <div className="px-4 pt-3">
+          <h2 className="font-semibold">Which round?</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{exGroup.exercise.name}</p>
+        </div>
+        <div className="flex flex-col py-4 gap-1 px-4 max-h-[60vh] overflow-y-auto">
+          {segments.flatMap((s, si) =>
+            Array.from({ length: segmentRounds(s) }, (_, k) => {
+              const round = ranges[si].from + k;
+              return (
+                <button
+                  key={round}
+                  type="button"
+                  onClick={() => onPick(round - 1)}
+                  className="w-full flex items-baseline justify-between gap-3 py-3 px-3 text-left rounded-xl hover:bg-muted/50"
+                >
+                  <span className="text-base font-medium shrink-0">Round {round}</span>
+                  <span className="text-sm text-muted-foreground truncate">
+                    {isBlankSet(s) ? "—" : formatCircuitSetSummary(s, exGroup)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+          <button
+            type="button"
+            onClick={() => onPick(null)}
+            className="w-full py-3 px-3 mt-1 text-left text-base font-medium rounded-xl border border-border hover:bg-muted/50"
+          >
+            Every round the same
+          </button>
+        </div>
+      </div>
     </>
   );
 }

@@ -173,7 +173,10 @@ function WorkoutEditor({
             type: "circuit",
             rounds: item.rounds,
             exercises: item.exercises.map((eg) => ({
-              sets: eg.sets.filter((s) => !isBlankSet(s)),
+              // Each set counts for the rounds it was performed for.
+              sets: eg.sets
+                .filter((s) => !isBlankSet(s))
+                .map((s) => ({ reps: s.reps, rounds: s.rounds })),
               doubleReps: eg.exercise.doubleReps,
             })),
           }

@@ -1,4 +1,7 @@
-export type StatSet = { reps: number | null };
+// `rounds` is how many circuit rounds this one set of values was performed for
+// (the per-set circuit_rounds). Absent outside a circuit, and on circuit sets
+// that span every round — those fall back to the circuit's total.
+export type StatSet = { reps: number | null; rounds?: number | null };
 export type StatExercise = { sets: StatSet[]; doubleReps: boolean };
 export type StatItem =
   | { type: "single"; exercise: StatExercise }
@@ -8,10 +11,14 @@ export type SessionStats = { exercises: number; totalSets: number; totalReps: nu
 
 function exerciseStats(ex: StatExercise, rounds = 1): { sets: number; reps: number } {
   const multiplier = ex.doubleReps ? 2 : 1;
-  return {
-    sets: ex.sets.length * rounds,
-    reps: ex.sets.reduce((n, s) => n + (s.reps ?? 1) * multiplier, 0) * rounds,
-  };
+  let sets = 0;
+  let reps = 0;
+  for (const s of ex.sets) {
+    const n = s.rounds ?? rounds;
+    sets += n;
+    reps += (s.reps ?? 1) * multiplier * n;
+  }
+  return { sets, reps };
 }
 
 export function computeSessionStats(items: StatItem[]): SessionStats {

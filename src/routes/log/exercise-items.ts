@@ -13,6 +13,7 @@ import {
   type ExerciseGroup,
   type WorkoutItem,
 } from "./workout-editor-types";
+import { normalizeSegments, totalSegmentRounds } from "./circuit-segments";
 
 export const ROOT = "ROOT";
 
@@ -61,7 +62,13 @@ export function insertExerciseIntoContainer(
   if (container === ROOT) {
     const overIndex = items.findIndex((i) => i.groupKey === overId);
     const insertAt = overIndex === -1 ? items.length : overIndex;
-    return [...items.slice(0, insertAt), exercise, ...items.slice(insertAt)];
+    // Outside a circuit each set is its own set again — drop the round spans
+    // so they don't linger and get re-applied if it's dragged back in.
+    const plain: ExerciseGroup = {
+      ...exercise,
+      sets: exercise.sets.map(({ rounds: _rounds, ...s }) => s),
+    };
+    return [...items.slice(0, insertAt), plain, ...items.slice(insertAt)];
   }
   return items.map((item) => {
     if (!isCircuitGroup(item) || item.groupKey !== container) return item;
@@ -71,7 +78,9 @@ export function insertExerciseIntoContainer(
       ...item,
       exercises: [
         ...item.exercises.slice(0, insertAt),
-        exercise,
+        // An exercise dragged in from outside brings a plain set list; fit it
+        // to the circuit's rounds so the round segments stay consistent.
+        { ...exercise, sets: normalizeSegments(exercise.sets, item.rounds) },
         ...item.exercises.slice(insertAt),
       ],
     };
@@ -186,12 +195,18 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
         result.push({
           groupKey: s.circuitId,
           name: s.circuitName ?? "Circuit",
-          rounds: s.circuitRounds ?? 0,
+          // Filled in below, once every set of the circuit has been seen.
+          rounds: 0,
           exercises: [],
         });
       }
       const circuit = result[circuitIndexes.get(s.circuitId)!] as CircuitGroup;
-      let eg = circuit.exercises.find((e) => e.exerciseId === ex.id);
+      // Consecutive sets of the same exercise are that exercise's round
+      // segments; a later, non-adjacent run of the same exercise is a separate
+      // entry in the circuit (an exercise the user duplicated) and must not be
+      // folded back into the first — that would double its round count.
+      const last = circuit.exercises[circuit.exercises.length - 1];
+      let eg = last?.exerciseId === ex.id ? last : undefined;
       if (!eg) {
         eg = {
           groupKey: crypto.randomUUID(),
@@ -202,6 +217,7 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
         };
         circuit.exercises.push(eg);
       }
+      draft.rounds = s.circuitRounds ?? 0;
       eg.sets.push(draft);
     } else {
       if (!exerciseIndexes.has(ex.id)) {
@@ -215,6 +231,21 @@ export function buildItemsFromSets(sets: SkeletonSet[], exercises: Exercise[]): 
         });
       }
       (result[exerciseIndexes.get(ex.id)!] as ExerciseGroup).sets.push(draft);
+    }
+  }
+
+  // A circuit's round count is what its exercises' segments add up to (they all
+  // describe the same rounds, so the longest one wins if data ever disagrees).
+  // For a session logged before per-round values, each exercise has a single
+  // set carrying the whole count, so this is exactly the old `circuit_rounds`.
+  for (const item of result) {
+    if (!isCircuitGroup(item)) continue;
+    item.rounds = item.exercises.reduce(
+      (max, eg) => Math.max(max, totalSegmentRounds(eg.sets)),
+      0
+    );
+    for (const eg of item.exercises) {
+      eg.sets = normalizeSegments(eg.sets, item.rounds);
     }
   }
 
@@ -245,7 +276,9 @@ export function flattenItems(items: WorkoutItem[]): FlatSet[] {
           steps: s.steps ?? null,
           heightM: s.heightM ?? null,
           circuitId: item.groupKey,
-          circuitRounds: item.rounds,
+          // Per-set: the rounds THIS set was performed for. Equal to the
+          // circuit's total unless the user split the rounds up.
+          circuitRounds: s.rounds ?? item.rounds,
           circuitName: item.name,
           variation: eg.variation,
         }))

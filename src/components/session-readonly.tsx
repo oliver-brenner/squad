@@ -63,12 +63,17 @@ export function buildReadOnlyItems(
           kind: "circuit",
           key: s.circuitId,
           name: s.circuitName ?? "Circuit",
-          rounds: s.circuitRounds ?? 1,
+          // Summed from the sets below, once they've all been seen.
+          rounds: 0,
           exercises: [],
         });
       }
       const circuit = out[idx] as ReadOnlyCircuitItem;
-      let eg = circuit.exercises.find((e) => e.exerciseId === s.exerciseId);
+      // Consecutive sets of one exercise are its round segments (each carries
+      // the rounds it was performed for in circuitRounds); a later run of the
+      // same exercise is a separate, duplicated entry in the circuit.
+      const prev = circuit.exercises[circuit.exercises.length - 1];
+      let eg = prev?.exerciseId === s.exerciseId ? prev : undefined;
       if (!eg) {
         eg = {
           exerciseId: s.exerciseId,
@@ -93,6 +98,18 @@ export function buildReadOnlyItems(
       }
       (out[idx] as ReadOnlyExerciseItem).sets.push(s);
     }
+  }
+
+  // A circuit's round count is what its exercises' per-set rounds add up to.
+  // With one set per exercise (a circuit whose rounds were all identical, and
+  // every circuit logged before per-round values existed) that's just the
+  // circuit_rounds the set carries.
+  for (const item of out) {
+    if (item.kind !== "circuit") continue;
+    item.rounds = item.exercises.reduce(
+      (max, eg) => Math.max(max, eg.sets.reduce((n, s) => n + (s.circuitRounds ?? 0), 0)),
+      0
+    );
   }
 
   return out;
@@ -269,20 +286,26 @@ function CircuitExerciseRow({
   pbsBySetId?: PBMap;
   onCopyExercise?: (exerciseId: string) => Promise<void>;
 }) {
-  const set = eg.sets[0];
-  const hasData =
-    set &&
-    (set.reps != null ||
-      set.weightKg != null ||
-      set.durationSec != null ||
-      set.distanceKm != null ||
-      set.resistance != null ||
-      set.speedMs != null ||
-      set.inclinePct != null ||
-      set.restSec != null ||
-      set.rpe != null);
+  const hasValues = (s: WorkoutSet) =>
+    s.reps != null ||
+    s.weightKg != null ||
+    s.durationSec != null ||
+    s.distanceKm != null ||
+    s.resistance != null ||
+    s.speedMs != null ||
+    s.inclinePct != null ||
+    s.restSec != null ||
+    s.rpe != null;
+  // While every round shared the same values there's one summary line, as
+  // before. Once a round differs, each set covers `circuitRounds` rounds of the
+  // circuit and the rounds are listed out individually, numbered — mirroring
+  // the log editor.
+  const logged = eg.sets.filter(hasValues);
+  const perRound = logged.length > 1;
+  const roundRows = perRound
+    ? logged.flatMap((s) => Array.from({ length: s.circuitRounds ?? 1 }, () => s))
+    : [];
   const distanceUnit = (eg.exercise?.distanceUnit ?? "km") as DistanceUnit;
-  const pbs = set ? pbsBySetId?.get(set.id) : undefined;
 
   return (
     <div className="flex items-start gap-2 rounded-md px-1 py-1.5">
@@ -298,11 +321,26 @@ function CircuitExerciseRow({
             <VariationMetaTag exercise={eg.exercise} sets={eg.sets} />
           </span>
         )}
-        {hasData && eg.exercise && (
+        {eg.exercise && !perRound && logged[0] && (
           <p className="text-sm mt-3 pl-3 before:content-['•'] before:mr-2 before:text-muted-foreground inline-flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span>{formatSetSummary(set, eg.exercise, distanceUnit)}</span>
-            {pbs && <PBBadges types={pbs} />}
+            <span>{formatSetSummary(logged[0], eg.exercise, distanceUnit)}</span>
+            {pbsBySetId?.get(logged[0].id) && (
+              <PBBadges types={pbsBySetId.get(logged[0].id)!} />
+            )}
           </p>
+        )}
+        {eg.exercise && perRound && (
+          <div className="mt-3 flex flex-col gap-0.5">
+            {roundRows.map((s, i) => (
+              <SetSummary
+                key={i}
+                index={i + 1}
+                set={s}
+                exercise={eg.exercise}
+                pbs={pbsBySetId?.get(s.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
       {onCopyExercise && eg.exercise && (

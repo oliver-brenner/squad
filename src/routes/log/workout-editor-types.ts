@@ -2,6 +2,11 @@ import type { Exercise } from "@/lib/db/types";
 
 export type DraftSet = {
   id?: string;
+  // Circuit sets only: how many consecutive rounds were performed with these
+  // values (persisted as `circuit_rounds`). Undefined on a set outside a
+  // circuit, and on a circuit set that spans every round — see
+  // circuit-segments.ts.
+  rounds?: number;
   exerciseId: string;
   reps: number | null;
   weightKg: number | null;
