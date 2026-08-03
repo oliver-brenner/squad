@@ -124,10 +124,14 @@ bucket_definitions:
   # those restrictions, or if we route this through a Postgres view that
   # bakes in `CURRENT_DATE - 30`.
   #
-  # Privacy: `notes_for_followers` is a Postgres STORED generated column —
-  # it pre-computes `CASE WHEN notes_public THEN notes ELSE NULL END` so we
-  # don't need a CASE expression here (PowerSync doesn't support them). The
-  # column is aliased as `notes` so the local SQLite schema sees the right name.
+  # Privacy: `notes_for_followers` is a plain Postgres column maintained by a
+  # BEFORE trigger — it pre-computes `CASE WHEN notes_public THEN notes ELSE
+  # NULL END` so we don't need a CASE expression here (PowerSync doesn't
+  # support them). It was a STORED generated column until
+  # scripts/db/fix-follower-notes-replication.sql: generated columns aren't
+  # published over logical replication before PG 18, so a follower's copy went
+  # NULL on every update. The column is aliased as `notes` so the local SQLite
+  # schema sees the right name.
   # `notes` and `notes_public` are excluded from this projection; followers
   # never receive raw note text or the visibility flag.
   followee_workouts:
@@ -147,7 +151,7 @@ bucket_definitions:
       - >-
         SELECT id, user_id, performed_on, workout_id, exercise_id, position,
         reps, weight_kg, bodyweight_kg, distance_km, duration_sec, resistance, speed_ms,
-        incline_pct, rest_sec, rpe, steps, height_m, circuit_id, circuit_rounds,
+        incline_pct, rest_sec, calories, rpe, steps, height_m, circuit_id, circuit_rounds,
         circuit_name, variation, notes_for_followers as notes
         FROM sets WHERE user_id = bucket.user_id
 

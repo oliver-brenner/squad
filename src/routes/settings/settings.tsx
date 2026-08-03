@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase/client";
 import { powersync } from "@/lib/db/client";
 import { decodeProfile } from "@/lib/db/decoders";
 import type { ProfileRow } from "@/lib/db/schema";
+import { SyncDiagnostics } from "./sync-diagnostics";
 import {
   updateCalorieTrackingEnabled,
   updateDurationTrackingEnabled,
@@ -86,6 +87,8 @@ export function Settings() {
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </Link>
       </Card>
+
+      <SyncDiagnostics />
 
       <Button
         variant="outline"
