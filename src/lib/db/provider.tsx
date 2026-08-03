@@ -5,17 +5,12 @@ import { powersync, powerSyncReady } from "./client";
 import { SupabaseConnector } from "./connector";
 import { bootstrapIfNeeded } from "./bootstrap";
 import { backfillLegacySetBodyweight } from "./backfill";
+import { hardResetLocalState, LAST_USER_KEY } from "./reset";
 
-// localStorage key for the last-connected PowerSync user. We only wipe the
-// local DB when this changes — *not* on every user→null transition, because
-// mobile Safari can emit transient SIGNED_OUT during token refresh and we
-// don't want to nuke local data every time that happens.
-//
-// The `.v2` suffix marks the OPFS migration: pre-migration markers pointed
-// at IDB storage which is now unused, so we want the first post-migration
-// load to go through the full bootstrap path against fresh OPFS storage.
-const LAST_USER_KEY = "squad.lastConnectedUserId.v2";
-
+// LAST_USER_KEY (see ./reset) records the last-connected PowerSync user. We
+// only wipe the local DB when it changes — *not* on every user→null transition,
+// because mobile Safari can emit transient SIGNED_OUT during token refresh and
+// we don't want to nuke local data every time that happens.
 function readLastUser(): string | null {
   try {
     return localStorage.getItem(LAST_USER_KEY);
@@ -31,43 +26,6 @@ function writeLastUser(id: string | null): void {
   } catch {
     // localStorage may be unavailable (private mode); proceeding without it
     // just means we won't auto-clear on cross-user swap.
-  }
-}
-
-// Nuke every trace of local state without going through PowerSync, which is
-// the point: this runs when PowerSync itself won't open. Deletes the OPFS files
-// backing squad.db, the connect marker, and any service-worker registration
-// (the PWA caches the app shell, and a half-broken shell survives a reload).
-async function clearLocalStorageAndDb(): Promise<void> {
-  try {
-    localStorage.removeItem(LAST_USER_KEY);
-    localStorage.removeItem("squad.lastConnectedUserId");
-  } catch {
-    // localStorage may be unavailable — nothing to clean up in that case.
-  }
-
-  try {
-    const root = await navigator.storage.getDirectory();
-    // @ts-expect-error — values() is available in browsers but not yet in the
-    // TS DOM lib for FileSystemDirectoryHandle.
-    for await (const entry of root.values()) {
-      try {
-        await root.removeEntry(entry.name, { recursive: true });
-      } catch (err) {
-        // A lock held by another context can block removal — keep going so one
-        // stuck file doesn't leave the rest behind.
-        console.warn(`[powersync] couldn't remove OPFS entry ${entry.name}:`, err);
-      }
-    }
-  } catch (err) {
-    console.warn("[powersync] OPFS cleanup failed:", err);
-  }
-
-  try {
-    const registrations = await navigator.serviceWorker?.getRegistrations?.();
-    for (const reg of registrations ?? []) await reg.unregister();
-  } catch (err) {
-    console.warn("[powersync] service worker unregister failed:", err);
   }
 }
 
@@ -275,7 +233,7 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={async () => {
-            await clearLocalStorageAndDb();
+            await hardResetLocalState();
             window.location.reload();
           }}
           className="text-xs text-muted-foreground underline"
