@@ -85,8 +85,21 @@ function formatSpeed(ms: number): string {
   return `${Number((ms * 3.6).toFixed(1)).toString()} km/h`;
 }
 
-function buildSetTable(sets: SessionExportSet[], extraIndent = "", defaultWeightKg = 0): string {
-  if (sets.length === 0) return `${extraIndent}  (no sets recorded)\n`;
+function buildSetTable(
+  allSets: SessionExportSet[],
+  extraIndent = "",
+  defaultWeightKg = 0
+): string {
+  if (allSets.length === 0) return `${extraIndent}  (no sets recorded)\n`;
+
+  // A circuit exercise whose rounds didn't all use the same values holds one
+  // entry per distinct set of values, each covering `rounds` rounds — list
+  // those rounds out so the numbering matches the app. A single entry (every
+  // round the same, and every non-circuit set) is left exactly as it was.
+  const sets =
+    allSets.length > 1
+      ? allSets.flatMap((s) => Array.from({ length: s.rounds ?? 1 }, () => s))
+      : allSets;
 
   const hasWeight = sets.some((s) => s.weightKg !== null);
   const hasReps = sets.some((s) => s.reps !== null);

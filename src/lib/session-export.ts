@@ -27,6 +27,9 @@ export type SessionExportSet = {
   inclinePct: number | null;
   restSec: number | null;
   rpe: number | null;
+  // Circuit sets only: how many rounds were performed with these values. Null
+  // outside a circuit.
+  rounds?: number | null;
 };
 
 export type SessionExportExercise = {
@@ -157,13 +160,18 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
         itemsMap.set(key, {
           type: "circuit",
           name: s.circuit_name ?? "Circuit",
-          rounds: s.circuit_rounds ?? 1,
+          // Summed from the per-set rounds below.
+          rounds: 0,
           exercises: [],
         });
         itemOrder.push(key);
       }
       const circuit = itemsMap.get(key) as Extract<SessionExportItem, { type: "circuit" }>;
-      let eg = circuit.exercises.find((e) => e.name === ex.name);
+      setData.rounds = s.circuit_rounds;
+      // Consecutive sets of one exercise are its round segments; a later run of
+      // the same exercise is a duplicated entry in the circuit.
+      const prev = circuit.exercises[circuit.exercises.length - 1];
+      let eg = prev?.name === ex.name ? prev : undefined;
       if (!eg) {
         eg = {
           name: ex.name,
@@ -199,6 +207,17 @@ export async function getSessionExportData(workoutId: string): Promise<SessionEx
       const item = itemsMap.get(key) as Extract<SessionExportItem, { type: "exercise" }>;
       item.data.sets.push(setData);
     }
+  }
+
+  // A circuit ran for as many rounds as its exercises' per-set rounds add up
+  // to — the same for every exercise, and just the one circuit_rounds value
+  // when the rounds weren't split into different set values.
+  for (const item of itemsMap.values()) {
+    if (item.type !== "circuit") continue;
+    item.rounds = item.exercises.reduce(
+      (max, eg) => Math.max(max, eg.sets.reduce((n, s) => n + (s.rounds ?? 0), 0)),
+      0
+    );
   }
 
   return {

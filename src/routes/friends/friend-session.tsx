@@ -158,7 +158,7 @@ export function FriendSession() {
             type: "circuit",
             rounds: item.rounds,
             exercises: item.exercises.map((eg) => ({
-              sets: eg.sets.map((s) => ({ reps: s.reps })),
+              sets: eg.sets.map((s) => ({ reps: s.reps, rounds: s.circuitRounds })),
               doubleReps: eg.exercise?.doubleReps ?? false,
             })),
           }
