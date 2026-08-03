@@ -34,6 +34,43 @@ function writeLastUser(id: string | null): void {
   }
 }
 
+// Nuke every trace of local state without going through PowerSync, which is
+// the point: this runs when PowerSync itself won't open. Deletes the OPFS files
+// backing squad.db, the connect marker, and any service-worker registration
+// (the PWA caches the app shell, and a half-broken shell survives a reload).
+async function clearLocalStorageAndDb(): Promise<void> {
+  try {
+    localStorage.removeItem(LAST_USER_KEY);
+    localStorage.removeItem("squad.lastConnectedUserId");
+  } catch {
+    // localStorage may be unavailable — nothing to clean up in that case.
+  }
+
+  try {
+    const root = await navigator.storage.getDirectory();
+    // @ts-expect-error — values() is available in browsers but not yet in the
+    // TS DOM lib for FileSystemDirectoryHandle.
+    for await (const entry of root.values()) {
+      try {
+        await root.removeEntry(entry.name, { recursive: true });
+      } catch (err) {
+        // A lock held by another context can block removal — keep going so one
+        // stuck file doesn't leave the rest behind.
+        console.warn(`[powersync] couldn't remove OPFS entry ${entry.name}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn("[powersync] OPFS cleanup failed:", err);
+  }
+
+  try {
+    const registrations = await navigator.serviceWorker?.getRegistrations?.();
+    for (const reg of registrations ?? []) await reg.unregister();
+  } catch (err) {
+    console.warn("[powersync] service worker unregister failed:", err);
+  }
+}
+
 // Local-first lifecycle.
 //
 // Goal: open the app, log a set, lock the phone, come back, keep logging —
@@ -69,11 +106,9 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
 
   const userId = user?.id ?? null;
 
-  // Read the marker once at mount. If it matches, we already have local data
-  // and can skip the network-blocking parts of setup.
-  const initialMarker = useMemo(() => readLastUser(), []);
-  const haveLocalDataForUser = userId !== null && initialMarker === userId;
-
+  // The marker's only remaining job is detecting a user swap (read inside
+  // runOnce). It no longer selects between a blocking and a background setup
+  // path — nothing blocks on the network now.
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
@@ -86,8 +121,22 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     const runOnce = async () => {
       // Await the eager init kicked off at module load. Idempotent — if it's
       // already done, this resolves immediately.
-      await powerSyncReady;
+      //
+      // Bounded, because OPFSCoopSyncVFS holds an exclusive lock on squad.db:
+      // if another context still has it (the homescreen PWA's worker while a
+      // Safari tab opens the same origin), init() never resolves. Unbounded,
+      // that's an unrecoverable spinner; bounded, we can at least tell the user
+      // what to do about it.
+      const initialised = await Promise.race([
+        powerSyncReady.then(() => true),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 10_000)),
+      ]);
       if (cancelled) return;
+      if (!initialised) {
+        throw new Error(
+          "The local database didn't open. Another copy of the app may still have it open — close other tabs and the homescreen app, then retry."
+        );
+      }
 
       if (!user || !connector) {
         await powersync.disconnect();
@@ -102,23 +151,22 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
       }
 
-      if (haveLocalDataForUser) {
-        // Returning user: kick off connect + bootstrap in the background.
-        // We render the app from the local DB now; sync catches up silently.
-        powersync.connect(connector).catch((err) => {
-          console.warn("[powersync] background connect failed:", err);
-        });
-        bootstrapIfNeeded(user).catch((err) => {
-          console.warn("[powersync] background bootstrap failed:", err);
-        });
-      } else {
-        // First sign-in on this device — wait for connect + bootstrap so the
-        // UI doesn't paint with missing defaults.
-        await powersync.connect(connector);
-        if (cancelled) return;
-        await bootstrapIfNeeded(user);
-        if (cancelled) return;
-      }
+      // Neither connect nor bootstrap gates rendering, on ANY path — including
+      // a first sign-in on this device.
+      //
+      // This used to await both for first-time users "so the UI doesn't paint
+      // with missing defaults". That made a stalled sync unrecoverable: signing
+      // out clears the marker, so the next login takes the first-time branch,
+      // and bootstrapIfNeeded awaits waitForFirstSync() — on a device whose
+      // sync isn't completing, the spinner never goes away and there's no route
+      // back into the app to fix it. Painting a briefly-empty exercise library
+      // is a far better failure than a permanent lockout.
+      powersync.connect(connector).catch((err) => {
+        console.warn("[powersync] background connect failed:", err);
+      });
+      bootstrapIfNeeded(user).catch((err) => {
+        console.warn("[powersync] background bootstrap failed:", err);
+      });
 
       // Legacy sets logged before `sets.bodyweight_kg` existed get the profile
       // bodyweight filled in, so they show it against the set like new ones do
@@ -206,7 +254,8 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-sm text-muted-foreground max-w-sm">
-          Couldn't start the local database. Check your connection and try again.
+          {error.message ||
+            "Couldn't start the local database. Check your connection and try again."}
         </p>
         <button
           type="button"
@@ -217,6 +266,21 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
           className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
         >
           Retry
+        </button>
+        {/* Last resort when the local database is what's broken: throw it away
+            and let the next load re-download from PowerSync. Everything here is
+            a local cache of Postgres, so the only loss is writes that hadn't
+            uploaded yet — and if we can't open the DB, those are unreachable
+            anyway. */}
+        <button
+          type="button"
+          onClick={async () => {
+            await clearLocalStorageAndDb();
+            window.location.reload();
+          }}
+          className="text-xs text-muted-foreground underline"
+        >
+          Clear local data and reload
         </button>
       </div>
     );
